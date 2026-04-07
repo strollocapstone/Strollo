@@ -64,3 +64,30 @@ Branch naming: `evelyn/onboarding-flow`, `eric/fix-map-zoom`, `amber/survey-sche
 - Default branch: `main`.
 
 (Add architecture notes, build commands, and test commands to this section as the project grows — Claude reads this file every session.)
+
+## Optional tooling: review agents
+
+Eric maintains a set of Claude Code slash commands at https://github.com/ericpjtsai/review-agents that review plans and code from three perspectives: Product Director, Product Designer, and Engineering / Tech Lead. They're useful for self-reviewing your own PRs before requesting a teammate review.
+
+To install (one-time, on your own machine):
+
+```bash
+git clone https://github.com/ericpjtsai/review-agents.git ~/Desktop/review-agents
+mkdir -p ~/.claude/commands
+for f in ~/Desktop/review-agents/commands/review-*.md; do
+  ln -sf "$f" ~/.claude/commands/$(basename "$f")
+done
+```
+
+After installing, these slash commands work in any Claude Code session (including Strollo):
+
+- `/review-product` — Product Director review
+- `/review-design` — Product Designer review
+- `/review-eng` — Engineering / Tech Lead review
+- `/review-all` — Runs all three and synthesizes the top issues
+- `/review-learn` — Capture a universal lesson back into the review-agents repo
+
+**Notes:**
+- These are optional. Nothing in the Strollo workflow requires them.
+- Each person's review observations are stored locally on their own machine, not in this repo. Your reviews don't show up on anyone else's machine.
+- If you want to contribute a universal lesson back upstream, do it inside `~/Desktop/review-agents`, not here.
