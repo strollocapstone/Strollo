@@ -92,7 +92,6 @@ The homescreen is a neutral starting point — it shows the map with the user's 
   screen where the user can input their mood, destination, 
   time, and other preferences before starting.
 
-
 ### Walk Companion Screen (During-Walk)
 Activates automatically when the user taps "Start Walking" 
 This screen has two states: Full Screen and Minimized (Wdiget). The Navigation Screen map always lives underneath and is visible when this screen is minimized.
@@ -100,7 +99,6 @@ This screen has two states: Full Screen and Minimized (Wdiget). The Navigation S
 Key design requirements prioritize a minimal, ambient experience where the user is not constantly staring at the screen. 
 Look Up nudges and Detour nudges surface during the 
 walk to encourage organic discovery and disengagement from the screen.
-
 
 ### Lock Screen (During-Walk)
 The lock screen is the same component as the minimized 
@@ -120,6 +118,26 @@ It lives underneath the Walk Companion screen at all times and is accessible by 
   locations shown as muted labels on the map, always 
   visible even if not added to the journey, unless user dismisses it.
 
+### Journey Edit Screen (During-Walk)
+Accessible during a walk by tapping the flag icon on 
+the Navigation Map Screen. Opens as a bottom sheet 
+overlay over the map.
+
+- Lists all locations currently added to the journey 
+  in order
+- User can:
+  - Remove a location from the journey
+  - Add a new location between existing stops
+  - Reorder stops by dragging
+  - Pause the walk
+  - End the walk
+- Drag handle at the top to close this overlay by dragging down
+- Can be expanded to full screen by dragging up
+- When in voice mode, this screen is not accessible — 
+  all journey edits are handled through voice commands 
+  instead
+- Walk Companion widget remains visible above 
+  the overlay at all times
 
 ### Reward Screen (Post-Walk)
 Celebrates the user's walk and rewards them for staying immersed in their environment.
