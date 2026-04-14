@@ -350,7 +350,7 @@ export default function NavigationMapScreen({ onGoBack, journeyItems = [] }) {
       {journeyOpen && (
         <>
           <div className="sheet-backdrop" onClick={() => setJourneyOpen(false)} />
-          <JourneyEditScreen />
+          <JourneyEditScreen items={journeyItems} onClose={() => setJourneyOpen(false)} onGoBack={onGoBack} />
         </>
       )}
 
