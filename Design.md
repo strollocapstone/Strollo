@@ -143,13 +143,13 @@ Celebrates the user's walk and rewards them for staying immersed in their enviro
 - Tone: playful and surprising — the user shouldn't 
   know what they'll collect until after the walk
 
-  **Location Favouriting**
+**Location Favouriting**
 - Each stop visited during the walk is listed with a 
   heart icon so the user can quickly fave any locations 
   they enjoyed
 - Faved locations are saved to their Faves tab on the 
   Homescreen for future walks
 
-  **Actions**
+**Actions**
 - Share walk summary and collectibles with friends/family
 - Return to Homescreen to plan another walk
