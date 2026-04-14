@@ -440,7 +440,6 @@ export default function NavigationScreen({ onGoBack, journeyItems = [] }) {
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [pathHistory, setPathHistory]     = useState(DEMO_PATH_START);
   const [voiceMode, setVoiceMode]         = useState(null); // null | 'full'
-  const [aiState, setAiState]             = useState("listening");
   const [muted, setMuted]                 = useState(false);
   const [listening, setListening]         = useState(false);
   const [locked, setLocked]              = useState(false);

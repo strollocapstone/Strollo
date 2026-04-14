@@ -250,7 +250,6 @@ export default function HomeScreen({ onStartWalk }) {
   const [favedIds, setFavedIds]           = useState(new Set());
   const [hiddenIds, setHiddenIds]         = useState(new Set());
   const [voiceActive, setVoiceActive]     = useState(false);
-  const [voiceDismissing, setVoiceDismissing] = useState(false);
   const [listening, setListening]         = useState(false);
   const [locked, setLocked]              = useState(false);
   const [muted, setMuted]                = useState(false);
@@ -282,8 +281,7 @@ export default function HomeScreen({ onStartWalk }) {
 
   const toggleVoice = () => {
     if (voiceActive) {
-      setVoiceDismissing(true);
-      setTimeout(() => { setVoiceActive(false); setVoiceDismissing(false); }, 320);
+      setTimeout(() => { setVoiceActive(false); }, 320);
     } else {
       setSheetOpen(false);
       setVoiceActive(true);
