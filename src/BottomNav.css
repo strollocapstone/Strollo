@@ -1,0 +1,72 @@
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 80px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(247, 243, 245, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(90, 75, 100, 0.08);
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 12px 0 8px;
+  min-width: 64px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Material You pill indicator behind active icon */
+.bottom-nav-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  transition: width 0.25s cubic-bezier(0.2, 0, 0, 1),
+              background-color 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.bottom-nav-item.active .bottom-nav-indicator {
+  width: 64px;
+  background-color: rgba(136, 81, 212, 0.12);
+}
+
+.bottom-nav-icon {
+  font-size: 24px;
+  color: #5A4B64;
+  transition: font-variation-settings 0.25s cubic-bezier(0.2, 0, 0, 1),
+              color 0.25s cubic-bezier(0.2, 0, 0, 1);
+  font-variation-settings: 'FILL' 0;
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+  color: #8851D4;
+  font-variation-settings: 'FILL' 1;
+}
+
+.bottom-nav-label {
+  font-family: 'Satoshi', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A4B64;
+  transition: color 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.bottom-nav-item.active .bottom-nav-label {
+  color: #8851D4;
+  font-weight: 700;
+}

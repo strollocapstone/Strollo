@@ -297,7 +297,7 @@ export default function HomeScreen({ onStartWalk }) {
       : SUGGESTIONS.filter((s) => favedIds.has(s.id));
 
   return (
-    <div className="phone-frame">
+    <>
 
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
@@ -548,6 +548,6 @@ export default function HomeScreen({ onStartWalk }) {
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -275,7 +275,7 @@ export default function NavigationMapScreen({ onGoBack, journeyItems = [] }) {
     : [];
 
   return (
-    <div className="phone-frame">
+    <>
 
       {/* ── MAP ── */}
       <div className="map-wrapper">
@@ -387,6 +387,6 @@ export default function NavigationMapScreen({ onGoBack, journeyItems = [] }) {
         />
       )}
 
-    </div>
+    </>
   );
 }
