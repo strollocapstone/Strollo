@@ -75,7 +75,7 @@ function TrackUserPosition({ userPos, onScreenPos }) {
   return null;
 }
 
-function LocateMe({ trigger, onLocate }) {
+function LocateMe({ trigger, onLocate, onError }) {
   const map = useMap();
   useEffect(() => {
     if (!trigger) return;
@@ -85,9 +85,16 @@ function LocateMe({ trigger, onLocate }) {
         map.flyTo(pos, 16, { duration: 1.4 });
         onLocate(pos);
       },
-      () => { map.flyTo(YOU, 16, { duration: 1.4 }); onLocate(YOU); }
+      (err) => {
+        if (err.code === 1) {
+          onError("Location permission denied. Please enable it in your browser settings.");
+        } else {
+          onError("Unable to get your location. Please try again.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-  }, [trigger, map, onLocate]);
+  }, [trigger, map, onLocate, onError]);
   return null;
 }
 
@@ -226,7 +233,7 @@ const CHAT_HISTORY = [
 
 // ── Sound wave icon (matches Walk Companion pill) ─────────────────────────
 function SoundWaveSvg({ active }) {
-  const color = active ? "#FFFFFF" : "rgba(225,177,255,0.70)";
+  const color = active ? "#FFFFFF" : "#8851D4";
   const cls = active ? "sw-bar sw-bar--active" : "sw-bar";
   return (
     <svg width="22" height="18" viewBox="0 0 22 18" fill={color}>
@@ -239,10 +246,141 @@ function SoundWaveSvg({ active }) {
   );
 }
 
+// ── Web Speech API hook ───────────────────────────────────────────────────
+const SILENCE_AFTER_SPEECH_MS = 1000;  // 1s silence after last words → auto-stop
+const NO_SPEECH_TIMEOUT_MS   = 5000;  // 5s with nothing heard → auto-stop
+const MAX_LISTEN_MS          = 30000; // 30s hard cap
+
+function useSpeechRecognition({ onAutoStop } = {}) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const supported = !!SpeechRecognition;
+  const recognitionRef = useRef(null);
+  const silenceTimer = useRef(null);
+  const noSpeechTimer = useRef(null);
+  const maxTimer = useRef(null);
+  const hasHeardSpeech = useRef(false);
+  const hadError = useRef(false);
+  const onAutoStopRef = useRef(onAutoStop);
+  onAutoStopRef.current = onAutoStop;
+  const [transcript, setTranscript] = useState("");
+  const [finalTranscript, setFinalTranscript] = useState("");
+  const transcriptRef = useRef("");
+
+  const clearTimers = useCallback(() => {
+    clearTimeout(silenceTimer.current);
+    clearTimeout(noSpeechTimer.current);
+    clearTimeout(maxTimer.current);
+  }, []);
+
+  const stop = useCallback(() => {
+    clearTimers();
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+      recognitionRef.current = null;
+    }
+  }, [clearTimers]);
+
+  const start = useCallback(() => {
+    if (!supported) return;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (_) {}
+    }
+    hasHeardSpeech.current = false;
+    hadError.current = false;
+    clearTimers();
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      let final = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          final += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      setFinalTranscript(final);
+      const combined = final + interim;
+      setTranscript(combined);
+      transcriptRef.current = combined;
+
+      if (!hasHeardSpeech.current) {
+        hasHeardSpeech.current = true;
+        clearTimeout(noSpeechTimer.current);
+      }
+
+      clearTimeout(silenceTimer.current);
+      silenceTimer.current = setTimeout(() => {
+        const t = transcriptRef.current;
+        stop();
+        onAutoStopRef.current?.(t);
+      }, SILENCE_AFTER_SPEECH_MS);
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === "aborted") return;
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === "network" || event.error === "not-allowed" || event.error === "service-not-allowed") {
+        hadError.current = true;
+        clearTimers();
+        recognitionRef.current = null;
+        setTranscript("Could not connect. Check your internet and try again.");
+      }
+    };
+
+    // Browser auto-ends after silence or error.
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      if (hadError.current) return; // error handler already dealt with it
+      if (hasHeardSpeech.current) {
+        clearTimers();
+        const t = transcriptRef.current;
+        recognitionRef.current = null;
+        onAutoStopRef.current?.(t);
+      } else {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+
+    recognitionRef.current = recognition;
+    setTranscript("");
+    setFinalTranscript("");
+    recognition.start();
+
+    noSpeechTimer.current = setTimeout(() => {
+      if (!hasHeardSpeech.current) {
+        stop();
+        onAutoStopRef.current?.("");
+      }
+    }, NO_SPEECH_TIMEOUT_MS);
+
+    maxTimer.current = setTimeout(() => {
+      const t = transcriptRef.current;
+      stop();
+      onAutoStopRef.current?.(t);
+    }, MAX_LISTEN_MS);
+  }, [supported, SpeechRecognition, clearTimers, stop]);
+
+  const reset = useCallback(() => {
+    setTranscript("");
+    setFinalTranscript("");
+  }, []);
+
+  return { transcript, finalTranscript, supported, start, stop, reset };
+}
+
 // ── HomeScreen ─────────────────────────────────────────────────────────────
 export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilters }) {
   const [userLocation, setUserLocation]   = useState(YOU);
   const [locateTrigger, setLocateTrigger] = useState(0);
+  const [showLocatePrompt, setShowLocatePrompt] = useState(false);
+  const [locateError, setLocateError]           = useState("");
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
   const [sheetOpen, setSheetOpen]         = useState(false);
   const [activeTab, setActiveTab]         = useState("suggested");
@@ -255,6 +393,42 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
   const [muted, setMuted]                = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
   const [query, setQuery]                 = useState("");
+  const [voiceUnsupported, setVoiceUnsupported] = useState(false);
+  const [voiceResult, setVoiceResult]           = useState("");
+  const [listenCardMode, setListenCardMode]     = useState(false);
+  const resultTimer = useRef(null);
+
+  const autoStopFired = useRef(false);
+  const handleAutoStop = useCallback((spokenText) => {
+    if (autoStopFired.current) {
+      console.log("[Strollo] auto-stop already fired, ignoring duplicate");
+      return;
+    }
+    autoStopFired.current = true;
+    console.log("[Strollo] auto-stop fired, transcript:", JSON.stringify(spokenText));
+    setListening(false);
+    setLocked(false);
+    const text = spokenText?.trim() || "";
+    console.log("[Strollo] text after trim:", JSON.stringify(text), "setting voiceResult");
+    if (text) {
+      // Show result in card for 1.5s before closing
+      setVoiceResult(text);
+      resultTimer.current = setTimeout(() => {
+        console.log("[Strollo] result timer fired, closing");
+        setQuery(text);
+        setVoiceResult("");
+        setListenCardMode(false);
+        setVoiceActive(false);
+      }, 1500);
+    } else {
+      console.log("[Strollo] no text, closing immediately");
+      // Nothing heard — just close
+      setListenCardMode(false);
+      setVoiceActive(false);
+    }
+  }, []);
+
+  const speech = useSpeechRecognition({ onAutoStop: handleAutoStop });
 
   const onScreenPos  = useCallback((pos) => setUserScreenPos(pos), []);
   const handleAdd    = (id) => setAddedIds((p) => new Set([...p, id]));
@@ -281,10 +455,28 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
 
   const toggleVoice = () => {
     if (voiceActive) {
+      speech.stop();
+      clearTimeout(resultTimer.current);
+      if (voiceResult.trim()) {
+        setQuery(voiceResult.trim());
+      } else if (speech.transcript.trim()) {
+        setQuery(speech.transcript.trim());
+      }
+      setVoiceResult("");
+      speech.reset();
+      setListenCardMode(false);
       setTimeout(() => { setVoiceActive(false); }, 320);
     } else {
+      if (!speech.supported) {
+        setVoiceUnsupported(true);
+        setTimeout(() => setVoiceUnsupported(false), 3000);
+        return;
+      }
       setSheetOpen(false);
+      setListenCardMode(true);
       setVoiceActive(true);
+      autoStopFired.current = false;
+      speech.start();
     }
   };
 
@@ -309,7 +501,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
           ))}
           <Marker position={userLocation} icon={youIcon} />
           <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />
-          <LocateMe trigger={locateTrigger} onLocate={setUserLocation} />
+          <LocateMe trigger={locateTrigger} onLocate={(pos) => { setUserLocation(pos); setShowLocatePrompt(false); }} onError={setLocateError} />
         </MapContainer>
       </div>
 
@@ -332,50 +524,64 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
         <span className="profile-initials">E</span>
       </button>
 
-      {/* ── LOCATE (bottom-right, rises above sheet when open) ── */}
-      <button
-        className="locate-fixed"
-        style={{ bottom: sheetOpen ? 440 : 128, transition: "bottom 0.42s cubic-bezier(0.22,1,0.36,1)" }}
-        onClick={() => setLocateTrigger((t) => t + 1)}
-        aria-label="Locate me"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="#8851D4">
-          <circle cx="12" cy="12" r="3.5"/>
-          <rect x="11" y="2" width="2" height="4" rx="1"/>
-          <rect x="11" y="18" width="2" height="4" rx="1"/>
-          <rect x="2" y="11" width="4" height="2" rx="1"/>
-          <rect x="18" y="11" width="4" height="2" rx="1"/>
-        </svg>
-      </button>
-
       {/* ── MAP ACTION BUTTONS ── */}
       {!voiceActive && !sheetOpen && (
         <div className="map-actions">
-          <button className="map-action-btn" aria-label="Preferences" onClick={onSetConstraints}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="6" x2="20" y2="6"/>
-              <line x1="4" y1="12" x2="20" y2="12"/>
-              <line x1="4" y1="18" x2="20" y2="18"/>
-              <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
-              <circle cx="15" cy="12" r="2" fill="currentColor"/>
-              <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+          <div className="map-actions-left">
+            <button className="map-action-btn" aria-label="Preferences" onClick={onSetConstraints}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+                <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
+                <circle cx="15" cy="12" r="2" fill="currentColor"/>
+                <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+              </svg>
+              <span>Preferences</span>
+            </button>
+            <button className="map-action-btn" aria-label="Map filters" onClick={onOpenFilters}>
+              <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+              </svg>
+              <span>Map filters</span>
+            </button>
+          </div>
+          <button className="locate-circle" aria-label="Locate me" onClick={() => { setLocateError(""); setShowLocatePrompt(true); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
             </svg>
-            <span>Preferences</span>
-          </button>
-          <button className="map-action-btn" aria-label="Map filters" onClick={onOpenFilters}>
-            <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
-            </svg>
-            <span>Map filters</span>
           </button>
         </div>
+      )}
+
+      {/* ── LOCATION PERMISSION POPOVER ── */}
+      {showLocatePrompt && (
+        <>
+          <div className="locate-overlay" onClick={() => setShowLocatePrompt(false)} />
+          <div className="locate-popover">
+            <div className="locate-popover-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <p className="locate-popover-title">Use your location?</p>
+            <p className="locate-popover-desc">Strollo needs your location to center the map and show nearby suggestions.</p>
+            {locateError && <p className="locate-popover-error">{locateError}</p>}
+            <div className="locate-popover-actions">
+              <button className="locate-popover-btn locate-popover-btn--cancel" onClick={() => setShowLocatePrompt(false)}>Not now</button>
+              <button className="locate-popover-btn locate-popover-btn--allow" onClick={() => setLocateTrigger((t) => t + 1)}>Allow</button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── BACKDROP ── */}
       {sheetOpen && <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />}
 
       {/* ── VOICE PILL (minimized) ── */}
-      {voiceActive && !voiceExpanded && (() => {
+      {voiceActive && !voiceExpanded && !listenCardMode && (() => {
         const demoUserText = listening ? "Something cozy, maybe a bakery?" : "";
         const demoAiSpeaking = !listening && (locked || muted);
         const demoAiText = muted ? "There's a courtyard 3 blocks east…" : "";
@@ -395,7 +601,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                 <MuteSvg muted={muted} />
               </button>
               <div className="wc-bubble-area">
-                <WidgetBubble listening={listening} aiSpeaking={demoAiSpeaking} muted={muted} userText={demoUserText} aiText={demoAiText} />
+                <WidgetBubble listening={listening} aiSpeaking={demoAiSpeaking} muted={muted} userText={speech.transcript || demoUserText} aiText={demoAiText} />
               </div>
               <button
                 className={`wc-btn wc-speak-btn ${listening ? "wc-listening" : ""} ${locked ? "wc-locked" : ""}`}
@@ -405,6 +611,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                   homeStartY.current = e.clientY;
                   homeDidLock.current = false;
                   setListening(true);
+                  speech.start();
                 }}
                 onPointerMove={(e) => {
                   if (homeStartY.current === null || homeDidLock.current) return;
@@ -413,9 +620,9 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                 onPointerUp={(e) => {
                   e.currentTarget.releasePointerCapture(e.pointerId);
                   homeStartY.current = null;
-                  if (!homeDidLock.current) setListening(false);
+                  if (!homeDidLock.current) { setListening(false); speech.stop(); }
                 }}
-                onClick={() => { if (locked) { setLocked(false); setListening(false); } }}
+                onClick={() => { if (locked) { setLocked(false); setListening(false); speech.stop(); } }}
                 style={{ touchAction: "none" }}
                 aria-label="Speak"
               >
@@ -478,6 +685,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                   homeStartY.current = e.clientY;
                   homeDidLock.current = false;
                   setListening(true);
+                  speech.start();
                 }}
                 onPointerMove={(e) => {
                   if (homeStartY.current === null || homeDidLock.current) return;
@@ -486,9 +694,9 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                 onPointerUp={(e) => {
                   e.currentTarget.releasePointerCapture(e.pointerId);
                   homeStartY.current = null;
-                  if (!homeDidLock.current) setListening(false);
+                  if (!homeDidLock.current) { setListening(false); speech.stop(); }
                 }}
-                onClick={() => { if (locked) { setLocked(false); setListening(false); } }}
+                onClick={() => { if (locked) { setLocked(false); setListening(false); speech.stop(); } }}
                 style={{ touchAction: "none" }}
                 aria-label="Speak"
               >
@@ -504,72 +712,106 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
       })()}
 
       {/* ── BOTTOM SEARCH / SHEET ── */}
-      {!voiceActive && (
+      {!voiceExpanded && (
         <div
-          className={`bottom-search ${sheetOpen ? "open" : ""}`}
+          className={`bottom-search ${sheetOpen ? "open" : ""} ${listenCardMode ? "listening" : ""}`}
           onMouseDown={onDragStart} onMouseUp={onDragEnd}
           onTouchStart={onDragStart} onTouchEnd={onDragEnd}
         >
-          <div className="search-handle" onClick={() => setSheetOpen((o) => !o)}>
+          {/* Animated blobs (always in DOM for smooth fade) */}
+          <div className={`listen-card-blobs ${listenCardMode ? "visible" : ""}`}>
+            <div className="listen-blob listen-blob--1" />
+            <div className="listen-blob listen-blob--2" />
+            <div className="listen-blob listen-blob--3" />
+          </div>
+
+          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)}>
             <div className="handle-bar" />
           </div>
 
-          <div className="search-input-row">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              className="search-input"
-              placeholder="I'm in the mood for..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSheetOpen(true)}
-            />
-            <button className="mic-btn" aria-label="Voice input" onClick={toggleVoice}>
-              <SoundWaveSvg active={false} />
-            </button>
-          </div>
-
-          {sheetOpen && (
-            <>
-              <div className="sheet-tabs">
-                {["suggested", "recent", "faves"].map((tab) => (
-                  <button
-                    key={tab}
-                    className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="suggestion-list">
-                {allItems.length === 0 && (
-                  <p className="empty-state">
-                    {activeTab === "faves" ? "Swipe right on suggestions to fave them ♥" : "Nothing here yet."}
-                  </p>
-                )}
-                {allItems.map((item) => (
-                  <SwipeRow
-                    key={item.id}
-                    item={item}
-                    added={addedIds.has(item.id)}
-                    onAdd={handleAdd}
-                    onFave={handleFave}
-                    onRemove={handleRemove}
-                  />
-                ))}
-              </div>
-
-              {addedIds.size > 0 && (
-                <button className="cta-btn" onClick={handleStartWalk}>
-                  Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
-                </button>
-              )}
-            </>
+          {/* State: idle — search input */}
+          {!listenCardMode && (
+            <div className="search-input-row">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                className="search-input"
+                placeholder="I'm in the mood for..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSheetOpen(true)}
+              />
+              <button className="mic-btn" aria-label="Voice input" onClick={toggleVoice}>
+                <SoundWaveSvg active={false} />
+              </button>
+            </div>
           )}
+
+          {/* State: listening — live transcript */}
+          {listenCardMode && !voiceResult && (
+            <div className="listen-content visible">
+              <p className="listen-card-caption">
+                {speech.transcript || "What's on your mind?"}
+              </p>
+              <button className="listen-card-close" aria-label="Stop listening" onClick={toggleVoice}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* State: result — final recognized text */}
+          {listenCardMode && voiceResult && (
+            <div className="listen-content visible">
+              <p className="listen-card-caption listen-card-result">{voiceResult}</p>
+            </div>
+          )}
+
+          <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
+            <div className="sheet-tabs">
+              {["suggested", "recent", "faves"].map((tab) => (
+                <button
+                  key={tab}
+                  className={`tab-btn ${activeTab === tab ? "active" : ""}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <div className="suggestion-list">
+              {allItems.length === 0 && (
+                <p className="empty-state">
+                  {activeTab === "faves" ? "Swipe right on suggestions to fave them ♥" : "Nothing here yet."}
+                </p>
+              )}
+              {allItems.map((item) => (
+                <SwipeRow
+                  key={item.id}
+                  item={item}
+                  added={addedIds.has(item.id)}
+                  onAdd={handleAdd}
+                  onFave={handleFave}
+                  onRemove={handleRemove}
+                />
+              ))}
+            </div>
+
+            {addedIds.size > 0 && (
+              <button className="cta-btn" onClick={handleStartWalk}>
+                Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      {/* ── Voice unsupported toast ── */}
+      {voiceUnsupported && (
+        <div className="voice-toast">Voice input is not supported in this browser</div>
       )}
     </>
   );
