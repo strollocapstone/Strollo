@@ -7,7 +7,7 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: 80px;
+  height: 60px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: rgba(247, 243, 245, 0.92);
   backdrop-filter: blur(12px);
@@ -19,30 +19,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   border: none;
   background: none;
   cursor: pointer;
-  padding: 12px 0 8px;
+  padding: 6px 0 4px;
   min-width: 64px;
   -webkit-tap-highlight-color: transparent;
-}
-
-/* Material You pill indicator behind active icon */
-.bottom-nav-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
-  transition: width 0.25s cubic-bezier(0.2, 0, 0, 1),
-              background-color 0.25s cubic-bezier(0.2, 0, 0, 1);
-}
-
-.bottom-nav-item.active .bottom-nav-indicator {
-  width: 64px;
-  background-color: rgba(136, 81, 212, 0.12);
 }
 
 .bottom-nav-icon {
