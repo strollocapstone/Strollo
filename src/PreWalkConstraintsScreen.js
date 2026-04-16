@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import "./PreWalkConstraintsScreen.css";
 
 const DESTINATION_OPTIONS = ["Return to start", "Open-ended", "End somewhere specific"];
@@ -7,14 +7,6 @@ const ACCESSIBILITY_OPTIONS = ["Wheelchair", "Stroller", "Hard of hearing", "Vis
 const AVOIDANCE_OPTIONS = [
   "Busy roads", "Big crowds", "Construction", "Touristy spots",
   "Bars & nightlife", "Places I've already explored", "Hilly terrain",
-];
-
-const MOCK_PLACES = [
-  "Golden Gate Park, San Francisco",
-  "Ferry Building, Embarcadero",
-  "Dolores Park, Mission District",
-  "Fisherman's Wharf, San Francisco",
-  "Palace of Fine Arts, Marina",
 ];
 
 function ChevronIcon({ expanded }) {
@@ -62,7 +54,25 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [durationError, setDurationError] = useState(false);
   const [distanceError, setDistanceError] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
   const searchRef = useRef(null);
+  const searchTimer = useRef(null);
+
+  // Live place search via Nominatim
+  const searchPlaces = useCallback(async (query) => {
+    if (!query || query.length < 2) { setSearchResults([]); return; }
+    try {
+      const encoded = encodeURIComponent(query);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5`,
+        { headers: { "User-Agent": "StrolloApp/1.0" } }
+      );
+      const data = await res.json();
+      setSearchResults(data.map((r) => r.display_name.split(",").slice(0, 2).join(",")));
+    } catch {
+      setSearchResults([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (destSearch.length > 0 && destination === "End somewhere specific") {
@@ -71,6 +81,9 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk }) {
       setShowDropdown(false);
     }
   }, [destSearch, destination]);
+
+  // Clean up searchTimer on unmount
+  useEffect(() => { return () => clearTimeout(searchTimer.current); }, []);
 
   const toggle = (card) => setExpandedCard((prev) => (prev === card ? null : card));
 
@@ -129,9 +142,7 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk }) {
     }
   };
 
-  const filteredPlaces = MOCK_PLACES.filter((p) =>
-    p.toLowerCase().includes(destSearch.toLowerCase())
-  );
+  const filteredPlaces = searchResults;
 
   const cards = [
     { id: "destination", label: "Destination", fullWidth: true },
@@ -167,7 +178,13 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk }) {
                     className="pwc-search-input"
                     placeholder="Search for a place or address"
                     value={destSearch}
-                    onChange={(e) => setDestSearch(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDestSearch(val);
+                      setShowDropdown(true);
+                      clearTimeout(searchTimer.current);
+                      searchTimer.current = setTimeout(() => searchPlaces(val), 300);
+                    }}
                     onFocus={() => destSearch.length > 0 && setShowDropdown(true)}
                   />
                 </div>
@@ -360,7 +377,15 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk }) {
 
       <div className="pwc-bottom">
         <p className="pwc-hint">You can always adjust during your walk</p>
-        <button className="pwc-start-btn" onClick={() => onStartWalk?.([])}>
+        <button className="pwc-start-btn" onClick={() => onStartWalk?.([], {
+          destination,
+          destChosen: destChosen || null,
+          duration: duration || null,
+          customDuration: customDuration || null,
+          distance: distance || null,
+          accessibility: [...accessibility],
+          avoidances: [...avoidances],
+        })}>
           Save Preferences
         </button>
       </div>

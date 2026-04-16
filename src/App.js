@@ -11,6 +11,8 @@ function App() {
   const [tab, setTab] = useState('map');
   const [screen, setScreen] = useState('home');
   const [journeyItems, setJourneyItems] = useState([]);
+  const [startLocation, setStartLocation] = useState(null);
+  const [lastKnownLocation, setLastKnownLocation] = useState(null);
 
   const showBottomNav = screen === 'home';
 
@@ -21,15 +23,17 @@ function App() {
           <>
             {screen === 'home' && (
               <HomeScreen
-                onStartWalk={(items) => { setJourneyItems(items); setScreen('navigation'); }}
+                onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
                 onSetConstraints={() => setScreen('constraints')}
                 onOpenFilters={() => setScreen('filters')}
+                initialLocation={lastKnownLocation}
               />
             )}
             {screen === 'navigation' && (
               <NavigationMapScreen
                 onGoBack={() => setScreen('home')}
                 journeyItems={journeyItems}
+                startLocation={startLocation}
               />
             )}
             {screen === 'filters' && (

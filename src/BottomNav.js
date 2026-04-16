@@ -20,11 +20,9 @@ export default function BottomNav({ activeTab, onTabChange }) {
             onClick={() => onTabChange(tab.id)}
             aria-label={tab.label}
           >
-            <div className="bottom-nav-indicator">
-              <span className="material-symbols-rounded bottom-nav-icon">
-                {tab.icon}
-              </span>
-            </div>
+            <span className="material-symbols-rounded bottom-nav-icon">
+              {tab.icon}
+            </span>
             <span className="bottom-nav-label">{tab.label}</span>
           </button>
         );
