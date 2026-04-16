@@ -240,7 +240,7 @@ function SoundWaveSvg({ active }) {
 }
 
 // ── HomeScreen ─────────────────────────────────────────────────────────────
-export default function HomeScreen({ onStartWalk }) {
+export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilters }) {
   const [userLocation, setUserLocation]   = useState(YOU);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
@@ -347,6 +347,29 @@ export default function HomeScreen({ onStartWalk }) {
           <rect x="18" y="11" width="4" height="2" rx="1"/>
         </svg>
       </button>
+
+      {/* ── MAP ACTION BUTTONS ── */}
+      {!voiceActive && !sheetOpen && (
+        <div className="map-actions">
+          <button className="map-action-btn" aria-label="Preferences" onClick={onSetConstraints}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="6" x2="20" y2="6"/>
+              <line x1="4" y1="12" x2="20" y2="12"/>
+              <line x1="4" y1="18" x2="20" y2="18"/>
+              <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
+              <circle cx="15" cy="12" r="2" fill="currentColor"/>
+              <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+            </svg>
+            <span>Preferences</span>
+          </button>
+          <button className="map-action-btn" aria-label="Map filters" onClick={onOpenFilters}>
+            <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+            </svg>
+            <span>Map filters</span>
+          </button>
+        </div>
+      )}
 
       {/* ── BACKDROP ── */}
       {sheetOpen && <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />}

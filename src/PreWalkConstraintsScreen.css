@@ -1,0 +1,329 @@
+/* ── Pre-Walk Constraints Screen ── */
+.pwc-screen {
+  position: absolute;
+  inset: 0;
+  background: #F7F4FA;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-ui);
+  z-index: 30;
+}
+
+/* ── Header ── */
+.pwc-header {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px 14px;
+  background: #F7F4FA;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.pwc-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+}
+.pwc-title {
+  font-family: var(--font-brand);
+  font-size: 16px;
+  font-weight: 800;
+  color: #34233E;
+  margin-top: 12px;
+  padding-left: 4px;
+}
+
+/* ── Scrollable body ── */
+.pwc-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px 120px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Card grid ── */
+.pwc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Card ── */
+.pwc-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pwc-card--full {
+  grid-column: 1 / -1;
+}
+.pwc-expanded-top {
+  margin-bottom: 12px;
+}
+
+/* ── Card header (collapsed tap target) ── */
+.pwc-card-header {
+  width: 100%;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 14px 14px 16px;
+  cursor: pointer;
+  text-align: left;
+}
+.pwc-card-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pwc-card-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #34233E;
+  margin-top: 4px;
+}
+.pwc-card-caption {
+  font-size: 12px;
+  color: #5A4B64;
+  font-weight: 500;
+}
+
+/* ── Chevron ── */
+.pwc-chevron {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.pwc-chevron--up {
+  transform: rotate(180deg);
+}
+
+/* ── Card body (expanded content) ── */
+.pwc-card-body {
+  padding: 0 16px 16px;
+  animation: pwc-expand 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes pwc-expand {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Pill chips ── */
+.pwc-chips {
+  display: flex;
+  gap: 8px;
+}
+.pwc-chips--wrap {
+  flex-wrap: wrap;
+}
+.pwc-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid #E8E4E6;
+  background: #FFFFFF;
+  color: #34233E;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.pwc-chip--active {
+  background: #8851D4;
+  color: #FFFFFF;
+  border-color: #8851D4;
+}
+
+/* ── Search input (Destination) ── */
+.pwc-search-wrapper {
+  margin-top: 12px;
+  position: relative;
+}
+.pwc-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #F4F0FA;
+  border-radius: 12px;
+}
+.pwc-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #34233E;
+  outline: none;
+}
+.pwc-search-input::placeholder {
+  color: #aaa;
+}
+
+/* ── Dropdown ── */
+.pwc-dropdown {
+  position: relative;
+  margin-top: 4px;
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 1px solid #E8E4E6;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  z-index: 5;
+  overflow: hidden;
+}
+.pwc-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #F4F0FA;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #34233E;
+  cursor: pointer;
+  text-align: left;
+}
+.pwc-dropdown-item:last-child {
+  border-bottom: none;
+}
+.pwc-dropdown-item:hover {
+  background: #F7F4FA;
+}
+
+/* ── Distance slider ── */
+.pwc-slider-wrapper {
+  margin-bottom: 8px;
+}
+.pwc-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+.pwc-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 3px solid #8851D4;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+.pwc-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 3px solid #8851D4;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+.pwc-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #5A4B64;
+  font-weight: 500;
+}
+
+/* ── Distance readout ── */
+.pwc-distance-readout {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #34233E;
+  margin: 10px 0 12px;
+}
+
+/* ── Distance input ── */
+.pwc-distance-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #F4F0FA;
+  border-radius: 12px;
+}
+.pwc-distance-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #34233E;
+  outline: none;
+}
+.pwc-distance-input::placeholder {
+  color: #aaa;
+}
+.pwc-clear-btn {
+  background: none;
+  border: none;
+  color: #8851D4;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+
+/* ── Input error ── */
+.pwc-input-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: #D4513B;
+}
+
+/* ── Bottom CTA ── */
+.pwc-bottom {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 16px 16px;
+  background: #F7F4FA;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.pwc-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #5A4B64;
+  font-weight: 500;
+  margin: 0 0 10px;
+}
+.pwc-start-btn {
+  width: 100%;
+  height: 52px;
+  background: #FFD501;
+  color: #34233E;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
