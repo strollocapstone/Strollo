@@ -107,6 +107,32 @@
   color: var(--color-accent);
 }
 
+/* ── Map action buttons (Preferences / Map filters) ── */
+.map-actions {
+  position: absolute;
+  left: 16px;
+  bottom: 185px;
+  z-index: 22;
+  display: flex;
+  gap: 8px;
+}
+.map-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  color: var(--color-body);
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  cursor: pointer;
+}
+.map-action-btn svg { flex-shrink: 0; }
+
 /* ── Profile button — floats top-right over map ── */
 .profile-btn {
   position: absolute;
