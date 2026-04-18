@@ -2,7 +2,6 @@ import { useState } from 'react';
 import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreWalkConstraintsScreen';
-import MapFilterScreen from './MapFilterScreen';
 import TimelineScreen from './TimelineScreen';
 import BottomNav from './BottomNav';
 import './App.css';
@@ -25,7 +24,6 @@ function App() {
               <HomeScreen
                 onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
                 onSetConstraints={() => setScreen('constraints')}
-                onOpenFilters={() => setScreen('filters')}
                 initialLocation={lastKnownLocation}
               />
             )}
@@ -35,9 +33,6 @@ function App() {
                 journeyItems={journeyItems}
                 startLocation={startLocation}
               />
-            )}
-            {screen === 'filters' && (
-              <MapFilterScreen onGoBack={() => setScreen('home')} />
             )}
             {screen === 'constraints' && (
               <PreWalkConstraintsScreen

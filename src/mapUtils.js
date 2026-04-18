@@ -123,6 +123,21 @@ export function MapDragListener({ onDrag }) {
   return null;
 }
 
+// ── Track map center (fires on moveend: drag, zoom, flyTo) ───────────────
+export function MapCenterTracker({ onCenterChange }) {
+  const map = useMap();
+  useEffect(() => {
+    const handler = () => {
+      const c = map.getCenter();
+      onCenterChange([c.lat, c.lng]);
+    };
+    handler();
+    map.on("moveend", handler);
+    return () => map.off("moveend", handler);
+  }, [map, onCenterChange]);
+  return null;
+}
+
 // ── Fit map bounds to a set of points ────────────────────────────────────
 export function FitBounds({ points }) {
   const map = useMap();
