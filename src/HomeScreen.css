@@ -194,14 +194,6 @@
   cursor: pointer;
 }
 .map-action-btn svg { flex-shrink: 0; }
-.map-action-btn--icon {
-  padding: 10px;
-  border-radius: 50%;
-}
-.map-actions-left {
-  display: flex;
-  gap: 8px;
-}
 .map-plan-btn {
   background: #8851D4;
   color: white;
@@ -1190,32 +1182,138 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── Suggestion list ── */
-.suggestion-list {
-  overflow-y: auto;
-  max-height: 240px;
-  padding: 0 4px;
+/* ── Preferences button (inside bottom sheet tabs) ── */
+.sheet-prefs-btn {
+  margin-left: auto;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.22);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  color: var(--color-accent-2);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.sheet-prefs-btn:hover { background: rgba(255,255,255,0.4); }
+.sheet-prefs-btn svg { flex-shrink: 0; }
+
+/* ── Location card carousel ── */
+.location-card-carousel {
+  display: flex;
+  gap: 12px;
+  padding: 8px 16px 4px 16px;
+  overflow-x: auto;
+  scroll-padding-left: 16px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.location-card-carousel::-webkit-scrollbar { display: none; }
+
+.location-card {
+  flex: 0 0 200px;
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  scroll-snap-align: start;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.location-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
 }
 
+.location-card-image {
+  position: relative;
+  width: 100%;
+  height: 130px;
+  background: #E8E4EE;
+  background-size: cover;
+  background-position: center;
+}
+.location-card-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,0.10) 100%);
+  pointer-events: none;
+}
+.location-card-add {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  transition: background 0.15s;
+}
+.location-card-add.added {
+  background: #8851D4;
+}
 
-.suggestion-item {
+.location-card-info {
+  padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.location-card-name-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  background: white;
-  border-radius: 16px;
-  position: relative;
-  z-index: 1;
-  cursor: pointer;
-  touch-action: pan-y;
-  user-select: none;
+  gap: 4px;
 }
-.suggestion-text { display: flex; flex-direction: column; gap: 2px; }
-.suggestion-name { font-size: 14px; font-weight: 600; color: var(--color-body); }
-.suggestion-desc { font-size: 12px; color: #aaa; }
-
-.add-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; }
+.location-card-name {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.location-card-fave {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+}
+.location-card-address {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.location-card-tag {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  background: #F4F0FA;
+  color: #5A4B64;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  pointer-events: none;
+}
 
 .empty-state {
   font-size: 13px;

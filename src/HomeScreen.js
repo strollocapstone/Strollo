@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,7 +7,7 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener } from "./mapUtils";
+import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, isWithinWalkingRadius } from "./mapUtils";
 
 const makePinIcon = (name, desc, added, expanded) => L.divIcon({
   className: "",
@@ -23,28 +23,56 @@ const makePinIcon = (name, desc, added, expanded) => L.divIcon({
   iconAnchor: [0, 0],
 });
 
-// ── Place list item ───────────────────────────────────────────────────────
-const PlaceItem = memo(function PlaceItem({ item, added, onToggle }) {
+// ── Location card ──────────────────────────────────────────────────────────
+const LOVED_PLACES = ["Sightglass Coffee", "Dolores Park", "Ferry Building"];
+
+const trustTagFor = (id) => {
+  const variant = id % 3;
+  if (variant === 0) return "From your last walk";
+  if (variant === 1) return `Because you loved ${LOVED_PLACES[id % LOVED_PLACES.length]}`;
+  return "Based on your preferences";
+};
+
+const LocationCard = memo(function LocationCard({ item, added, faved, onToggle, onFave }) {
   return (
-    <div className="suggestion-item" onClick={() => onToggle(item.id)}>
-      <div className="suggestion-text">
-        <span className="suggestion-name">{item.name}</span>
-        <span className="suggestion-desc">{item.desc}</span>
+    <div className="location-card">
+      <div
+        className="location-card-image"
+        style={item.image ? { backgroundImage: `url(${item.image})` } : undefined}
+      >
+        <div className="location-card-gradient" />
+        <button
+          className={`location-card-add ${added ? "added" : ""}`}
+          onClick={() => onToggle(item.id)}
+          aria-label={added ? "Remove from itinerary" : "Add to itinerary"}
+        >
+          {added ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="3" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          )}
+        </button>
       </div>
-      <div className={`add-btn ${added ? "added" : ""}`}>
-        {added ? (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="#8851D4" opacity="0.9"/>
-            <line x1="12" y1="6" x2="12" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-            <line x1="9" y1="9" x2="15" y2="9" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" fill="rgba(136,81,212,0.1)"/>
-            <line x1="12" y1="7" x2="12" y2="17" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
-            <line x1="7" y1="12" x2="17" y2="12" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        )}
+      <div className="location-card-info">
+        <div className="location-card-name-row">
+          <span className="location-card-name">{item.name}</span>
+          <button
+            className={`location-card-fave ${faved ? "faved" : ""}`}
+            onClick={() => onFave(item.id)}
+            aria-label={faved ? "Unfave" : "Fave"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={faved ? "#FF6B6B" : "none"} stroke={faved ? "#FF6B6B" : "#ccc"} strokeWidth="2">
+              <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/>
+            </svg>
+          </button>
+        </div>
+        <span className="location-card-address">{item.desc || item.address || ""}</span>
+        <span className="location-card-tag">{trustTagFor(item.id)}</span>
       </div>
     </div>
   );
@@ -92,6 +120,18 @@ function WidgetBubble({ listening, aiSpeaking, muted, userText, aiText }) {
   return null;
 }
 
+// Map a PreferencesScreen "Show on Map" filter ID → Overpass place `desc` strings.
+// Only these filter IDs correspond to fetched pin categories; others (ai-highlights,
+// saved-places, benches, dog-friendly) don't map to Overpass results and are skipped.
+const FILTER_DESCS = {
+  cafes: new Set(["Coffee", "Bakery"]),
+  food: new Set(["Restaurant", "Ice Cream", "Bar"]),
+  museums: new Set(["Museum", "Gallery", "Art", "Arts"]),
+  parks: new Set(["Park", "Garden"]),
+  sights: new Set(["Viewpoint"]),
+  attractions: new Set(["Attraction"]),
+};
+
 // ── Marauder's Map footstep positions ──────────────────────────────────────
 const VFS_STEPS = [
   { x: "calc(50% + 6px)",  y: "88%", rot: -4,  mirror: false },
@@ -125,16 +165,35 @@ function SoundWaveSvg({ active }) {
 }
 
 // ── HomeScreen ─────────────────────────────────────────────────────────────
-export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilters, initialLocation }) {
+export default function HomeScreen({
+  onStartWalk,
+  onSetConstraints,
+  initialLocation,
+  initialSheetOpen,
+  onSheetOpenConsumed,
+  preferences,
+  nearbyPlaces,
+  setNearbyPlaces,
+  addedIds,
+  setAddedIds,
+  favedIds,
+  setFavedIds,
+  lastFetchedLocationRef,
+  lastFetchTimeRef,
+}) {
   const [userLocation, setUserLocation]   = useState(initialLocation || null);
   const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
   const [showLocatePrompt, setShowLocatePrompt] = useState(false);
   const [locateError, setLocateError]           = useState("");
   const [locateActive, setLocateActive]         = useState(false);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
-  const [sheetOpen, setSheetOpen]         = useState(false);
-  const [addedIds, setAddedIds]           = useState(new Set());
-  const [nearbyPlaces, setNearbyPlaces]   = useState([]);
+  const [sheetOpen, setSheetOpen]         = useState(Boolean(initialSheetOpen));
+
+  useEffect(() => {
+    if (initialSheetOpen) onSheetOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const mapCenterRef                      = useRef(null);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyError, setNearbyError]     = useState("");
   const [voiceActive, setVoiceActive]     = useState(false);
@@ -161,45 +220,48 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
   const chatHistoryIdCounter = useRef(0);
   const chatIdCounter = useRef(0);
   const resultTimer = useRef(null);
-  const lastFetchedLocation = useRef(null);
-  const lastFetchTime = useRef(0);
-  const fetchingRef = useRef(false);
+  const nearbyAbortRef = useRef(null);
 
   // Clean up resultTimer on unmount
   useEffect(() => { return () => clearTimeout(resultTimer.current); }, []);
+  useEffect(() => () => { nearbyAbortRef.current?.abort(); }, []);
 
   const loadNearbyPlaces = useCallback(async (loc, force = false) => {
-    // Prevent concurrent requests and enforce 10s cooldown
-    if (fetchingRef.current) return;
     const now = Date.now();
-    if (!force && now - lastFetchTime.current < 10000) return;
+    if (!force && now - lastFetchTimeRef.current < 10000) return;
 
-    fetchingRef.current = true;
+    // Supersede any in-flight request — a newer call owns the result set now
+    nearbyAbortRef.current?.abort();
+    const controller = new AbortController();
+    nearbyAbortRef.current = controller;
+
     setNearbyLoading(true);
     setNearbyError("");
     try {
-      const places = await fetchNearbyPlaces(loc[0], loc[1]);
+      const places = await fetchNearbyPlaces(loc[0], loc[1], 800, { signal: controller.signal });
+      if (controller.signal.aborted) return; // superseded — drop result
       setNearbyPlaces(places);
-      lastFetchedLocation.current = loc;
-      lastFetchTime.current = Date.now();
+      lastFetchedLocationRef.current = loc;
+      lastFetchTimeRef.current = Date.now();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.warn("[Strollo] Failed to fetch nearby places:", err);
       setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
     } finally {
-      setNearbyLoading(false);
-      fetchingRef.current = false;
+      if (!controller.signal.aborted) setNearbyLoading(false);
+      if (nearbyAbortRef.current === controller) nearbyAbortRef.current = null;
     }
   }, []);
 
   // Auto-fetch nearby places when real user location is available / changes significantly
   useEffect(() => {
     if (!userLocation) return; // wait for geolocation
-    if (!lastFetchedLocation.current) {
+    if (!lastFetchedLocationRef.current) {
       loadNearbyPlaces(userLocation, true);
       return;
     }
     // Only re-fetch if moved more than ~200m
-    const [prevLat, prevLng] = lastFetchedLocation.current;
+    const [prevLat, prevLng] = lastFetchedLocationRef.current;
     const dlat = Math.abs(userLocation[0] - prevLat);
     const dlng = Math.abs(userLocation[1] - prevLng);
     if (dlat > 0.002 || dlng > 0.002) {
@@ -348,12 +410,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
         }
       }
 
-      // Filter out stops that are too far (>3km from user)
-      const nearby = geocoded.filter((s) => {
-        const dlat = Math.abs(s.lat - userLocation[0]);
-        const dlng = Math.abs(s.lng - userLocation[1]);
-        return dlat < 0.027 && dlng < 0.027;
-      });
+      const nearby = geocoded.filter((s) => isWithinWalkingRadius(userLocation, s));
 
       if (nearby.length === 0) {
         const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Sorry, I couldn't find those places on the map. Try asking for specific place names!" };
@@ -398,6 +455,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
   }, []);
 
   const onScreenPos  = useCallback((pos) => setUserScreenPos(pos), []);
+  const handleMapCenterChange = useCallback((center) => { mapCenterRef.current = center; }, []);
   const handleLocate = useCallback((pos) => {
     setUserLocation(pos);
     setShowLocatePrompt(false);
@@ -410,6 +468,41 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
     else next.add(id);
     return next;
   }), []);
+  const handleFave = useCallback((id) => setFavedIds((p) => {
+    const next = new Set(p);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  }), []);
+
+  const carouselRef = useRef(null);
+  const carouselDrag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false });
+  const onCarouselMouseDown = (e) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    carouselDrag.current = { active: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft, moved: false };
+    el.style.cursor = "grabbing";
+  };
+  const onCarouselMouseMove = (e) => {
+    if (!carouselDrag.current.active) return;
+    e.preventDefault();
+    const el = carouselRef.current;
+    const x = e.pageX - el.offsetLeft;
+    const dx = x - carouselDrag.current.startX;
+    if (Math.abs(dx) > 3) carouselDrag.current.moved = true;
+    el.scrollLeft = carouselDrag.current.scrollLeft - dx;
+  };
+  const onCarouselMouseUp = () => {
+    carouselDrag.current.active = false;
+    if (carouselRef.current) carouselRef.current.style.cursor = "grab";
+  };
+  const onCarouselClickCapture = (e) => {
+    if (carouselDrag.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      carouselDrag.current.moved = false;
+    }
+  };
 
   const dragStartY = useRef(null);
   const homeStartY = useRef(null);
@@ -425,16 +518,11 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
   };
 
   const handleStartWalk = () => {
+    const origin = lastFetchedLocationRef.current || userLocation;
     const items = nearbyPlaces
       .filter((s) => addedIds.has(s.id))
-      .filter((s) => {
-        // Drop stops more than ~3km from user (roughly 40 min walk)
-        if (!userLocation || !s.lat || !s.lng) return false;
-        const dlat = Math.abs(s.lat - userLocation[0]);
-        const dlng = Math.abs(s.lng - userLocation[1]);
-        return dlat < 0.027 && dlng < 0.027; // ~3km
-      });
-    if (items.length) onStartWalk(items, userLocation);
+      .filter((s) => isWithinWalkingRadius(origin, s));
+    if (items.length) onStartWalk(items, origin);
   };
 
   const toggleVoice = () => {
@@ -466,7 +554,15 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
 
   const { x, y } = userScreenPos;
 
-  const allItems = nearbyPlaces;
+  const visibleNearbyPlaces = useMemo(() => {
+    const active = preferences?.mapFilters?.filter((id) => FILTER_DESCS[id]) ?? [];
+    if (active.length === 0) return nearbyPlaces;
+    const allowed = new Set();
+    for (const id of active) FILTER_DESCS[id].forEach((d) => allowed.add(d));
+    return nearbyPlaces.filter((p) => allowed.has(p.desc));
+  }, [nearbyPlaces, preferences]);
+
+  const allItems = visibleNearbyPlaces;
 
   return (
     <>
@@ -475,7 +571,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 15 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
-          {nearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
+          {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isExpanded = selectedPoi === s.id;
             const isAdded = addedIds.has(s.id);
             return (
@@ -503,6 +599,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
           <LocateMe trigger={locateTrigger} onLocate={handleLocate} onError={setLocateError} />
           <WatchLocation onUpdate={setUserLocation} />
           <MapDragListener onDrag={handleMapDrag} />
+          <MapCenterTracker onCenterChange={handleMapCenterChange} />
         </MapContainer>
       </div>
 
@@ -528,26 +625,9 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
       {/* ── MAP ACTION BUTTONS ── */}
       {!voiceActive && !sheetOpen && (
         <div className="map-actions">
-          <div className="map-actions-left">
-            <button className="map-action-btn map-action-btn--icon" aria-label="Preferences" onClick={onSetConstraints}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="4" y1="6" x2="20" y2="6"/>
-                <line x1="4" y1="12" x2="20" y2="12"/>
-                <line x1="4" y1="18" x2="20" y2="18"/>
-                <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
-                <circle cx="15" cy="12" r="2" fill="currentColor"/>
-                <circle cx="8"  cy="18" r="2" fill="currentColor"/>
-              </svg>
-            </button>
-            <button className="map-action-btn map-action-btn--icon" aria-label="Map filters" onClick={onOpenFilters}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-              </svg>
-            </button>
-          </div>
           {addedIds.size > 0 && (
             <button className="map-action-btn map-plan-btn" onClick={handleStartWalk}>
-              Plan the walk · {addedIds.size}
+              Start walk · {addedIds.size}
             </button>
           )}
           <button className={`locate-circle ${locateActive ? "locate-active" : ""}`} aria-label="Locate me" onClick={() => {
@@ -874,7 +954,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
               <button
                 className={`sheet-refresh-btn ${nearbyLoading ? "sheet-refresh-btn--spinning" : ""}`}
                 aria-label="Refresh nearby places"
-                onClick={() => loadNearbyPlaces(userLocation, true)}
+                onClick={() => loadNearbyPlaces(mapCenterRef.current || userLocation, true)}
                 disabled={nearbyLoading}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -882,9 +962,28 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
               </button>
+              <button className="sheet-prefs-btn" aria-label="Preferences" onClick={onSetConstraints}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="6" x2="20" y2="6"/>
+                  <line x1="4" y1="12" x2="20" y2="12"/>
+                  <line x1="4" y1="18" x2="20" y2="18"/>
+                  <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
+                  <circle cx="15" cy="12" r="2" fill="currentColor"/>
+                  <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+                </svg>
+              </button>
             </div>
 
-            <div className="suggestion-list">
+            <div
+              className="location-card-carousel"
+              ref={carouselRef}
+              onMouseDown={onCarouselMouseDown}
+              onMouseMove={onCarouselMouseMove}
+              onMouseUp={onCarouselMouseUp}
+              onMouseLeave={onCarouselMouseUp}
+              onClickCapture={onCarouselClickCapture}
+              style={{ cursor: "grab" }}
+            >
               {nearbyLoading && allItems.length === 0 && (
                 <p className="empty-state">Finding places near you...</p>
               )}
@@ -895,11 +994,13 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                 <p className="empty-state">No places found nearby. Try refreshing.</p>
               )}
               {allItems.map((item) => (
-                <PlaceItem
+                <LocationCard
                   key={item.id}
                   item={item}
                   added={addedIds.has(item.id)}
+                  faved={favedIds.has(item.id)}
                   onToggle={handleToggleAdd}
+                  onFave={handleFave}
                 />
               ))}
             </div>
