@@ -107,31 +107,24 @@
   color: var(--color-accent);
 }
 
-/* ── Map action buttons (Preferences / Map filters) ── */
-.map-actions {
-  position: absolute;
-  left: 16px;
-  bottom: 185px;
-  z-index: 22;
-  display: flex;
-  gap: 8px;
-}
-.map-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  background: #FFFFFF;
-  color: var(--color-body);
+/* ── Preferences button (inside bottom sheet tabs) ── */
+.sheet-prefs-btn {
+  margin-left: auto;
+  width: 40px; height: 40px;
+  border-radius: 50%;
   border: none;
-  border-radius: 16px;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.22);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  color: var(--color-accent-2);
+  flex-shrink: 0;
+  transition: background 0.15s;
 }
-.map-action-btn svg { flex-shrink: 0; }
+.sheet-prefs-btn:hover { background: rgba(255,255,255,0.4); }
+.sheet-prefs-btn svg { flex-shrink: 0; }
 
 /* ── Profile button — floats top-right over map ── */
 .profile-btn {
@@ -519,46 +512,127 @@
   color: var(--color-accent-2);
 }
 
-/* ── Suggestion list ── */
-.suggestion-list {
-  overflow-y: auto;
-  max-height: 240px;
-  padding: 0 4px;
+/* ── Location card carousel ── */
+.location-card-carousel {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0 4px;
+  margin: 0 16px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.location-card-carousel::-webkit-scrollbar { display: none; }
 
-.swipe-wrapper {
-  position: relative;
+.location-card {
+  flex: 0 0 200px;
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  margin: 2px 0;
+  scroll-snap-align: start;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.location-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
 }
 
-/* Revealed actions (sit behind the item) */
-.swipe-action {
+.location-card-image {
+  position: relative;
+  width: 100%;
+  height: 130px;
+  background: #E8E4EE;
+  background-size: cover;
+  background-position: center;
+}
+
+.location-card-gradient {
+  display: none;
+}
+
+.location-card-add {
   position: absolute;
-  top: 0; bottom: 0;
-  width: 72px;
-  display: flex; align-items: center; justify-content: center;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s, transform 0.15s;
 }
-.swipe-action--fave   { left: 0;  background: linear-gradient(to right, #FFD501, #FFE44D); border-radius: 16px 0 0 16px; }
-.swipe-action--remove { right: 0; background: linear-gradient(to left, #FF6B6B, #FF8E8E); border-radius: 0 16px 16px 0; }
+.location-card-add:hover { background: rgba(255, 255, 255, 1); transform: scale(1.08); }
+.location-card-add.added { background: var(--color-accent-2); }
 
-.suggestion-item {
+.location-card-info {
+  padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.location-card-name-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  background: white;
-  border-radius: 16px;
-  position: relative;
-  z-index: 1;
-  touch-action: pan-y;
-  user-select: none;
+  gap: 4px;
 }
-.suggestion-text { display: flex; flex-direction: column; gap: 2px; }
-.suggestion-name { font-size: 14px; font-weight: 600; color: var(--color-body); }
-.suggestion-desc { font-size: 12px; color: #aaa; }
 
-.add-btn { background: none; border: none; padding: 4px; cursor: pointer; display: flex; }
+.location-card-name {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.location-card-fave {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.location-card-fave:hover { transform: scale(1.15); }
+
+.location-card-address {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.location-card-tag {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  background: #F4F0FA;
+  color: #5A4B64;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  pointer-events: none;
+}
 
 .empty-state {
   font-size: 13px;
@@ -566,6 +640,7 @@
   text-align: center;
   padding: 24px 16px;
   margin: 0;
+  flex: 1;
 }
 
 /* ── Start walk CTA ── */
@@ -573,8 +648,8 @@
   width: calc(100% - 32px);
   margin: 12px 16px 0;
   padding: 16px;
-  background: var(--color-accent);
-  color: white;
+  background: var(--color-primary);
+  color: var(--color-body);
   border: none;
   border-radius: var(--radius-pill);
   font-family: var(--font-ui);
@@ -583,7 +658,7 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.cta-btn:hover { background: var(--color-accent-2); }
+.cta-btn:hover { background: #e6c000; }
 
 /* ── Sheet animation ── */
 @keyframes sheet-in {

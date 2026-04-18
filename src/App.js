@@ -2,7 +2,7 @@ import { useState } from 'react';
 import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreWalkConstraintsScreen';
-import MapFilterScreen from './MapFilterScreen';
+import PreviewWalkScreen from './PreviewWalkScreen';
 import TimelineScreen from './TimelineScreen';
 import BottomNav from './BottomNav';
 import './App.css';
@@ -21,9 +21,15 @@ function App() {
           <>
             {screen === 'home' && (
               <HomeScreen
-                onStartWalk={(items) => { setJourneyItems(items); setScreen('navigation'); }}
+                onStartWalk={(items) => { setJourneyItems(items); setScreen('preview'); }}
                 onSetConstraints={() => setScreen('constraints')}
-                onOpenFilters={() => setScreen('filters')}
+              />
+            )}
+            {screen === 'preview' && (
+              <PreviewWalkScreen
+                journeyItems={journeyItems}
+                onGoBack={() => setScreen('home')}
+                onStartWalk={(items) => { setJourneyItems(items); setScreen('navigation'); }}
               />
             )}
             {screen === 'navigation' && (
@@ -32,13 +38,10 @@ function App() {
                 journeyItems={journeyItems}
               />
             )}
-            {screen === 'filters' && (
-              <MapFilterScreen onGoBack={() => setScreen('home')} />
-            )}
             {screen === 'constraints' && (
               <PreWalkConstraintsScreen
               onGoBack={() => setScreen('home')}
-              onStartWalk={(items) => { setJourneyItems(items); setScreen('navigation'); }}
+              onStartWalk={(items) => { setJourneyItems(items); setScreen('preview'); }}
             />
             )}
           </>

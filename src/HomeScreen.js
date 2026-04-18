@@ -47,17 +47,17 @@ const YOU = [37.7820, -122.4070];
 const MAP_CENTER = [37.7850, -122.4030];
 
 const SUGGESTIONS = [
-  { id: 1, name: "Tartine Bakery",       desc: "Mission · Bakery",    lat: 37.7814, lng: -122.4041, icon: "🥐" },
-  { id: 2, name: "Dolores Park",         desc: "Mission · Park",      lat: 37.7836, lng: -122.4072, icon: "🌿" },
-  { id: 3, name: "Bi-Rite Creamery",     desc: "Mission · Ice Cream", lat: 37.7812, lng: -122.4049, icon: "🍦" },
-  { id: 4, name: "Clarion Alley Murals", desc: "Mission · Art",       lat: 37.7830, lng: -122.4224, icon: "🎨" },
-  { id: 5, name: "Mission Dolores",      desc: "Mission · Historic",  lat: 37.7849, lng: -122.4270, icon: "⛪" },
+  { id: 1, name: "Tartine Bakery",       desc: "Mission · Bakery",    lat: 37.7814, lng: -122.4041, icon: "🥐", address: "600 Guerrero St",      openStatus: "open",   closesAt: "7 PM",  image: null },
+  { id: 2, name: "Dolores Park",         desc: "Mission · Park",      lat: 37.7836, lng: -122.4072, icon: "🌿", address: "19th & Dolores St",    openStatus: "open",   closesAt: "10 PM", image: null },
+  { id: 3, name: "Bi-Rite Creamery",     desc: "Mission · Ice Cream", lat: 37.7812, lng: -122.4049, icon: "🍦", address: "3692 18th St",         openStatus: "open",   closesAt: "9 PM",  image: null },
+  { id: 4, name: "Clarion Alley Murals", desc: "Mission · Art",       lat: 37.7830, lng: -122.4224, icon: "🎨", address: "Clarion Alley",        openStatus: "open",   closesAt: "Sunset", image: null },
+  { id: 5, name: "Mission Dolores",      desc: "Mission · Historic",  lat: 37.7849, lng: -122.4270, icon: "⛪", address: "3321 16th St",         openStatus: "closed", opensAt: "9 AM",   image: null },
 ];
 
 const RECENT = [
-  { id: 6, name: "Sightglass Coffee",  desc: "SoMa · Coffee"              },
-  { id: 7, name: "The Painted Ladies", desc: "Alamo Square · Landmark"    },
-  { id: 8, name: "Ferry Building",     desc: "Embarcadero · Market"       },
+  { id: 6, name: "Sightglass Coffee",  desc: "SoMa · Coffee",           address: "270 7th St",           openStatus: "open",   closesAt: "6 PM",  image: null },
+  { id: 7, name: "The Painted Ladies", desc: "Alamo Square · Landmark", address: "Steiner & Hayes St",   openStatus: "open",   closesAt: "Sunset", image: null },
+  { id: 8, name: "Ferry Building",     desc: "Embarcadero · Market",    address: "1 Ferry Building",     openStatus: "closed", opensAt: "7 AM",   image: null },
 ];
 
 // ── Inner components ───────────────────────────────────────────────────────
@@ -91,67 +91,56 @@ function LocateMe({ trigger, onLocate }) {
   return null;
 }
 
-// ── Swipe row ──────────────────────────────────────────────────────────────
-const SWIPE_MAX = 80;
-const SWIPE_THRESHOLD = 55;
+// ── Location card ──────────────────────────────────────────────────────────
+const LOVED_PLACES = ["Sightglass Coffee", "Dolores Park", "Ferry Building"];
 
-function SwipeRow({ item, added, onAdd, onFave, onRemove }) {
-  const startX = useRef(null);
-  const [dx, setDx] = useState(0);
-  const [settled, setSettled] = useState(false); // true when action triggered
+const trustTagFor = (id) => {
+  const variant = id % 3;
+  if (variant === 0) return "From your last walk";
+  if (variant === 1) return `Because you loved ${LOVED_PLACES[id % LOVED_PLACES.length]}`;
+  return "Based on your preferences";
+};
 
-  const start = (e) => {
-    startX.current = e.touches?.[0]?.clientX ?? e.clientX;
-    setSettled(false);
-  };
-  const move = (e) => {
-    if (startX.current === null) return;
-    const x = e.touches?.[0]?.clientX ?? e.clientX;
-    setDx(Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, x - startX.current)));
-  };
-  const end = () => {
-    if (dx > SWIPE_THRESHOLD) { onFave(item.id); setSettled(true); }
-    else if (dx < -SWIPE_THRESHOLD) { onRemove(item.id); setSettled(true); }
-    startX.current = null;
-    setDx(0);
-  };
-
+function LocationCard({ item, added, faved, onAdd, onFave }) {
   return (
-    <div className="swipe-wrapper">
-      {/* Revealed actions */}
-      <div className="swipe-action swipe-action--fave">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFD501"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/></svg>
-      </div>
-      <div className="swipe-action swipe-action--remove">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-      </div>
-
-      {/* Item */}
+    <div className="location-card">
       <div
-        className="suggestion-item"
-        style={{ transform: `translateX(${dx}px)`, transition: settled || dx === 0 ? 'transform 0.25s' : 'none' }}
-        onTouchStart={start} onTouchMove={move} onTouchEnd={end}
-        onMouseDown={start} onMouseMove={move} onMouseUp={end}
+        className="location-card-image"
+        style={item.image ? { backgroundImage: `url(${item.image})` } : undefined}
       >
-        <div className="suggestion-text">
-          <span className="suggestion-name">{item.name}</span>
-          <span className="suggestion-desc">{item.desc}</span>
-        </div>
-        <button className={`add-btn ${added ? "added" : ""}`} onClick={() => onAdd(item.id)}>
+        <div className="location-card-gradient" />
+        <button
+          className={`location-card-add ${added ? "added" : ""}`}
+          onClick={() => onAdd(item.id)}
+          aria-label={added ? "Added to itinerary" : "Add to itinerary"}
+        >
           {added ? (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="#8851D4" opacity="0.9"/>
-              <line x1="12" y1="6" x2="12" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="9" y1="9" x2="15" y2="9" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" fill="rgba(136,81,212,0.1)"/>
-              <line x1="12" y1="7" x2="12" y2="17" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="7" y1="12" x2="17" y2="12" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="3" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           )}
         </button>
+      </div>
+      <div className="location-card-info">
+        <div className="location-card-name-row">
+          <span className="location-card-name">{item.name}</span>
+          <button
+            className={`location-card-fave ${faved ? "faved" : ""}`}
+            onClick={() => onFave(item.id)}
+            aria-label={faved ? "Unfave" : "Fave"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={faved ? "#FF6B6B" : "none"} stroke={faved ? "#FF6B6B" : "#ccc"} strokeWidth="2">
+              <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/>
+            </svg>
+          </button>
+        </div>
+        <span className="location-card-address">{item.address}</span>
+        <span className="location-card-tag">{trustTagFor(item.id)}</span>
       </div>
     </div>
   );
@@ -240,7 +229,7 @@ function SoundWaveSvg({ active }) {
 }
 
 // ── HomeScreen ─────────────────────────────────────────────────────────────
-export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilters }) {
+export default function HomeScreen({ onStartWalk, onSetConstraints }) {
   const [userLocation, setUserLocation]   = useState(YOU);
   const [locateTrigger, setLocateTrigger] = useState(0);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
@@ -248,7 +237,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
   const [activeTab, setActiveTab]         = useState("suggested");
   const [addedIds, setAddedIds]           = useState(new Set());
   const [favedIds, setFavedIds]           = useState(new Set());
-  const [hiddenIds, setHiddenIds]         = useState(new Set());
+  const [hiddenIds]                        = useState(new Set());
   const [voiceActive, setVoiceActive]     = useState(false);
   const [listening, setListening]         = useState(false);
   const [locked, setLocked]              = useState(false);
@@ -258,8 +247,31 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
 
   const onScreenPos  = useCallback((pos) => setUserScreenPos(pos), []);
   const handleAdd    = (id) => setAddedIds((p) => new Set([...p, id]));
-  const handleFave   = (id) => setFavedIds((p) => new Set([...p, id]));
-  const handleRemove = (id) => setHiddenIds((p) => new Set([...p, id]));
+  const handleFave   = (id) => setFavedIds((p) => {
+    const next = new Set(p);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const carouselRef = useRef(null);
+  const carouselDrag = useRef({ active: false, startX: 0, scrollLeft: 0 });
+  const onCarouselMouseDown = (e) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    carouselDrag.current = { active: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft };
+    el.style.cursor = "grabbing";
+  };
+  const onCarouselMouseMove = (e) => {
+    if (!carouselDrag.current.active) return;
+    e.preventDefault();
+    const el = carouselRef.current;
+    const x = e.pageX - el.offsetLeft;
+    el.scrollLeft = carouselDrag.current.scrollLeft - (x - carouselDrag.current.startX);
+  };
+  const onCarouselMouseUp = () => {
+    carouselDrag.current.active = false;
+    if (carouselRef.current) carouselRef.current.style.cursor = "grab";
+  };
 
   const dragStartY = useRef(null);
   const homeStartY = useRef(null);
@@ -335,7 +347,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
       {/* ── LOCATE (bottom-right, rises above sheet when open) ── */}
       <button
         className="locate-fixed"
-        style={{ bottom: sheetOpen ? 440 : 128, transition: "bottom 0.42s cubic-bezier(0.22,1,0.36,1)" }}
+        style={{ bottom: sheetOpen ? 460 : 184, transition: "bottom 0.42s cubic-bezier(0.22,1,0.36,1)" }}
         onClick={() => setLocateTrigger((t) => t + 1)}
         aria-label="Locate me"
       >
@@ -347,29 +359,6 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
           <rect x="18" y="11" width="4" height="2" rx="1"/>
         </svg>
       </button>
-
-      {/* ── MAP ACTION BUTTONS ── */}
-      {!voiceActive && !sheetOpen && (
-        <div className="map-actions">
-          <button className="map-action-btn" aria-label="Preferences" onClick={onSetConstraints}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="6" x2="20" y2="6"/>
-              <line x1="4" y1="12" x2="20" y2="12"/>
-              <line x1="4" y1="18" x2="20" y2="18"/>
-              <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
-              <circle cx="15" cy="12" r="2" fill="currentColor"/>
-              <circle cx="8"  cy="18" r="2" fill="currentColor"/>
-            </svg>
-            <span>Preferences</span>
-          </button>
-          <button className="map-action-btn" aria-label="Map filters" onClick={onOpenFilters}>
-            <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
-            </svg>
-            <span>Map filters</span>
-          </button>
-        </div>
-      )}
 
       {/* ── BACKDROP ── */}
       {sheetOpen && <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />}
@@ -542,22 +531,40 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, onOpenFilter
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </button>
                 ))}
+                <button className="sheet-prefs-btn" aria-label="Preferences" onClick={onSetConstraints}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="4" y1="6" x2="20" y2="6"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/>
+                    <line x1="4" y1="18" x2="20" y2="18"/>
+                    <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
+                    <circle cx="15" cy="12" r="2" fill="currentColor"/>
+                    <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+                  </svg>
+                </button>
               </div>
 
-              <div className="suggestion-list">
+              <div
+                className="location-card-carousel"
+                ref={carouselRef}
+                onMouseDown={onCarouselMouseDown}
+                onMouseMove={onCarouselMouseMove}
+                onMouseUp={onCarouselMouseUp}
+                onMouseLeave={onCarouselMouseUp}
+                style={{ cursor: "grab" }}
+              >
                 {allItems.length === 0 && (
                   <p className="empty-state">
-                    {activeTab === "faves" ? "Swipe right on suggestions to fave them ♥" : "Nothing here yet."}
+                    {activeTab === "faves" ? "Tap the heart on a card to fave it" : "Nothing here yet."}
                   </p>
                 )}
                 {allItems.map((item) => (
-                  <SwipeRow
+                  <LocationCard
                     key={item.id}
                     item={item}
                     added={addedIds.has(item.id)}
+                    faved={favedIds.has(item.id)}
                     onAdd={handleAdd}
                     onFave={handleFave}
-                    onRemove={handleRemove}
                   />
                 ))}
               </div>

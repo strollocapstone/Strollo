@@ -1,0 +1,446 @@
+/* ── Preview Walk Screen ── */
+
+.pw-screen {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  background: white;
+  font-family: var(--font-ui);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+.pw-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 20px 12px;
+}
+
+.pw-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(90, 75, 100, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.pw-back:hover { background: rgba(90, 75, 100, 0.14); }
+
+.pw-title {
+  font-family: var(--font-brand);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-body);
+  margin: 0;
+}
+
+/* ── Caption ── */
+.pw-caption {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: #5A4B64;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0 20px 12px;
+}
+
+/* ── Preference pills ── */
+.pw-prefs {
+  display: flex;
+  gap: 8px;
+  padding: 8px 20px 16px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pw-prefs::-webkit-scrollbar { display: none; }
+
+.pw-pref-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: white;
+  border: 1.5px solid #8851D4;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: #5A4B64;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pw-pref-icon {
+  font-size: 16px;
+  color: #8851D4;
+}
+
+/* ── Search bar ── */
+.pw-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 20px 12px;
+  background: #F4F0FA;
+  border-radius: 999px;
+  padding: 12px 14px;
+}
+
+.pw-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--color-body);
+  outline: none;
+}
+.pw-search-input::placeholder { color: #aaa; }
+
+/* ── Timeline ── */
+.pw-timeline {
+  position: relative;
+  padding: 0 20px;
+  flex: 1;
+}
+
+.pw-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.pw-rail-cell {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+/* Rail line via pseudo-element on each rail cell */
+.pw-rail-cell::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  background: #E1B1FF;
+  top: -6px;
+  bottom: -6px;
+  z-index: 0;
+}
+
+/* First card: rail starts at dot center */
+.pw-row--first .pw-rail-cell::before { top: 50%; }
+/* Last card: rail ends at dot center */
+.pw-row--last .pw-rail-cell::before { bottom: 50%; }
+/* Single stop: no rail at all */
+.pw-row--first.pw-row--last .pw-rail-cell::before { display: none; }
+
+.pw-content-cell {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Dots ── */
+.pw-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8851D4;
+  border: 3px solid white;
+  box-shadow: 0 0 0 2px #8851D4;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Cards ── */
+.pw-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  margin: 6px 0;
+  min-height: 72px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: grab;
+}
+
+.pw-card:active { cursor: grabbing; }
+
+.pw-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
+}
+
+/* Drag handle — 6-dot grid */
+.pw-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px 0 14px;
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.pw-card:hover .pw-drag-handle { opacity: 0.7; }
+
+.pw-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14px 12px 14px 0;
+  min-width: 0;
+}
+
+.pw-card-name {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--color-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pw-card-address {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #5A4B64;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Thumbnail — right side of card */
+.pw-card-thumb {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.pw-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pw-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #E8E4EE;
+}
+
+/* ── Card remove button ── */
+.pw-card-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(90, 75, 100, 0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+  z-index: 2;
+}
+.pw-card-remove:hover {
+  background: rgba(90, 75, 100, 0.85);
+}
+
+/* ── Walk time label ── */
+.pw-row--segment {
+  min-height: 32px;
+}
+
+.pw-walk-label {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: #5A4B64;
+  padding-left: 6px;
+}
+
+/* ── Clickable prefs count chip ── */
+.pw-pref-pill--count {
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s;
+}
+.pw-pref-pill--count:hover {
+  background: rgba(136, 81, 212, 0.16);
+}
+
+/* ── Map button ── */
+.pw-map-btn-row {
+  text-align: center;
+  padding: 16px 20px 8px;
+}
+
+.pw-map-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--color-body);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+.pw-map-btn:hover { background: #2a1f4e; }
+.pw-map-btn:active { transform: scale(0.97); }
+
+/* ── Map overlay ── */
+.pw-map-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: white;
+}
+
+.pw-map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.pw-map-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 51;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pw-map-close:hover { background: #f5f5f5; }
+
+/* ── Preferences bottom sheet ── */
+.pw-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 40;
+  animation: pw-fade-in 0.25s ease;
+}
+
+@keyframes pw-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pw-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 85%;
+  background: #F7F4FA;
+  border-radius: 24px 24px 0 0;
+  z-index: 41;
+  overflow-y: auto;
+  animation: pw-sheet-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes pw-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.pw-sheet-handle {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+  cursor: grab;
+}
+
+.pw-sheet-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(90, 75, 100, 0.2);
+}
+
+/* ── Empty state ── */
+.pw-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.pw-empty p {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: #5A4B64;
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Footer ── */
+.pw-footer {
+  padding: 16px 20px 32px;
+  text-align: center;
+}
+
+.pw-footer-hint {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: #5A4B64;
+  margin: 0 0 12px;
+}
+
+.pw-start-btn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 999px;
+  border: none;
+  background: #FFD501;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--color-body);
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.pw-start-btn:hover { background: #e6c000; }
+.pw-start-btn:active { transform: scale(0.97); }
+.pw-start-btn:disabled { opacity: 0.4; cursor: default; }
+.pw-start-btn:disabled:hover { background: #FFD501; }
