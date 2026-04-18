@@ -132,7 +132,7 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
 ];
 
-export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800) {
+export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal } = {}) {
   const query = `[out:json][timeout:10];(node["amenity"~"cafe|restaurant|bar|ice_cream|bakery|library|theatre"](around:${radiusMeters},${lat},${lon});node["tourism"~"museum|gallery|attraction|viewpoint"](around:${radiusMeters},${lat},${lon});node["leisure"~"park|garden"](around:${radiusMeters},${lat},${lon});node["shop"~"books|florist"](around:${radiusMeters},${lat},${lon}););out body 15;`;
 
   const categoryMap = {
@@ -150,6 +150,7 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800) {
         method: "POST",
         body: `data=${encodeURIComponent(query)}`,
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal,
       });
       if (res.status === 429 || res.status === 504) continue; // try next endpoint
       if (!res.ok) continue;
@@ -167,7 +168,8 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800) {
             lng: el.lon,
           };
         });
-    } catch {
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
       continue; // try next endpoint
     }
   }

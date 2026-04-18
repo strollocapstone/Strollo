@@ -138,6 +138,32 @@ export function MapCenterTracker({ onCenterChange }) {
   return null;
 }
 
+// ── Distance helpers ─────────────────────────────────────────────────────
+const EARTH_RADIUS_KM = 6371;
+
+export function haversineKm(a, b) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const [lat1, lng1] = a;
+  const [lat2, lng2] = b;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(s));
+}
+
+export const WALKING_RADIUS_KM = 3;
+
+export function isWithinWalkingRadius(origin, point, radiusKm = WALKING_RADIUS_KM) {
+  if (!origin || !point) return false;
+  const [oLat, oLng] = origin;
+  const pLat = point.lat ?? point[0];
+  const pLng = point.lng ?? point[1];
+  if (oLat == null || oLng == null || pLat == null || pLng == null) return false;
+  return haversineKm([oLat, oLng], [pLat, pLng]) <= radiusKm;
+}
+
 // ── Fit map bounds to a set of points ────────────────────────────────────
 export function FitBounds({ points }) {
   const map = useMap();

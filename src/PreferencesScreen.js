@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import "./PreWalkConstraintsScreen.css";
+import "./PreferencesScreen.css";
 
 const DESTINATION_OPTIONS = [
   { id: "loop", label: "End where I began", subtext: "Start and end in the same spot" },
@@ -101,19 +101,22 @@ function CheckCircle({ checked }) {
   return <div className="pwc-check pwc-check--off" />;
 }
 
-export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk, embedded }) {
+export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, embedded, initialPreferences }) {
+  const seed = initialPreferences;
   const [expandedCards, setExpandedCards] = useState(new Set(["destination"]));
-  const [destination, setDestination] = useState(null);
-  const [destSearch, setDestSearch] = useState("");
-  const [destChosen, setDestChosen] = useState("");
-  const [duration, setDuration] = useState(null);
-  const [customDuration, setCustomDuration] = useState("");
-  const [distance, setDistance] = useState(0);
-  const [distanceInput, setDistanceInput] = useState("");
-  const [accessibility, setAccessibility] = useState(new Set());
-  const [avoidances, setAvoidances] = useState(new Set());
-  const [mapFilters, setMapFilters] = useState(
-    () => new Set(MAP_FILTERS.filter((f) => f.defaultOn).map((f) => f.id))
+  const [destination, setDestination] = useState(seed?.destination ?? null);
+  const [destSearch, setDestSearch] = useState(seed?.destChosen ?? "");
+  const [destChosen, setDestChosen] = useState(seed?.destChosen ?? "");
+  const [duration, setDuration] = useState(seed?.duration ?? null);
+  const [customDuration, setCustomDuration] = useState(seed?.customDuration ?? "");
+  const [distance, setDistance] = useState(seed?.distance ?? 0);
+  const [distanceInput, setDistanceInput] = useState(seed?.distance ? String(seed.distance) : "");
+  const [accessibility, setAccessibility] = useState(() => new Set(seed?.accessibility ?? []));
+  const [avoidances, setAvoidances] = useState(() => new Set(seed?.avoidances ?? []));
+  const [mapFilters, setMapFilters] = useState(() =>
+    seed?.mapFilters
+      ? new Set(seed.mapFilters)
+      : new Set(MAP_FILTERS.filter((f) => f.defaultOn).map((f) => f.id))
   );
   const [showDropdown, setShowDropdown] = useState(false);
   const [durationError, setDurationError] = useState(false);
@@ -469,7 +472,19 @@ export default function PreWalkConstraintsScreen({ onGoBack, onStartWalk, embedd
       {!embedded && (
         <div className="pwc-bottom">
           <p className="pwc-hint">You can always adjust during your walk</p>
-          <button className="pwc-start-btn" onClick={() => onStartWalk?.([])}>
+          <button
+            className="pwc-start-btn"
+            onClick={() => onSavePreferences?.({
+              destination,
+              destChosen: destChosen || null,
+              duration: duration || null,
+              customDuration: customDuration || null,
+              distance: distance || null,
+              accessibility: [...accessibility],
+              avoidances: [...avoidances],
+              mapFilters: [...mapFilters],
+            })}
+          >
             Save Preferences
           </button>
         </div>

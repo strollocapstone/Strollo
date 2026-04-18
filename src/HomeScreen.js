@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,7 +7,7 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker } from "./mapUtils";
+import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, isWithinWalkingRadius } from "./mapUtils";
 
 const makePinIcon = (name, desc, added, expanded) => L.divIcon({
   className: "",
@@ -120,6 +120,18 @@ function WidgetBubble({ listening, aiSpeaking, muted, userText, aiText }) {
   return null;
 }
 
+// Map a PreferencesScreen "Show on Map" filter ID → Overpass place `desc` strings.
+// Only these filter IDs correspond to fetched pin categories; others (ai-highlights,
+// saved-places, benches, dog-friendly) don't map to Overpass results and are skipped.
+const FILTER_DESCS = {
+  cafes: new Set(["Coffee", "Bakery"]),
+  food: new Set(["Restaurant", "Ice Cream", "Bar"]),
+  museums: new Set(["Museum", "Gallery", "Art", "Arts"]),
+  parks: new Set(["Park", "Garden"]),
+  sights: new Set(["Viewpoint"]),
+  attractions: new Set(["Attraction"]),
+};
+
 // ── Marauder's Map footstep positions ──────────────────────────────────────
 const VFS_STEPS = [
   { x: "calc(50% + 6px)",  y: "88%", rot: -4,  mirror: false },
@@ -153,18 +165,35 @@ function SoundWaveSvg({ active }) {
 }
 
 // ── HomeScreen ─────────────────────────────────────────────────────────────
-export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocation }) {
+export default function HomeScreen({
+  onStartWalk,
+  onSetConstraints,
+  initialLocation,
+  initialSheetOpen,
+  onSheetOpenConsumed,
+  preferences,
+  nearbyPlaces,
+  setNearbyPlaces,
+  addedIds,
+  setAddedIds,
+  favedIds,
+  setFavedIds,
+  lastFetchedLocationRef,
+  lastFetchTimeRef,
+}) {
   const [userLocation, setUserLocation]   = useState(initialLocation || null);
   const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
   const [showLocatePrompt, setShowLocatePrompt] = useState(false);
   const [locateError, setLocateError]           = useState("");
   const [locateActive, setLocateActive]         = useState(false);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
-  const [sheetOpen, setSheetOpen]         = useState(false);
-  const [addedIds, setAddedIds]           = useState(new Set());
-  const [favedIds, setFavedIds]           = useState(new Set());
-  const [nearbyPlaces, setNearbyPlaces]   = useState([]);
-  const [mapCenter, setMapCenter]         = useState(null);
+  const [sheetOpen, setSheetOpen]         = useState(Boolean(initialSheetOpen));
+
+  useEffect(() => {
+    if (initialSheetOpen) onSheetOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const mapCenterRef                      = useRef(null);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyError, setNearbyError]     = useState("");
   const [voiceActive, setVoiceActive]     = useState(false);
@@ -191,45 +220,48 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
   const chatHistoryIdCounter = useRef(0);
   const chatIdCounter = useRef(0);
   const resultTimer = useRef(null);
-  const lastFetchedLocation = useRef(null);
-  const lastFetchTime = useRef(0);
-  const fetchingRef = useRef(false);
+  const nearbyAbortRef = useRef(null);
 
   // Clean up resultTimer on unmount
   useEffect(() => { return () => clearTimeout(resultTimer.current); }, []);
+  useEffect(() => () => { nearbyAbortRef.current?.abort(); }, []);
 
   const loadNearbyPlaces = useCallback(async (loc, force = false) => {
-    // Prevent concurrent requests and enforce 10s cooldown
-    if (fetchingRef.current) return;
     const now = Date.now();
-    if (!force && now - lastFetchTime.current < 10000) return;
+    if (!force && now - lastFetchTimeRef.current < 10000) return;
 
-    fetchingRef.current = true;
+    // Supersede any in-flight request — a newer call owns the result set now
+    nearbyAbortRef.current?.abort();
+    const controller = new AbortController();
+    nearbyAbortRef.current = controller;
+
     setNearbyLoading(true);
     setNearbyError("");
     try {
-      const places = await fetchNearbyPlaces(loc[0], loc[1]);
+      const places = await fetchNearbyPlaces(loc[0], loc[1], 800, { signal: controller.signal });
+      if (controller.signal.aborted) return; // superseded — drop result
       setNearbyPlaces(places);
-      lastFetchedLocation.current = loc;
-      lastFetchTime.current = Date.now();
+      lastFetchedLocationRef.current = loc;
+      lastFetchTimeRef.current = Date.now();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.warn("[Strollo] Failed to fetch nearby places:", err);
       setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
     } finally {
-      setNearbyLoading(false);
-      fetchingRef.current = false;
+      if (!controller.signal.aborted) setNearbyLoading(false);
+      if (nearbyAbortRef.current === controller) nearbyAbortRef.current = null;
     }
   }, []);
 
   // Auto-fetch nearby places when real user location is available / changes significantly
   useEffect(() => {
     if (!userLocation) return; // wait for geolocation
-    if (!lastFetchedLocation.current) {
+    if (!lastFetchedLocationRef.current) {
       loadNearbyPlaces(userLocation, true);
       return;
     }
     // Only re-fetch if moved more than ~200m
-    const [prevLat, prevLng] = lastFetchedLocation.current;
+    const [prevLat, prevLng] = lastFetchedLocationRef.current;
     const dlat = Math.abs(userLocation[0] - prevLat);
     const dlng = Math.abs(userLocation[1] - prevLng);
     if (dlat > 0.002 || dlng > 0.002) {
@@ -378,12 +410,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
         }
       }
 
-      // Filter out stops that are too far (>3km from user)
-      const nearby = geocoded.filter((s) => {
-        const dlat = Math.abs(s.lat - userLocation[0]);
-        const dlng = Math.abs(s.lng - userLocation[1]);
-        return dlat < 0.027 && dlng < 0.027;
-      });
+      const nearby = geocoded.filter((s) => isWithinWalkingRadius(userLocation, s));
 
       if (nearby.length === 0) {
         const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Sorry, I couldn't find those places on the map. Try asking for specific place names!" };
@@ -428,6 +455,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
   }, []);
 
   const onScreenPos  = useCallback((pos) => setUserScreenPos(pos), []);
+  const handleMapCenterChange = useCallback((center) => { mapCenterRef.current = center; }, []);
   const handleLocate = useCallback((pos) => {
     setUserLocation(pos);
     setShowLocatePrompt(false);
@@ -490,16 +518,10 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
   };
 
   const handleStartWalk = () => {
-    const origin = lastFetchedLocation.current || userLocation;
+    const origin = lastFetchedLocationRef.current || userLocation;
     const items = nearbyPlaces
       .filter((s) => addedIds.has(s.id))
-      .filter((s) => {
-        // Drop stops more than ~3km from the area the places were fetched from
-        if (!origin || !s.lat || !s.lng) return false;
-        const dlat = Math.abs(s.lat - origin[0]);
-        const dlng = Math.abs(s.lng - origin[1]);
-        return dlat < 0.027 && dlng < 0.027; // ~3km
-      });
+      .filter((s) => isWithinWalkingRadius(origin, s));
     if (items.length) onStartWalk(items, origin);
   };
 
@@ -532,7 +554,15 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
 
   const { x, y } = userScreenPos;
 
-  const allItems = nearbyPlaces;
+  const visibleNearbyPlaces = useMemo(() => {
+    const active = preferences?.mapFilters?.filter((id) => FILTER_DESCS[id]) ?? [];
+    if (active.length === 0) return nearbyPlaces;
+    const allowed = new Set();
+    for (const id of active) FILTER_DESCS[id].forEach((d) => allowed.add(d));
+    return nearbyPlaces.filter((p) => allowed.has(p.desc));
+  }, [nearbyPlaces, preferences]);
+
+  const allItems = visibleNearbyPlaces;
 
   return (
     <>
@@ -541,7 +571,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 15 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
-          {nearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
+          {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isExpanded = selectedPoi === s.id;
             const isAdded = addedIds.has(s.id);
             return (
@@ -569,7 +599,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
           <LocateMe trigger={locateTrigger} onLocate={handleLocate} onError={setLocateError} />
           <WatchLocation onUpdate={setUserLocation} />
           <MapDragListener onDrag={handleMapDrag} />
-          <MapCenterTracker onCenterChange={setMapCenter} />
+          <MapCenterTracker onCenterChange={handleMapCenterChange} />
         </MapContainer>
       </div>
 
@@ -924,7 +954,7 @@ export default function HomeScreen({ onStartWalk, onSetConstraints, initialLocat
               <button
                 className={`sheet-refresh-btn ${nearbyLoading ? "sheet-refresh-btn--spinning" : ""}`}
                 aria-label="Refresh nearby places"
-                onClick={() => loadNearbyPlaces(mapCenter || userLocation, true)}
+                onClick={() => loadNearbyPlaces(mapCenterRef.current || userLocation, true)}
                 disabled={nearbyLoading}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

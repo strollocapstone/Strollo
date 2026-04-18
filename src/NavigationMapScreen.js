@@ -35,7 +35,7 @@ const destinationIcon = L.divIcon({
 
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, journeyItems = [], startLocation }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, journeyItems = [], startLocation }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -160,11 +160,23 @@ export default function NavigationMapScreen({ onGoBack, journeyItems = [], start
           </svg>
           <span>Journey</span>
         </button>
-        <button className="locate-circle" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Locate me">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-          </svg>
-        </button>
+        <div className="nav-actions-stack">
+          <button className="nav-prefs-circle" onClick={onSetConstraints} aria-label="Preferences">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="6" x2="20" y2="6"/>
+              <line x1="4" y1="12" x2="20" y2="12"/>
+              <line x1="4" y1="18" x2="20" y2="18"/>
+              <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+              <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+              <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
+            </svg>
+          </button>
+          <button className="locate-circle" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Locate me">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* ── JOURNEY OVERLAY ── */}
