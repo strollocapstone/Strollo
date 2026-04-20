@@ -3,7 +3,7 @@ import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
-import BottomNav from './BottomNav';
+import { MOCK_LOCATION } from './mapUtils';
 import './App.css';
 
 function App() {
@@ -11,7 +11,7 @@ function App() {
   const [screen, setScreen] = useState('home');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
-  const [lastKnownLocation, setLastKnownLocation] = useState(null);
+  const [lastKnownLocation, setLastKnownLocation] = useState(MOCK_LOCATION);
   const [preferences, setPreferences] = useState(null);
   const [openSheetOnHome, setOpenSheetOnHome] = useState(false);
   const [constraintsReturnScreen, setConstraintsReturnScreen] = useState('home');
@@ -20,8 +20,6 @@ function App() {
   const [favedIds, setFavedIds] = useState(() => new Set());
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
-
-  const showBottomNav = screen === 'home';
 
   return (
     <div className="App">
@@ -32,6 +30,7 @@ function App() {
               <HomeScreen
                 onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
                 onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
+                onOpenTimeline={() => setTab('timeline')}
                 initialLocation={lastKnownLocation}
                 initialSheetOpen={openSheetOnHome}
                 onSheetOpenConsumed={() => setOpenSheetOnHome(false)}
@@ -68,26 +67,14 @@ function App() {
           </>
         )}
 
-        {tab === 'timeline' && <TimelineScreen />}
-
-        {tab === 'explore' && (
-          <div className="placeholder-screen">
-            <span className="material-symbols-rounded placeholder-icon">explore</span>
-            <h2>Explore</h2>
-            <p>Discover new places and routes.</p>
-          </div>
-        )}
-
-        {tab === 'profile' && (
-          <div className="placeholder-screen">
-            <span className="material-symbols-rounded placeholder-icon">person</span>
-            <h2>Profile</h2>
-            <p>Your preferences and stats.</p>
-          </div>
-        )}
-
-        {showBottomNav && (
-          <BottomNav activeTab={tab} onTabChange={(t) => { setTab(t); setScreen('home'); }} />
+        {tab === 'timeline' && (
+          <TimelineScreen
+            nearbyPlaces={nearbyPlaces}
+            addedIds={addedIds}
+            setAddedIds={setAddedIds}
+            userLocation={lastKnownLocation}
+            onGoBack={() => setTab('map')}
+          />
         )}
       </div>
     </div>

@@ -168,6 +168,7 @@ function SoundWaveSvg({ active }) {
 export default function HomeScreen({
   onStartWalk,
   onSetConstraints,
+  onOpenTimeline,
   initialLocation,
   initialSheetOpen,
   onSheetOpenConsumed,
@@ -619,7 +620,12 @@ export default function HomeScreen({
 
       {/* ── PROFILE (floats over map, top-right) ── */}
       <button className="fab-circle profile-btn" aria-label="Profile">
-        <span className="profile-initials">E</span>
+        <span className="material-symbols-rounded">person</span>
+      </button>
+
+      {/* ── TIMELINE FAB (floats over map, below profile) ── */}
+      <button className="timeline-fab" onClick={onOpenTimeline} aria-label="Open Timeline">
+        <span className="material-symbols-rounded">timeline</span>
       </button>
 
       {/* ── MAP ACTION BUTTONS ── */}

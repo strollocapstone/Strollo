@@ -10,8 +10,29 @@
 
 /* ── Header ── */
 .tl-header {
+  position: relative;
   text-align: center;
   padding: 40px 24px 0;
+}
+
+.tl-back-btn {
+  position: absolute;
+  top: 36px;
+  left: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease;
+}
+.tl-back-btn:active {
+  transform: scale(0.95);
 }
 
 .tl-elapsed-time {
@@ -83,6 +104,29 @@
   padding: 8px 20px 0 20px;
 }
 
+/* ── Empty state ── */
+.tl-empty {
+  text-align: center;
+  padding: 40px 24px;
+  color: #5A4B64;
+}
+
+.tl-empty p {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-body);
+}
+
+.tl-empty-hint {
+  font-weight: 400 !important;
+  font-size: 13px !important;
+  color: #5A4B64 !important;
+  line-height: 1.5;
+  max-width: 260px;
+  margin: 0 auto !important;
+}
+
 /* Single continuous vertical rail behind everything */
 .tl-rail {
   position: absolute;
@@ -102,7 +146,7 @@
 }
 
 .tl-row--card {
-  align-items: flex-start;
+  align-items: center;
 }
 
 /* Left column — fixed width, centers dots and plus buttons on the rail */
@@ -116,9 +160,7 @@
   z-index: 2;
 }
 
-.tl-row--card .tl-rail-cell {
-  padding-top: 20px; /* vertically align dot with card top area */
-}
+/* Dot stays vertically centered with the card via flex align-items: center on the row */
 
 .tl-row--add {
   min-height: 40px;

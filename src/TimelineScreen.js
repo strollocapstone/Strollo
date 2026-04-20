@@ -1,50 +1,25 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./TimelineScreen.css";
 
-// ── Demo data ─────────────────────────────────────────────────────────────
-const TIMELINE_ITEMS = [
-  {
-    id: 1,
-    type: "confirmed",
-    name: "Cashew Creamery",
-    category: "Ice Cream Shop",
-    time: "2:37 PM arrived",
-    walkMin: 7,
-    image: "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=300&h=300&fit=crop",
-    description: "A beloved local creamery known for its unique cashew-based flavors and cozy atmosphere.",
-  },
-  {
-    id: 2,
-    type: "confirmed",
-    name: "Tay Tah Caf\u00e9",
-    category: "Caf\u00e9",
-    time: "2:52 PM estimated arrival",
-    walkMin: 10,
-    image: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300&h=300&fit=crop",
-    description: "Charming neighborhood caf\u00e9 with house-made pastries and specialty lattes.",
-  },
-  {
-    id: 3,
-    type: "suggestion",
-    name: "Five Little Monkeys",
-    category: "Toy Store",
-    time: "Adds 5 minutes walk time",
-    walkMin: null,
-    image: "https://images.unsplash.com/photo-1558060318-2e0f737f1463?w=300&h=300&fit=crop",
-    description: "A whimsical independent toy store tucked away on a quiet side street. Great for a quick browse.",
-    warning: true,
-  },
-  {
-    id: 4,
-    type: "confirmed",
-    name: "Flowerland Nursery",
-    category: "Garden & Nursery",
-    time: "Planned for 4 PM",
-    walkMin: 6,
-    image: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=300&h=300&fit=crop",
-    description: "A sprawling urban nursery with rare plants, succulents, and a peaceful garden path to wander.",
-  },
-];
+// Fallback image when the place doesn't have one
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=400&h=300&fit=crop";
+
+// Estimate walk time (min) between two lat/lng points. Falls back to 5 min.
+function estimateWalkMin(a, b) {
+  if (!a || !b || !a.lat || !b.lat) return 5;
+  const R = 6371; // km
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const km = 2 * R * Math.asin(Math.sqrt(h));
+  return Math.max(1, Math.round((km / 4.5) * 60));
+}
 
 // ── Icons ─────────────────────────────────────────────────────────────────
 function PlusIcon() {
@@ -73,7 +48,7 @@ function SuggestionBadge() {
 }
 
 // ── Expanded card detail ──────────────────────────────────────────────────
-function CardDetail({ item, onCollapse, onAdd }) {
+function CardDetail({ item, onCollapse, onAdd, onRemove }) {
   return (
     <div className={`tl-card-detail ${item.type === "suggestion" ? "tl-card-detail--suggestion" : ""}`}>
       <div className="tl-detail-header">
@@ -85,7 +60,7 @@ function CardDetail({ item, onCollapse, onAdd }) {
         </button>
       </div>
       <div className="tl-detail-image">
-        <img src={item.image} alt={item.name} />
+        <img src={item.image} alt={item.name} onError={(e) => { e.currentTarget.src = FALLBACK_IMAGE; }} />
       </div>
       <h3 className="tl-detail-title">{item.name}</h3>
       <span className="tl-detail-walk">{item.walkMin ? `${item.walkMin} minute walk` : item.time}</span>
@@ -93,8 +68,8 @@ function CardDetail({ item, onCollapse, onAdd }) {
       <div className="tl-detail-actions">
         <button className="tl-btn tl-btn--outline">See all details</button>
         {item.type === "suggestion"
-          ? <button className="tl-btn tl-btn--primary" onClick={onAdd}>Add to journey</button>
-          : <button className="tl-btn tl-btn--primary">Go now</button>
+          ? <button className="tl-btn tl-btn--primary" onClick={onAdd}>Add to Timeline</button>
+          : <button className="tl-btn tl-btn--outline" onClick={onRemove}>Remove</button>
         }
       </div>
     </div>
@@ -120,16 +95,59 @@ function useStopwatch() {
 }
 
 // ── TimelineScreen ────────────────────────────────────────────────────────
-export default function TimelineScreen() {
+const MAX_SUGGESTIONS = 3;
+
+export default function TimelineScreen({ nearbyPlaces = [], addedIds, setAddedIds, userLocation, onGoBack }) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const [items, setItems] = useState(TIMELINE_ITEMS);
   const time = useStopwatch();
 
+  // Split places by added state
+  const confirmedPlaces = nearbyPlaces.filter((p) => addedIds?.has(p.id));
+  const suggestionPool = nearbyPlaces.filter((p) => !addedIds?.has(p.id));
+
+  // Sort suggestions by distance from user, take top N
+  const originPoint = userLocation
+    ? { lat: userLocation[0], lng: userLocation[1] }
+    : null;
+  const rankedSuggestions = [...suggestionPool]
+    .map((p) => ({ p, d: estimateWalkMin(originPoint, p) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, MAX_SUGGESTIONS)
+    .map(({ p }) => p);
+
+  // Build timeline: confirmed places first, then the top nearest suggestions
+  const orderedPlaces = [...confirmedPlaces, ...rankedSuggestions];
+
+  const items = orderedPlaces.map((p, idx) => {
+    const prev = idx > 0 ? orderedPlaces[idx - 1] : originPoint;
+    return {
+      id: p.id,
+      type: addedIds?.has(p.id) ? "confirmed" : "suggestion",
+      name: p.name,
+      category: p.desc || "Place",
+      time: addedIds?.has(p.id) ? "Planned stop" : "Suggested nearby",
+      walkMin: estimateWalkMin(prev, p),
+      image: p.image || FALLBACK_IMAGE,
+      description: p.description || `${p.desc || "A nearby spot"} — worth a quick visit.`,
+    };
+  });
+
   const handleAdd = (id) => {
-    setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, type: "confirmed" } : it))
-    );
+    setAddedIds?.((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setExpandedId(null);
+  };
+
+  const handleRemove = (id) => {
+    setAddedIds?.((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     setExpandedId(null);
   };
 
@@ -168,6 +186,13 @@ export default function TimelineScreen() {
     <div className="tl-screen">
       {/* ── Header ── */}
       <div className="tl-header">
+        {onGoBack && (
+          <button className="tl-back-btn" onClick={onGoBack} aria-label="Back to map">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </button>
+        )}
         <div className="tl-elapsed-time">{time}</div>
         <div className="tl-elapsed-label">Elapsed exploration time</div>
         <div className="tl-header-divider" />
@@ -199,8 +224,17 @@ export default function TimelineScreen() {
 
       {/* ── Timeline ── */}
       <div className="tl-timeline">
+        {rows.length === 0 && (
+          <div className="tl-empty">
+            <p>No suggestions yet.</p>
+            <p className="tl-empty-hint">
+              Visit the Map tab and ask Strollo for places nearby — they'll show up here.
+            </p>
+          </div>
+        )}
+
         {/* Single continuous vertical line */}
-        <div className="tl-rail" />
+        {rows.length > 0 && <div className="tl-rail" />}
 
         {rows.map((row) => {
           if (row.kind === "add") {
@@ -236,6 +270,7 @@ export default function TimelineScreen() {
                     item={item}
                     onCollapse={() => setExpandedId(null)}
                     onAdd={() => handleAdd(item.id)}
+                    onRemove={() => handleRemove(item.id)}
                   />
                 ) : (
                   <div
