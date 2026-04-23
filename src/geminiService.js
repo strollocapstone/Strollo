@@ -2,7 +2,7 @@ const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"];
 
-export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops, mode = 'pre-walk' }) {
+export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops, mode = 'pre-walk', vibePreferences = null }) {
   const stopsDescription = journeyItems
     .map((item, i) => `${i + 1}. ${item.name}${item.desc ? ` (${item.desc})` : ''}`)
     .join('\n');
@@ -10,6 +10,21 @@ export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, 
   const stopsSection = stopsDescription
     ? `- Journey stops:\n${stopsDescription}`
     : '- No journey planned yet — the user is exploring freely';
+
+  let vibeSection = '';
+  if (vibePreferences && vibePreferences.vibeScores) {
+    const sorted = Object.entries(vibePreferences.vibeScores).sort((a, b) => b[1] - a[1]);
+    const loves = sorted.filter(([, s]) => s >= 2).map(([v]) => v);
+    const likes = sorted.filter(([, s]) => s === 1).map(([v]) => v);
+    const dislikes = sorted.filter(([, s]) => s < 0).map(([v]) => v);
+    const parts = [];
+    if (loves.length) parts.push(`strongly prefers ${loves.join(', ')}`);
+    if (likes.length) parts.push(`likes ${likes.join(', ')}`);
+    if (dislikes.length) parts.push(`avoids ${dislikes.join(', ')}`);
+    if (parts.length) {
+      vibeSection = `\n- Vibe preferences (from quiz): ${parts.join('; ')}. Prioritize suggestions matching preferred vibes; avoid disliked ones unless nothing else fits.`;
+    }
+  }
 
   const duringWalkActionRules = mode === 'during-walk' ? `
 
@@ -28,7 +43,7 @@ Rules:
   return `You are Strollo, a walking companion AI. You help users discover places to walk to.
 
 User location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}
-${stopsSection}
+${stopsSection}${vibeSection}
 
 Response rules:
 - Be CONCISE. Max 1-2 short sentences of intro, then jump straight to places.

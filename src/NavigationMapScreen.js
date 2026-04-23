@@ -34,7 +34,7 @@ const destinationIcon = L.divIcon({
 });
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -104,6 +104,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
     userLocation,
     journeyItems,
     mode: "during-walk",
+    vibePreferences,
     onApplyActions: applyActions,
   });
 

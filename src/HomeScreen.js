@@ -169,6 +169,7 @@ export default function HomeScreen({
   onStartWalk,
   onSetConstraints,
   onOpenTimeline,
+  onOpenQuiz,
   initialLocation,
   initialSheetOpen,
   onSheetOpenConsumed,
@@ -624,7 +625,7 @@ export default function HomeScreen({
       </div>
 
       {/* ── PROFILE (floats over map, top-right) ── */}
-      <button className="fab-circle profile-btn" aria-label="Profile">
+      <button className="fab-circle profile-btn" onClick={onOpenQuiz} aria-label="Open quiz">
         <span className="profile-initials">E</span>
       </button>
 

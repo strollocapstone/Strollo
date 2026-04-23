@@ -15,6 +15,7 @@ export function useJourneyVoice({
   userLocation,
   journeyItems,
   mode = "pre-walk",
+  vibePreferences = null,
   onSuggestStops,
   onApplyActions,
 } = {}) {
@@ -35,6 +36,8 @@ export function useJourneyVoice({
   journeyItemsRef.current = journeyItems;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const vibePreferencesRef = useRef(vibePreferences);
+  vibePreferencesRef.current = vibePreferences;
   const onSuggestStopsRef = useRef(onSuggestStops);
   onSuggestStopsRef.current = onSuggestStops;
   const onApplyActionsRef = useRef(onApplyActions);
@@ -60,6 +63,7 @@ export function useJourneyVoice({
         currentStopIndex: 0,
         totalStops: journeyItemsRef.current.length,
         mode: modeRef.current,
+        vibePreferences: vibePreferencesRef.current,
       });
       const history = [...messagesRef.current, userMsg];
       const response = await sendMessage(history, systemPrompt);
