@@ -138,11 +138,11 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
 
           {/* Walking route along streets (from OSRM) */}
           {walkingRoute && (
-            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 3, opacity: 0.5, lineCap: "round", lineJoin: "round" }} />
+            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
           )}
           {/* Fallback dashed line while route loads */}
           {!walkingRoute && stopPositions.length > 0 && (
-            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 2, opacity: 0.3, dashArray: "6 8", lineCap: "round" }} />
+            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
           {/* Journey stop pins with labels */}
@@ -183,7 +183,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       {/* ── BOTTOM-RIGHT STACK: Timeline (flag) + Preferences + Locate ── */}
       <div className="bottom-right-stack">
         <button className="fab-circle bottom-right-btn" onClick={onOpenTimeline} aria-label="Timeline">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <polygon points="10,2 22,7 10,12" fill="#8851D4"/>
             <rect x="8" y="2" width="2" height="20" rx="1" fill="#8851D4"/>
             <circle cx="5" cy="20" r="1" fill="#8851D4"/>
@@ -191,7 +191,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           </svg>
         </button>
         <button className="fab-circle bottom-right-btn" onClick={onSetConstraints} aria-label="Preferences">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
             <line x1="4" y1="6" x2="20" y2="6"/>
             <line x1="4" y1="12" x2="20" y2="12"/>
             <line x1="4" y1="18" x2="20" y2="18"/>
@@ -201,7 +201,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           </svg>
         </button>
         <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
             <circle cx="12" cy="12" r="8"/>
             <line x1="12" y1="2" x2="12" y2="5"/>
