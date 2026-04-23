@@ -175,15 +175,17 @@ export default function TimelineScreen({ onBack, onEndWalk, onPauseWalk }) {
 
   return (
     <div className="tl-screen">
+      {onBack && (
+        <button className="tl-close" onClick={onBack} aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="6" y1="18" x2="18" y2="6" />
+          </svg>
+        </button>
+      )}
+
       {/* ── Header ── */}
       <div className="tl-header">
-        {onBack && (
-          <button className="tl-back-btn" onClick={onBack} aria-label="Back">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M19 12H5M12 5l-7 7 7 7"/>
-            </svg>
-          </button>
-        )}
         <div className="tl-elapsed-time">{time}</div>
         <div className="tl-elapsed-label">Elapsed exploration time</div>
         <div className="tl-header-divider" />

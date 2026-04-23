@@ -3,9 +3,12 @@
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  background: var(--color-bg);
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
   font-family: var(--font-ui);
   padding-bottom: 40px;
+  z-index: 30;
 }
 
 /* ── Header ── */
@@ -15,23 +18,31 @@
   position: relative;
 }
 
-.tl-back-btn {
+.tl-close {
   position: absolute;
-  top: 40px;
-  left: 16px;
-  width: 36px;
-  height: 36px;
+  top: 18px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
-  background: rgba(255,255,255,0.22);
+  background: rgba(255, 255, 255, 0.22);
   backdrop-filter: blur(8px) saturate(1.4);
   -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
-  color: var(--color-body);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+  color: #8851D4;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  z-index: 40;
+  transition: transform 0.15s ease-out, background 0.2s ease;
+}
+.tl-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+.tl-close:active {
+  transform: scale(0.92);
 }
 
 .tl-elapsed-time {
@@ -208,9 +219,11 @@
 .tl-card {
   display: flex;
   align-items: stretch;
-  background: white;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
   border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -270,9 +283,11 @@
 
 /* ── Expanded card detail ── */
 .tl-card-detail {
-  background: white;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
   border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
   overflow: hidden;
   animation: tl-expand 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }

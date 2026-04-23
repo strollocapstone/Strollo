@@ -438,14 +438,17 @@ export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, 
   return (
     <div className={`pwc-screen${embedded ? " pwc-screen--embedded" : ""}`}>
       {!embedded && (
-        <div className="pwc-header">
+        <>
           <button className="pwc-close" onClick={onGoBack} aria-label="Close">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="6" y1="18" x2="18" y2="6" />
             </svg>
           </button>
-          <span className="pwc-title">Plan your walk</span>
-        </div>
+          <div className="pwc-header">
+            <span className="pwc-title">Plan your exploration</span>
+          </div>
+        </>
       )}
 
       <div className="pwc-scroll">

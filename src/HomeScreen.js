@@ -18,7 +18,7 @@ const makePinIcon = (name, desc, added, expanded) => L.divIcon({
       <span class="sugg-pin-desc">${desc}</span>
       <button class="sugg-pin-btn sugg-pin-btn--icon" data-action="toggle" aria-label="${added ? "Remove from itinerary" : "Add to itinerary"}">
         ${added
-          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
           : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
         }
       </button>
@@ -590,7 +590,6 @@ export default function HomeScreen({
                     const target = e.originalEvent?.target;
                     if (target && target.closest && target.closest('[data-action="toggle"]')) {
                       handleToggleAdd(s.id);
-                      setSelectedPoi(null);
                     } else if (isExpanded) {
                       setSelectedPoi(null);
                     } else {
