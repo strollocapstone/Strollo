@@ -24,7 +24,7 @@ const QUIZ_DECK = [
 // ── Swipe directions ──────────────────────────────────────────────────────
 const LABELS = {
   up:    { text: "YES, please",  weight:  2, pinned: true  },
-  right: { text: "Could do",     weight:  1, pinned: true  },
+  right: { text: "Could go",     weight:  1, pinned: true  },
   left:  { text: "Meh",          weight: -1, pinned: false },
   down:  { text: "Hard pass",    weight: -2, pinned: false },
 };
@@ -79,6 +79,32 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
   const lastPos = useRef({ x: 0, y: 0, t: 0 });
   const cardRef = useRef(null);
   const animatingRef = useRef(false);
+  const lineItemsRef = useRef(null);
+  const lineDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 });
+
+  const handleLineDown = (e) => {
+    const el = lineItemsRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    lineDragRef.current = {
+      active: true,
+      startX: e.pageX - el.offsetLeft,
+      scrollLeft: el.scrollLeft,
+    };
+    el.classList.add("quiz-line-items--dragging");
+  };
+  const handleLineMove = (e) => {
+    if (!lineDragRef.current.active) return;
+    const el = lineItemsRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const walk = (e.pageX - el.offsetLeft) - lineDragRef.current.startX;
+    el.scrollLeft = lineDragRef.current.scrollLeft - walk;
+  };
+  const handleLineUp = () => {
+    if (!lineDragRef.current.active) return;
+    lineDragRef.current.active = false;
+    lineItemsRef.current?.classList.remove("quiz-line-items--dragging");
+  };
 
   const total = QUIZ_DECK.length;
   const current = QUIZ_DECK[index] || null;
@@ -214,9 +240,9 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
 
   return (
     <div className="quiz-screen">
-      {/* Strollo logo + close */}
+      {/* Close */}
       <div className="quiz-topbar">
-        <span className="quiz-logo">strollo</span>
+        <div style={{ flex: 1 }} />
         {onClose && (
           <button className="quiz-close" onClick={onClose} aria-label="Close quiz">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -265,7 +291,14 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
             </svg>
           ))}
         </div>
-        <div className="quiz-line-items">
+        <div
+          className="quiz-line-items"
+          ref={lineItemsRef}
+          onMouseDown={handleLineDown}
+          onMouseMove={handleLineMove}
+          onMouseUp={handleLineUp}
+          onMouseLeave={handleLineUp}
+        >
           {pinnedItems.map((it, i) => (
             <MiniPolaroid key={`${it.id}-${i}`} item={it} angle={it.angle} delay={it.delay} />
           ))}
@@ -274,7 +307,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
 
       {/* Direction labels around the polaroid */}
       <div className="quiz-dir quiz-dir--top">YES, please</div>
-      <div className="quiz-dir quiz-dir--right">Could do</div>
+      <div className="quiz-dir quiz-dir--right">Could go</div>
       <div className="quiz-dir quiz-dir--left">Meh</div>
       <div className="quiz-dir quiz-dir--bottom">Hard pass</div>
 

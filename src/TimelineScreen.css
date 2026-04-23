@@ -391,10 +391,49 @@
 /* ── Footer ── */
 .tl-footer {
   padding: 8px 24px 16px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.tl-pause-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: rgba(136, 81, 212, 0.12);
+  color: #8851D4;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s ease;
+}
+
+.tl-pause-btn:hover {
+  background: rgba(136, 81, 212, 0.18);
+}
+
+.tl-pause-btn:active {
+  transform: scale(0.97);
+}
+
+.tl-pause-btn--paused {
+  background: #8851D4;
+  color: #FFFFFF;
+}
+
+.tl-pause-btn--paused:hover {
+  background: #7643C4;
 }
 
 .tl-end-btn {
-  width: 100%;
+  flex: 1;
   padding: 14px;
   border-radius: var(--radius-pill);
   border: none;
