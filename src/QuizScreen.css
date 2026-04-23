@@ -93,10 +93,10 @@
 }
 .quiz-subtitle {
   font-family: var(--font-brand);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: #4B2E12;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   letter-spacing: 0.3px;
   display: flex;
   align-items: center;
@@ -108,8 +108,8 @@
   gap: 3px;
 }
 .quiz-subtitle-arrows svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   color: #4B2E12;
 }
 
@@ -238,11 +238,24 @@
   background: rgba(255, 253, 247, 0.22);
   backdrop-filter: blur(6px) saturate(1.2);
   -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  border: none;
   border-radius: 999px;
   box-shadow: 0 1px 6px rgba(40, 22, 6, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.quiz-dir:hover { background: rgba(255, 253, 247, 0.4); }
+.quiz-dir:active { background: rgba(255, 253, 247, 0.55); }
+.quiz-dir-arrow {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 .quiz-dir--top    { top: 300px;  left: 50%; transform: translateX(-50%) rotate(-2deg); }
-.quiz-dir--bottom { bottom: 90px; left: 50%; transform: translateX(-50%) rotate(2deg); }
+.quiz-dir--bottom { bottom: 80px; left: 50%; transform: translateX(-50%) rotate(2deg); }
 .quiz-dir--left   { top: 65%; left: 14px;  transform: translateY(-50%) rotate(-6deg); }
 .quiz-dir--right  { top: 65%; right: 14px; transform: translateY(-50%) rotate(6deg); }
 
@@ -291,6 +304,28 @@
 }
 .quiz-card--active {
   z-index: 2;
+}
+
+/* ── Button-triggered exit animations (subtle wind-up, then swoosh out) ── */
+@keyframes quiz-exit-up {
+  0%   { transform: translate(0, 0)      rotate(0deg); opacity: 1; }
+  14%  { transform: translate(0, 22px)   rotate(1deg); opacity: 1; }
+  100% { transform: translate(0, -820px) rotate(-2deg); opacity: 0; }
+}
+@keyframes quiz-exit-down {
+  0%   { transform: translate(0, 0)     rotate(0deg); opacity: 1; }
+  14%  { transform: translate(0, -22px) rotate(-1deg); opacity: 1; }
+  100% { transform: translate(0, 820px) rotate(2deg); opacity: 0; }
+}
+@keyframes quiz-exit-left {
+  0%   { transform: translate(0, 0)      rotate(0deg); opacity: 1; }
+  14%  { transform: translate(24px, -4px) rotate(3deg); opacity: 1; }
+  100% { transform: translate(-820px, 0) rotate(-15deg); opacity: 0; }
+}
+@keyframes quiz-exit-right {
+  0%   { transform: translate(0, 0)      rotate(0deg); opacity: 1; }
+  14%  { transform: translate(-24px, -4px) rotate(-3deg); opacity: 1; }
+  100% { transform: translate(820px, 0)  rotate(15deg); opacity: 0; }
 }
 .quiz-card-photo {
   flex: 1;
