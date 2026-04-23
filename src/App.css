@@ -41,3 +41,34 @@
     transform: rotate(360deg);
   }
 }
+
+/* Placeholder screens for tabs without content yet */
+.placeholder-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding-bottom: 80px;
+  box-sizing: border-box;
+  color: #5A4B64;
+  font-family: 'Satoshi', sans-serif;
+}
+
+.placeholder-screen h2 {
+  font-family: 'Unbounded', sans-serif;
+  font-size: 22px;
+  color: #34233E;
+  margin: 12px 0 4px;
+}
+
+.placeholder-screen p {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  color: #8851D4;
+  opacity: 0.4;
+}

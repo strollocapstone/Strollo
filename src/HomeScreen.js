@@ -1,161 +1,82 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./HomeScreen.css";
 import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
+import { useSpeechRecognition } from "./useSpeechRecognition";
+import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
+import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, isWithinWalkingRadius } from "./mapUtils";
 
-// ── Leaflet setup ──────────────────────────────────────────────────────────
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png"),
-  iconUrl: require("leaflet/dist/images/marker-icon.png"),
-  shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
-});
-
-const youIcon = L.divIcon({
+const makePinIcon = (name, desc, added, expanded) => L.divIcon({
   className: "",
-  html: `<div class="marauder-marker">
-    <svg class="foot foot--left" width="18" height="30" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
-      <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#1E1541"/>
-      <line x1="6" y1="14" x2="17" y2="14" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-      <line x1="6" y1="19" x2="17" y2="19" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-    </svg>
-    <svg class="foot foot--right" width="18" height="30" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20 2 C23 2 25 5 25 10 L25 32 C25 38 23 44 18 44 L11 44 C8 44 6 42 5 38 L4 32 C4 28 6 26 9 26 L10 26 L10 10 C10 5 12 2 15 2 Z" fill="#1E1541"/>
-      <line x1="11" y1="14" x2="22" y2="14" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-      <line x1="11" y1="19" x2="22" y2="19" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-    </svg>
-  </div>`,
-  iconSize: [42, 32],
-  iconAnchor: [21, 32],
-});
-
-const suggestionLabelIcon = (name, emoji, added) => L.divIcon({
-  className: "",
-  html: `<div class="sugg-label-pin${added ? " sugg-label-pin--added" : ""}">
-    <div class="sugg-label-ic">${emoji}</div>
-    <span class="sugg-label-nm">${name}</span>
+  html: `<div class="sugg-pin${expanded ? " sugg-pin--open" : ""}${added ? " sugg-pin--added" : ""}">
+    <div class="sugg-pin-dot"></div>
+    <span class="sugg-pin-name">${name}</span>
+    <div class="sugg-pin-extra">
+      <span class="sugg-pin-desc">${desc}</span>
+      <div class="sugg-pin-btn" data-action="toggle">${added ? "Remove" : "Add"}</div>
+    </div>
   </div>`,
   iconSize: [0, 0],
   iconAnchor: [0, 0],
 });
 
-// ── Data ───────────────────────────────────────────────────────────────────
-const YOU = [37.7820, -122.4070];
-const MAP_CENTER = [37.7850, -122.4030];
+// ── Location card ──────────────────────────────────────────────────────────
+const LOVED_PLACES = ["Sightglass Coffee", "Dolores Park", "Ferry Building"];
 
-const SUGGESTIONS = [
-  { id: 1, name: "Tartine Bakery",       desc: "Mission · Bakery",    lat: 37.7814, lng: -122.4041, icon: "🥐" },
-  { id: 2, name: "Dolores Park",         desc: "Mission · Park",      lat: 37.7836, lng: -122.4072, icon: "🌿" },
-  { id: 3, name: "Bi-Rite Creamery",     desc: "Mission · Ice Cream", lat: 37.7812, lng: -122.4049, icon: "🍦" },
-  { id: 4, name: "Clarion Alley Murals", desc: "Mission · Art",       lat: 37.7830, lng: -122.4224, icon: "🎨" },
-  { id: 5, name: "Mission Dolores",      desc: "Mission · Historic",  lat: 37.7849, lng: -122.4270, icon: "⛪" },
-];
+const trustTagFor = (id) => {
+  const variant = id % 3;
+  if (variant === 0) return "From your last walk";
+  if (variant === 1) return `Because you loved ${LOVED_PLACES[id % LOVED_PLACES.length]}`;
+  return "Based on your preferences";
+};
 
-const RECENT = [
-  { id: 6, name: "Sightglass Coffee",  desc: "SoMa · Coffee"              },
-  { id: 7, name: "The Painted Ladies", desc: "Alamo Square · Landmark"    },
-  { id: 8, name: "Ferry Building",     desc: "Embarcadero · Market"       },
-];
-
-// ── Inner components ───────────────────────────────────────────────────────
-function TrackUserPosition({ userPos, onScreenPos }) {
-  const map = useMap();
-  useEffect(() => {
-    const update = () => {
-      const pt = map.latLngToContainerPoint(L.latLng(userPos[0], userPos[1]));
-      onScreenPos({ x: pt.x, y: pt.y });
-    };
-    update();
-    map.on("move zoom moveend", update);
-    return () => map.off("move zoom moveend", update);
-  }, [map, userPos, onScreenPos]);
-  return null;
-}
-
-function LocateMe({ trigger, onLocate }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!trigger) return;
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const pos = [coords.latitude, coords.longitude];
-        map.flyTo(pos, 16, { duration: 1.4 });
-        onLocate(pos);
-      },
-      () => { map.flyTo(YOU, 16, { duration: 1.4 }); onLocate(YOU); }
-    );
-  }, [trigger, map, onLocate]);
-  return null;
-}
-
-// ── Swipe row ──────────────────────────────────────────────────────────────
-const SWIPE_MAX = 80;
-const SWIPE_THRESHOLD = 55;
-
-function SwipeRow({ item, added, onAdd, onFave, onRemove }) {
-  const startX = useRef(null);
-  const [dx, setDx] = useState(0);
-  const [settled, setSettled] = useState(false); // true when action triggered
-
-  const start = (e) => {
-    startX.current = e.touches?.[0]?.clientX ?? e.clientX;
-    setSettled(false);
-  };
-  const move = (e) => {
-    if (startX.current === null) return;
-    const x = e.touches?.[0]?.clientX ?? e.clientX;
-    setDx(Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, x - startX.current)));
-  };
-  const end = () => {
-    if (dx > SWIPE_THRESHOLD) { onFave(item.id); setSettled(true); }
-    else if (dx < -SWIPE_THRESHOLD) { onRemove(item.id); setSettled(true); }
-    startX.current = null;
-    setDx(0);
-  };
-
+const LocationCard = memo(function LocationCard({ item, added, faved, onToggle, onFave }) {
   return (
-    <div className="swipe-wrapper">
-      {/* Revealed actions */}
-      <div className="swipe-action swipe-action--fave">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#FFD501"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/></svg>
-      </div>
-      <div className="swipe-action swipe-action--remove">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-      </div>
-
-      {/* Item */}
+    <div className="location-card">
       <div
-        className="suggestion-item"
-        style={{ transform: `translateX(${dx}px)`, transition: settled || dx === 0 ? 'transform 0.25s' : 'none' }}
-        onTouchStart={start} onTouchMove={move} onTouchEnd={end}
-        onMouseDown={start} onMouseMove={move} onMouseUp={end}
+        className="location-card-image"
+        style={item.image ? { backgroundImage: `url(${item.image})` } : undefined}
       >
-        <div className="suggestion-text">
-          <span className="suggestion-name">{item.name}</span>
-          <span className="suggestion-desc">{item.desc}</span>
-        </div>
-        <button className={`add-btn ${added ? "added" : ""}`} onClick={() => onAdd(item.id)}>
+        <div className="location-card-gradient" />
+        <button
+          className={`location-card-add ${added ? "added" : ""}`}
+          onClick={() => onToggle(item.id)}
+          aria-label={added ? "Remove from itinerary" : "Add to itinerary"}
+        >
           {added ? (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9z" fill="#8851D4" opacity="0.9"/>
-              <line x1="12" y1="6" x2="12" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="9" y1="9" x2="15" y2="9" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           ) : (
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" fill="rgba(136,81,212,0.1)"/>
-              <line x1="12" y1="7" x2="12" y2="17" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="7" y1="12" x2="17" y2="12" stroke="#8851D4" strokeWidth="2" strokeLinecap="round"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="3" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           )}
         </button>
       </div>
+      <div className="location-card-info">
+        <div className="location-card-name-row">
+          <span className="location-card-name">{item.name}</span>
+          <button
+            className={`location-card-fave ${faved ? "faved" : ""}`}
+            onClick={() => onFave(item.id)}
+            aria-label={faved ? "Unfave" : "Fave"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={faved ? "#FF6B6B" : "none"} stroke={faved ? "#FF6B6B" : "#ccc"} strokeWidth="2">
+              <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/>
+            </svg>
+          </button>
+        </div>
+        <span className="location-card-address">{item.desc || item.address || ""}</span>
+        <span className="location-card-tag">{trustTagFor(item.id)}</span>
+      </div>
     </div>
   );
-}
+});
 
 // ── Mute icon ─────────────────────────────────────────────────────────────
 function MuteSvg({ muted }) {
@@ -199,6 +120,18 @@ function WidgetBubble({ listening, aiSpeaking, muted, userText, aiText }) {
   return null;
 }
 
+// Map a PreferencesScreen "Show on Map" filter ID → Overpass place `desc` strings.
+// Only these filter IDs correspond to fetched pin categories; others (ai-highlights,
+// saved-places, benches, dog-friendly) don't map to Overpass results and are skipped.
+const FILTER_DESCS = {
+  cafes: new Set(["Coffee", "Bakery"]),
+  food: new Set(["Restaurant", "Ice Cream", "Bar"]),
+  museums: new Set(["Museum", "Gallery", "Art", "Arts"]),
+  parks: new Set(["Park", "Garden"]),
+  sights: new Set(["Viewpoint"]),
+  attractions: new Set(["Attraction"]),
+};
+
 // ── Marauder's Map footstep positions ──────────────────────────────────────
 const VFS_STEPS = [
   { x: "calc(50% + 6px)",  y: "88%", rot: -4,  mirror: false },
@@ -215,18 +148,10 @@ const VFS_STEPS = [
   { x: "calc(50% - 18px)", y: "11%", rot: -3,  mirror: true },
 ];
 
-// ── Demo conversation history ─────────────────────────────────────────────
-const CHAT_HISTORY = [
-  { id: 1, role: "ai",   text: "Hey! You're moving — love that energy. What are you feeling today?" },
-  { id: 2, role: "user", text: "Something cozy. Maybe a bakery or a hidden garden?" },
-  { id: 3, role: "ai",   text: "Perfect. There's a secret courtyard 3 blocks east locals swear by on Sunday mornings." },
-  { id: 4, role: "user", text: "That sounds great, add it!" },
-  { id: 5, role: "ai",   text: "Done! Tartine is nearby too if you want pastries first. Should I add both?" },
-];
 
 // ── Sound wave icon (matches Walk Companion pill) ─────────────────────────
 function SoundWaveSvg({ active }) {
-  const color = active ? "#FFFFFF" : "rgba(225,177,255,0.70)";
+  const color = active ? "#FFFFFF" : "#8851D4";
   const cls = active ? "sw-bar sw-bar--active" : "sw-bar";
   return (
     <svg width="22" height="18" viewBox="0 0 22 18" fill={color}>
@@ -240,26 +165,344 @@ function SoundWaveSvg({ active }) {
 }
 
 // ── HomeScreen ─────────────────────────────────────────────────────────────
-export default function HomeScreen({ onStartWalk }) {
-  const [userLocation, setUserLocation]   = useState(YOU);
-  const [locateTrigger, setLocateTrigger] = useState(0);
+export default function HomeScreen({
+  onStartWalk,
+  onSetConstraints,
+  initialLocation,
+  initialSheetOpen,
+  onSheetOpenConsumed,
+  preferences,
+  nearbyPlaces,
+  setNearbyPlaces,
+  addedIds,
+  setAddedIds,
+  favedIds,
+  setFavedIds,
+  lastFetchedLocationRef,
+  lastFetchTimeRef,
+}) {
+  const [userLocation, setUserLocation]   = useState(initialLocation || null);
+  const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
+  const [showLocatePrompt, setShowLocatePrompt] = useState(false);
+  const [locateError, setLocateError]           = useState("");
+  const [locateActive, setLocateActive]         = useState(false);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
-  const [sheetOpen, setSheetOpen]         = useState(false);
-  const [activeTab, setActiveTab]         = useState("suggested");
-  const [addedIds, setAddedIds]           = useState(new Set());
-  const [favedIds, setFavedIds]           = useState(new Set());
-  const [hiddenIds, setHiddenIds]         = useState(new Set());
+  const [sheetOpen, setSheetOpen]         = useState(Boolean(initialSheetOpen));
+
+  useEffect(() => {
+    if (initialSheetOpen) onSheetOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const mapCenterRef                      = useRef(null);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError]     = useState("");
   const [voiceActive, setVoiceActive]     = useState(false);
   const [listening, setListening]         = useState(false);
   const [locked, setLocked]              = useState(false);
   const [muted, setMuted]                = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
   const [query, setQuery]                 = useState("");
+  const [voiceUnsupported, setVoiceUnsupported] = useState(false);
+  const [voiceResult, setVoiceResult]           = useState("");
+  const [listenCardMode, setListenCardMode]     = useState(false);
+  const [chatMode, setChatMode]                 = useState(false);
+  const [chatMessages, setChatMessages]         = useState([]);
+  const [chatLoading, setChatLoading]           = useState(false);
+  const [chatListening, setChatListening]       = useState(false);
+  const [chatClosing, setChatClosing]           = useState(false);
+  const [chatHistory, setChatHistory]           = useState([]);
+  const [showHistory, setShowHistory]           = useState(false);
+  const [viewingHistory, setViewingHistory]     = useState(null);
+  const [listenTextMode, setListenTextMode]     = useState(false);
+  const [suggestedStops, setSuggestedStops]     = useState([]);
+  const [planLoading, setPlanLoading]           = useState(false);
+  const [selectedPoi, setSelectedPoi]           = useState(null);
+  const chatHistoryIdCounter = useRef(0);
+  const chatIdCounter = useRef(0);
+  const resultTimer = useRef(null);
+  const nearbyAbortRef = useRef(null);
+
+  // Clean up resultTimer on unmount
+  useEffect(() => { return () => clearTimeout(resultTimer.current); }, []);
+  useEffect(() => () => { nearbyAbortRef.current?.abort(); }, []);
+
+  const loadNearbyPlaces = useCallback(async (loc, force = false) => {
+    const now = Date.now();
+    if (!force && now - lastFetchTimeRef.current < 10000) return;
+
+    // Supersede any in-flight request — a newer call owns the result set now
+    nearbyAbortRef.current?.abort();
+    const controller = new AbortController();
+    nearbyAbortRef.current = controller;
+
+    setNearbyLoading(true);
+    setNearbyError("");
+    try {
+      const places = await fetchNearbyPlaces(loc[0], loc[1], 800, { signal: controller.signal });
+      if (controller.signal.aborted) return; // superseded — drop result
+      setNearbyPlaces(places);
+      lastFetchedLocationRef.current = loc;
+      lastFetchTimeRef.current = Date.now();
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      console.warn("[Strollo] Failed to fetch nearby places:", err);
+      setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
+    } finally {
+      if (!controller.signal.aborted) setNearbyLoading(false);
+      if (nearbyAbortRef.current === controller) nearbyAbortRef.current = null;
+    }
+  }, []);
+
+  // Auto-fetch nearby places when real user location is available / changes significantly
+  useEffect(() => {
+    if (!userLocation) return; // wait for geolocation
+    if (!lastFetchedLocationRef.current) {
+      loadNearbyPlaces(userLocation, true);
+      return;
+    }
+    // Only re-fetch if moved more than ~200m
+    const [prevLat, prevLng] = lastFetchedLocationRef.current;
+    const dlat = Math.abs(userLocation[0] - prevLat);
+    const dlng = Math.abs(userLocation[1] - prevLng);
+    if (dlat > 0.002 || dlng > 0.002) {
+      loadNearbyPlaces(userLocation);
+    }
+  }, [userLocation, loadNearbyPlaces]);
+
+  const chatModeRef = useRef(false);
+  chatModeRef.current = chatMode;
+  const handleAutoStop = useCallback(async (spokenText) => {
+    setListening(false);
+    setLocked(false);
+    const text = spokenText?.trim() || "";
+
+    // In chat mode, ignore auto-stop — user manually controls stop via button
+    if (chatModeRef.current) {
+      return;
+    }
+    setChatListening(false);
+
+    if (text) {
+      // Show result briefly, then transition to chat
+      setVoiceResult(text);
+      resultTimer.current = setTimeout(async () => {
+        setVoiceResult("");
+        setListenCardMode(false);
+        setListenTextMode(false);
+        setVoiceActive(false);
+
+        // Enter chat mode
+        const userMsg = { id: ++chatIdCounter.current, role: "user", text };
+        setChatMessages([userMsg]);
+        setChatMode(true);
+        setChatLoading(true);
+
+        try {
+          const systemPrompt = buildSystemPrompt({
+            userLocation,
+            journeyItems: [],
+            elapsedMinutes: 0,
+            currentStopIndex: 0,
+            totalStops: 0,
+          });
+          const response = await sendMessage([userMsg], systemPrompt);
+          const places = extractPlaces(response);
+          const displayText = cleanResponseText(response);
+          const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
+          setChatMessages(prev => {
+            const updated = [...prev, aiMsg];
+            if (places.length > 0) setSuggestedStops(places);
+            return updated;
+          });
+        } catch (err) {
+          console.error("Gemini error:", err);
+          const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" };
+          setChatMessages(prev => [...prev, errMsg]);
+        } finally {
+          setChatLoading(false);
+        }
+      }, 1000);
+    } else {
+      setListenCardMode(false);
+      setListenTextMode(false);
+      setVoiceActive(false);
+    }
+  }, [userLocation]);
+
+  const speech = useSpeechRecognition({ onAutoStop: handleAutoStop });
+
+  const chatLoadingRef = useRef(false);
+  chatLoadingRef.current = chatLoading;
+  const chatMessagesRef = useRef([]);
+  chatMessagesRef.current = chatMessages;
+  const sendChatMessage = useCallback(async (text) => {
+    if (!text.trim() || chatLoadingRef.current) return;
+    const userMsg = { id: ++chatIdCounter.current, role: "user", text: text.trim() };
+    setChatMessages(prev => [...prev, userMsg]);
+    setQuery("");
+    setChatLoading(true);
+
+    try {
+      const systemPrompt = buildSystemPrompt({
+        userLocation,
+        journeyItems: [],
+        elapsedMinutes: 0,
+        currentStopIndex: 0,
+        totalStops: 0,
+      });
+      // Send full conversation history so LLM has session context
+      const fullHistory = [...chatMessagesRef.current, userMsg];
+      const response = await sendMessage(fullHistory, systemPrompt);
+      const places = extractPlaces(response);
+      const displayText = cleanResponseText(response);
+      const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
+      setChatMessages(prev => [...prev, aiMsg]);
+      if (places.length > 0) setSuggestedStops(places);
+    } catch (err) {
+      console.error("Gemini error:", err);
+      const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" };
+      setChatMessages(prev => [...prev, errMsg]);
+    } finally {
+      setChatLoading(false);
+    }
+  }, [userLocation]);
+  const sendChatMessageRef = useRef(sendChatMessage);
+  sendChatMessageRef.current = sendChatMessage;
+
+  const handleSendQuery = useCallback((text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setChatMessages([{ id: ++chatIdCounter.current, role: "user", text: trimmed }]);
+    setChatMode(true);
+    setChatLoading(true);
+    setQuery("");
+    setListenCardMode(false);
+    setListenTextMode(false);
+    setVoiceActive(false);
+    const systemPrompt = buildSystemPrompt({ userLocation, journeyItems: [], elapsedMinutes: 0, currentStopIndex: 0, totalStops: 0 });
+    sendMessage([{ role: "user", text: trimmed }], systemPrompt).then(response => {
+      const places = extractPlaces(response);
+      const displayText = cleanResponseText(response);
+      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: displayText }]);
+      if (places.length > 0) setSuggestedStops(places);
+    }).catch(() => {
+      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" }]);
+    }).finally(() => setChatLoading(false));
+  }, [userLocation]);
+
+  const handlePlanWalk = useCallback(async () => {
+    if (suggestedStops.length === 0) return;
+    setPlanLoading(true);
+
+    try {
+      // Geocode all suggested places
+      const geocoded = [];
+      for (const stop of suggestedStops) {
+        const result = await geocodePlace(stop.name, userLocation[0], userLocation[1]);
+        if (result) {
+          geocoded.push({
+            id: Date.now() + geocoded.length,
+            name: stop.name,
+            desc: stop.desc,
+            lat: result.lat,
+            lng: result.lng,
+          });
+        }
+      }
+
+      const nearby = geocoded.filter((s) => isWithinWalkingRadius(userLocation, s));
+
+      if (nearby.length === 0) {
+        const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Sorry, I couldn't find those places on the map. Try asking for specific place names!" };
+        setChatMessages(prev => [...prev, errMsg]);
+        setPlanLoading(false);
+        return;
+      }
+
+      // Close chat and start walk
+      setChatMode(false);
+      setChatMessages([]);
+      setSuggestedStops([]);
+      onStartWalk(nearby, userLocation);
+    } catch (err) {
+      console.error("Plan walk error:", err);
+      const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Something went wrong while planning the route. Please try again." };
+      setChatMessages(prev => [...prev, errMsg]);
+    } finally {
+      setPlanLoading(false);
+    }
+  }, [suggestedStops, userLocation, onStartWalk]);
+
+  const closeChat = useCallback(() => {
+    setChatClosing(true);
+    setTimeout(() => {
+      // Save conversation to history if it has messages
+      setChatMessages(prev => {
+        if (prev.length > 0) {
+          setChatHistory(h => [{
+            id: ++chatHistoryIdCounter.current,
+            timestamp: Date.now(),
+            messages: prev,
+          }, ...h]);
+        }
+        return [];
+      });
+      setChatMode(false);
+      setChatClosing(false);
+      setShowHistory(false);
+      setViewingHistory(null);
+    }, 350);
+  }, []);
 
   const onScreenPos  = useCallback((pos) => setUserScreenPos(pos), []);
-  const handleAdd    = (id) => setAddedIds((p) => new Set([...p, id]));
-  const handleFave   = (id) => setFavedIds((p) => new Set([...p, id]));
-  const handleRemove = (id) => setHiddenIds((p) => new Set([...p, id]));
+  const handleMapCenterChange = useCallback((center) => { mapCenterRef.current = center; }, []);
+  const handleLocate = useCallback((pos) => {
+    setUserLocation(pos);
+    setShowLocatePrompt(false);
+    setLocateActive(true);
+  }, []);
+  const handleMapDrag = useCallback(() => setLocateActive(false), []);
+  const handleToggleAdd = useCallback((id) => setAddedIds((p) => {
+    const next = new Set(p);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  }), []);
+  const handleFave = useCallback((id) => setFavedIds((p) => {
+    const next = new Set(p);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  }), []);
+
+  const carouselRef = useRef(null);
+  const carouselDrag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false });
+  const onCarouselMouseDown = (e) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    carouselDrag.current = { active: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft, moved: false };
+    el.style.cursor = "grabbing";
+  };
+  const onCarouselMouseMove = (e) => {
+    if (!carouselDrag.current.active) return;
+    e.preventDefault();
+    const el = carouselRef.current;
+    const x = e.pageX - el.offsetLeft;
+    const dx = x - carouselDrag.current.startX;
+    if (Math.abs(dx) > 3) carouselDrag.current.moved = true;
+    el.scrollLeft = carouselDrag.current.scrollLeft - dx;
+  };
+  const onCarouselMouseUp = () => {
+    carouselDrag.current.active = false;
+    if (carouselRef.current) carouselRef.current.style.cursor = "grab";
+  };
+  const onCarouselClickCapture = (e) => {
+    if (carouselDrag.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      carouselDrag.current.moved = false;
+    }
+  };
 
   const dragStartY = useRef(null);
   const homeStartY = useRef(null);
@@ -275,41 +518,88 @@ export default function HomeScreen({ onStartWalk }) {
   };
 
   const handleStartWalk = () => {
-    const items = SUGGESTIONS.filter((s) => addedIds.has(s.id));
-    onStartWalk(items.length ? items : [{ id: 0, name: "Sightglass Coffee", desc: "SoMa · Coffee" }]);
+    const origin = lastFetchedLocationRef.current || userLocation;
+    const items = nearbyPlaces
+      .filter((s) => addedIds.has(s.id))
+      .filter((s) => isWithinWalkingRadius(origin, s));
+    if (items.length) onStartWalk(items, origin);
   };
 
   const toggleVoice = () => {
     if (voiceActive) {
+      speech.stop();
+      clearTimeout(resultTimer.current);
+      if (voiceResult.trim()) {
+        setQuery(voiceResult.trim());
+      } else if (speech.transcript.trim()) {
+        setQuery(speech.transcript.trim());
+      }
+      setVoiceResult("");
+      speech.reset();
+      setListenCardMode(false);
+      setListenTextMode(false);
       setTimeout(() => { setVoiceActive(false); }, 320);
     } else {
+      if (!speech.supported) {
+        setVoiceUnsupported(true);
+        setTimeout(() => setVoiceUnsupported(false), 3000);
+        return;
+      }
       setSheetOpen(false);
+      setListenCardMode(true);
       setVoiceActive(true);
+      speech.start();
     }
   };
 
   const { x, y } = userScreenPos;
 
-  const allItems = activeTab === "suggested"
-    ? SUGGESTIONS.filter((s) => !hiddenIds.has(s.id))
-    : activeTab === "recent"
-      ? RECENT.filter((s) => !hiddenIds.has(s.id))
-      : SUGGESTIONS.filter((s) => favedIds.has(s.id));
+  const visibleNearbyPlaces = useMemo(() => {
+    const active = preferences?.mapFilters?.filter((id) => FILTER_DESCS[id]) ?? [];
+    if (active.length === 0) return nearbyPlaces;
+    const allowed = new Set();
+    for (const id of active) FILTER_DESCS[id].forEach((d) => allowed.add(d));
+    return nearbyPlaces.filter((p) => allowed.has(p.desc));
+  }, [nearbyPlaces, preferences]);
+
+  const allItems = visibleNearbyPlaces;
 
   return (
-    <div className="phone-frame">
+    <>
 
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
-        <MapContainer center={MAP_CENTER} zoom={15} zoomControl={false} attributionControl={false} className="map-container">
+        <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 15 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
-          {sheetOpen && SUGGESTIONS.filter((s) => !hiddenIds.has(s.id)).map((s) => (
-            <Marker key={s.id} position={[s.lat, s.lng]}
-              icon={suggestionLabelIcon(s.name, s.icon, addedIds.has(s.id))} />
-          ))}
-          <Marker position={userLocation} icon={youIcon} />
-          <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />
-          <LocateMe trigger={locateTrigger} onLocate={setUserLocation} />
+          {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
+            const isExpanded = selectedPoi === s.id;
+            const isAdded = addedIds.has(s.id);
+            return (
+              <Marker key={s.id} position={[s.lat, s.lng]}
+                icon={makePinIcon(s.name, s.desc, isAdded, isExpanded)}
+                zIndexOffset={isExpanded ? 1000 : 0}
+                eventHandlers={{
+                  click: (e) => {
+                    const target = e.originalEvent?.target;
+                    if (target && target.closest && target.closest('[data-action="toggle"]')) {
+                      handleToggleAdd(s.id);
+                      setSelectedPoi(null);
+                    } else if (isExpanded) {
+                      setSelectedPoi(null);
+                    } else {
+                      setSelectedPoi(s.id);
+                    }
+                  },
+                }}
+              />
+            );
+          })}
+          {userLocation && <Marker position={userLocation} icon={youIcon} />}
+          {userLocation && <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />}
+          <LocateMe trigger={locateTrigger} onLocate={handleLocate} onError={setLocateError} />
+          <WatchLocation onUpdate={setUserLocation} />
+          <MapDragListener onDrag={handleMapDrag} />
+          <MapCenterTracker onCenterChange={handleMapCenterChange} />
         </MapContainer>
       </div>
 
@@ -332,27 +622,53 @@ export default function HomeScreen({ onStartWalk }) {
         <span className="profile-initials">E</span>
       </button>
 
-      {/* ── LOCATE (bottom-right, rises above sheet when open) ── */}
-      <button
-        className="locate-fixed"
-        style={{ bottom: sheetOpen ? 440 : 128, transition: "bottom 0.42s cubic-bezier(0.22,1,0.36,1)" }}
-        onClick={() => setLocateTrigger((t) => t + 1)}
-        aria-label="Locate me"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="#8851D4">
-          <circle cx="12" cy="12" r="3.5"/>
-          <rect x="11" y="2" width="2" height="4" rx="1"/>
-          <rect x="11" y="18" width="2" height="4" rx="1"/>
-          <rect x="2" y="11" width="4" height="2" rx="1"/>
-          <rect x="18" y="11" width="4" height="2" rx="1"/>
-        </svg>
-      </button>
+      {/* ── MAP ACTION BUTTONS ── */}
+      {!voiceActive && !sheetOpen && (
+        <div className="map-actions">
+          {addedIds.size > 0 && (
+            <button className="map-action-btn map-plan-btn" onClick={handleStartWalk}>
+              Start walk · {addedIds.size}
+            </button>
+          )}
+          <button className={`locate-circle ${locateActive ? "locate-active" : ""}`} aria-label="Locate me" onClick={() => {
+            setLocateError("");
+            setLocateTrigger((t) => t + 1);
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* ── LOCATION PERMISSION POPOVER ── */}
+      {showLocatePrompt && (
+        <>
+          <div className="locate-overlay" onClick={() => setShowLocatePrompt(false)} />
+          <div className="locate-popover">
+            <div className="locate-popover-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <p className="locate-popover-title">Use your location?</p>
+            <p className="locate-popover-desc">Strollo needs your location to center the map and show nearby suggestions.</p>
+            {locateError && <p className="locate-popover-error">{locateError}</p>}
+            <div className="locate-popover-actions">
+              <button className="locate-popover-btn locate-popover-btn--cancel" onClick={() => setShowLocatePrompt(false)}>Not now</button>
+              <button className="locate-popover-btn locate-popover-btn--allow" onClick={() => setLocateTrigger((t) => t + 1)}>Allow</button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── BACKDROP ── */}
       {sheetOpen && <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />}
 
       {/* ── VOICE PILL (minimized) ── */}
-      {voiceActive && !voiceExpanded && (() => {
+      {voiceActive && !voiceExpanded && !listenCardMode && (() => {
         const demoUserText = listening ? "Something cozy, maybe a bakery?" : "";
         const demoAiSpeaking = !listening && (locked || muted);
         const demoAiText = muted ? "There's a courtyard 3 blocks east…" : "";
@@ -372,7 +688,7 @@ export default function HomeScreen({ onStartWalk }) {
                 <MuteSvg muted={muted} />
               </button>
               <div className="wc-bubble-area">
-                <WidgetBubble listening={listening} aiSpeaking={demoAiSpeaking} muted={muted} userText={demoUserText} aiText={demoAiText} />
+                <WidgetBubble listening={listening} aiSpeaking={demoAiSpeaking} muted={muted} userText={speech.transcript || demoUserText} aiText={demoAiText} />
               </div>
               <button
                 className={`wc-btn wc-speak-btn ${listening ? "wc-listening" : ""} ${locked ? "wc-locked" : ""}`}
@@ -382,6 +698,7 @@ export default function HomeScreen({ onStartWalk }) {
                   homeStartY.current = e.clientY;
                   homeDidLock.current = false;
                   setListening(true);
+                  speech.start();
                 }}
                 onPointerMove={(e) => {
                   if (homeStartY.current === null || homeDidLock.current) return;
@@ -390,9 +707,9 @@ export default function HomeScreen({ onStartWalk }) {
                 onPointerUp={(e) => {
                   e.currentTarget.releasePointerCapture(e.pointerId);
                   homeStartY.current = null;
-                  if (!homeDidLock.current) setListening(false);
+                  if (!homeDidLock.current) { setListening(false); speech.stop(); }
                 }}
-                onClick={() => { if (locked) { setLocked(false); setListening(false); } }}
+                onClick={() => { if (locked) { setLocked(false); setListening(false); speech.stop(); } }}
                 style={{ touchAction: "none" }}
                 aria-label="Speak"
               >
@@ -434,7 +751,7 @@ export default function HomeScreen({ onStartWalk }) {
               <div className="vfs-handle-bar" />
             </div>
             <div className="vfs-chat">
-              {CHAT_HISTORY.map((msg) => (
+              {chatMessages.map((msg) => (
                 <div key={msg.id} className={`wcb wcb--${msg.role}`}>
                   <div className={`wcb-bubble vfs-bubble vfs-bubble--${msg.role}`}>
                     <p className="wcb-text">{msg.text}</p>
@@ -455,6 +772,7 @@ export default function HomeScreen({ onStartWalk }) {
                   homeStartY.current = e.clientY;
                   homeDidLock.current = false;
                   setListening(true);
+                  speech.start();
                 }}
                 onPointerMove={(e) => {
                   if (homeStartY.current === null || homeDidLock.current) return;
@@ -463,9 +781,9 @@ export default function HomeScreen({ onStartWalk }) {
                 onPointerUp={(e) => {
                   e.currentTarget.releasePointerCapture(e.pointerId);
                   homeStartY.current = null;
-                  if (!homeDidLock.current) setListening(false);
+                  if (!homeDidLock.current) { setListening(false); speech.stop(); }
                 }}
-                onClick={() => { if (locked) { setLocked(false); setListening(false); } }}
+                onClick={() => { if (locked) { setLocked(false); setListening(false); speech.stop(); } }}
                 style={{ touchAction: "none" }}
                 aria-label="Speak"
               >
@@ -481,73 +799,400 @@ export default function HomeScreen({ onStartWalk }) {
       })()}
 
       {/* ── BOTTOM SEARCH / SHEET ── */}
-      {!voiceActive && (
+      {!voiceExpanded && (
         <div
-          className={`bottom-search ${sheetOpen ? "open" : ""}`}
+          className={`bottom-search ${sheetOpen ? "open" : ""} ${listenCardMode ? "listening" : ""}`}
           onMouseDown={onDragStart} onMouseUp={onDragEnd}
           onTouchStart={onDragStart} onTouchEnd={onDragEnd}
         >
-          <div className="search-handle" onClick={() => setSheetOpen((o) => !o)}>
+          {/* Animated blobs (always in DOM for smooth fade) */}
+          <div className={`listen-card-blobs ${listenCardMode ? "visible" : ""}`}>
+            <div className="listen-blob listen-blob--1" />
+            <div className="listen-blob listen-blob--2" />
+            <div className="listen-blob listen-blob--3" />
+          </div>
+
+          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)}>
             <div className="handle-bar" />
           </div>
 
-          <div className="search-input-row">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              className="search-input"
-              placeholder="I'm in the mood for..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSheetOpen(true)}
-            />
-            <button className="mic-btn" aria-label="Voice input" onClick={toggleVoice}>
-              <SoundWaveSvg active={false} />
+          {/* State: idle — search input */}
+          {!listenCardMode && (
+            <div className="search-input-row">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                className="search-input"
+                placeholder="I'm in the mood for..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSheetOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && query.trim()) {
+                    e.target.blur();
+                    handleSendQuery(query);
+                  }
+                }}
+              />
+              {query.trim() ? (
+                <button className="mic-btn" aria-label="Send" onClick={() => handleSendQuery(query)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </button>
+              ) : (
+                <button className="mic-btn" aria-label="Voice input" onClick={toggleVoice}>
+                  <SoundWaveSvg active={false} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Close button — on the card, above listen-content */}
+          {listenCardMode && (
+            <button className="listen-card-close" aria-label="Close" onClick={() => {
+              if (listenTextMode) {
+                setListenTextMode(false);
+                setListenCardMode(false);
+              } else {
+                toggleVoice();
+              }
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Keyboard toggle — switch from voice to text input */}
+          {listenCardMode && !listenTextMode && !voiceResult && (
+            <button className="listen-card-keyboard" aria-label="Switch to typing" onClick={() => {
+              speech.stop();
+              const partial = speech.transcript.trim();
+              if (partial) setQuery(partial);
+              speech.reset();
+              setVoiceActive(false);
+              setVoiceResult("");
+              setListenTextMode(true);
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="20" height="14" rx="2"/>
+                <line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/>
+                <line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/>
+                <line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/>
+                <line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/>
+                <line x1="8" y1="16" x2="16" y2="16"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Mic toggle — switch back from text to voice input */}
+          {listenCardMode && listenTextMode && (
+            <button className="listen-card-keyboard" aria-label="Switch to voice" onClick={() => {
+              if (!speech.supported) return;
+              setListenTextMode(false);
+              setVoiceActive(true);
+              speech.start();
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="1" width="6" height="11" rx="3"/>
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+          )}
+
+          {/* State: listening — live transcript */}
+          {listenCardMode && !listenTextMode && !voiceResult && (
+            <div className="listen-content visible">
+              <p className="listen-card-caption">
+                {speech.transcript || "What's on your mind?"}
+              </p>
+            </div>
+          )}
+
+          {/* State: result — final recognized text */}
+          {listenCardMode && !listenTextMode && voiceResult && (
+            <div className="listen-content visible">
+              <p className="listen-card-caption listen-card-result">{voiceResult}</p>
+            </div>
+          )}
+
+          {/* State: text input mode */}
+          {listenCardMode && listenTextMode && (
+            <div className="listen-content visible">
+              <div className="listen-text-input-row">
+                <input
+                  className="listen-text-input"
+                  placeholder="Type your message..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && query.trim()) {
+                      e.target.blur();
+                      handleSendQuery(query);
+                    }
+                  }}
+                />
+                {query.trim() && (
+                  <button className="listen-text-send" aria-label="Send" onClick={() => handleSendQuery(query)}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
+            <div className="sheet-tabs">
+              <span className="sheet-tabs-label">Suggested</span>
+              <button
+                className={`sheet-refresh-btn ${nearbyLoading ? "sheet-refresh-btn--spinning" : ""}`}
+                aria-label="Refresh nearby places"
+                onClick={() => loadNearbyPlaces(mapCenterRef.current || userLocation, true)}
+                disabled={nearbyLoading}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+              <button className="sheet-prefs-btn" aria-label="Preferences" onClick={onSetConstraints}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="6" x2="20" y2="6"/>
+                  <line x1="4" y1="12" x2="20" y2="12"/>
+                  <line x1="4" y1="18" x2="20" y2="18"/>
+                  <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
+                  <circle cx="15" cy="12" r="2" fill="currentColor"/>
+                  <circle cx="8"  cy="18" r="2" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
+
+            <div
+              className="location-card-carousel"
+              ref={carouselRef}
+              onMouseDown={onCarouselMouseDown}
+              onMouseMove={onCarouselMouseMove}
+              onMouseUp={onCarouselMouseUp}
+              onMouseLeave={onCarouselMouseUp}
+              onClickCapture={onCarouselClickCapture}
+              style={{ cursor: "grab" }}
+            >
+              {nearbyLoading && allItems.length === 0 && (
+                <p className="empty-state">Finding places near you...</p>
+              )}
+              {!nearbyLoading && nearbyError && (
+                <p className="empty-state">{nearbyError}</p>
+              )}
+              {!nearbyLoading && !nearbyError && allItems.length === 0 && (
+                <p className="empty-state">No places found nearby. Try refreshing.</p>
+              )}
+              {allItems.map((item) => (
+                <LocationCard
+                  key={item.id}
+                  item={item}
+                  added={addedIds.has(item.id)}
+                  faved={favedIds.has(item.id)}
+                  onToggle={handleToggleAdd}
+                  onFave={handleFave}
+                />
+              ))}
+            </div>
+
+            {addedIds.size > 0 && (
+              <button className="cta-btn" onClick={handleStartWalk}>
+                Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── CHAT MODE ── */}
+      {chatMode && (
+        <div className={`chat-overlay ${chatClosing ? "chat-overlay--closing" : ""}`}>
+          <div className="chat-header">
+            <button className="chat-history-btn" onClick={() => { setShowHistory(h => !h); setViewingHistory(null); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </button>
+            <span className="chat-title">{showHistory ? "History" : "strollo"}</span>
+            <button className="chat-x-btn" onClick={closeChat}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
             </button>
           </div>
 
-          {sheetOpen && (
-            <>
-              <div className="sheet-tabs">
-                {["suggested", "recent", "faves"].map((tab) => (
-                  <button
-                    key={tab}
-                    className={`tab-btn ${activeTab === tab ? "active" : ""}`}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="suggestion-list">
-                {allItems.length === 0 && (
-                  <p className="empty-state">
-                    {activeTab === "faves" ? "Swipe right on suggestions to fave them ♥" : "Nothing here yet."}
-                  </p>
-                )}
-                {allItems.map((item) => (
-                  <SwipeRow
-                    key={item.id}
-                    item={item}
-                    added={addedIds.has(item.id)}
-                    onAdd={handleAdd}
-                    onFave={handleFave}
-                    onRemove={handleRemove}
-                  />
-                ))}
-              </div>
-
-              {addedIds.size > 0 && (
-                <button className="cta-btn" onClick={handleStartWalk}>
-                  Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
-                </button>
+          {/* History list */}
+          {showHistory && !viewingHistory && (
+            <div className="chat-history-list">
+              {chatHistory.length === 0 && (
+                <p className="chat-history-empty">No past conversations yet</p>
               )}
-            </>
+              {chatHistory.map((conv) => {
+                const firstMsg = conv.messages.find(m => m.role === "user");
+                const ago = Math.round((Date.now() - conv.timestamp) / 60000);
+                const timeLabel = ago < 1 ? "Just now" : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                return (
+                  <button key={conv.id} className="chat-history-item" onClick={() => setViewingHistory(conv)}>
+                    <span className="chat-history-text">{firstMsg?.text || "Conversation"}</span>
+                    <span className="chat-history-time">{timeLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
+
+          {/* Viewing a past conversation */}
+          {showHistory && viewingHistory && (
+            <div className="chat-messages">
+              <button className="chat-history-back" onClick={() => setViewingHistory(null)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                <span>Back to list</span>
+              </button>
+              {viewingHistory.messages.map((msg) => (
+                <div key={msg.id} className={`chat-msg chat-msg--${msg.role}`}>
+                  <div className={`chat-bubble chat-bubble--${msg.role}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Current conversation */}
+          {!showHistory && (
+            <div className="chat-messages">
+              {chatMessages.map((msg) => (
+                <div key={msg.id} className={`chat-msg chat-msg--${msg.role}`}>
+                  <div className={`chat-bubble chat-bubble--${msg.role}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatListening && speech.transcript && (
+                <div className="chat-msg chat-msg--user">
+                  <div className="chat-bubble chat-bubble--user chat-bubble--live">
+                    {speech.transcript}
+                  </div>
+                </div>
+              )}
+              {chatLoading && (
+                <div className="chat-msg chat-msg--ai">
+                  <div className="chat-bubble chat-bubble--ai chat-typing">
+                    <div className="chat-dot" /><div className="chat-dot" /><div className="chat-dot" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Plan walk button */}
+          {!showHistory && suggestedStops.length > 0 && !chatLoading && (
+            <button className="chat-plan-btn" onClick={handlePlanWalk} disabled={planLoading}>
+              {planLoading ? (
+                <>
+                  <div className="plan-spinner" />
+                  <span>Finding places on map...</span>
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <span>Plan this walk · {suggestedStops.length} {suggestedStops.length === 1 ? "stop" : "stops"}</span>
+                </>
+              )}
+            </button>
+          )}
+          <div className="chat-input-row">
+            <button
+              className="chat-mic-btn"
+              disabled={chatLoading}
+              onClick={() => {
+                if (chatListening) {
+                  const text = speech.getTranscript().trim();
+                  speech.stop();
+                  setChatListening(false);
+                  if (text) sendChatMessage(text);
+                } else {
+                  if (!speech.supported) return;
+                  setChatListening(true);
+                  speech.start();
+                }
+              }}
+              aria-label="Voice input"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={chatListening ? "#fff" : "#8851D4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="1" width="6" height="11" rx="3"/>
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <input
+              className="chat-input"
+              placeholder={chatListening ? "Listening..." : "Type a message..."}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") sendChatMessage(query); }}
+              disabled={chatListening}
+            />
+            <button className="chat-send-btn" onClick={() => sendChatMessage(query)} disabled={chatLoading || !query.trim() || chatListening}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Floating speak FAB */}
+          <button
+            className={`chat-mic-fab ${chatListening ? "chat-mic-fab--active" : ""}`}
+            disabled={chatLoading}
+            onClick={() => {
+              if (chatListening) {
+                speech.stop();
+                setChatListening(false);
+                const text = speech.transcript.trim();
+                if (text) sendChatMessage(text);
+              } else {
+                if (!speech.supported) return;
+                setChatListening(true);
+                speech.start();
+              }
+            }}
+            aria-label="Speak"
+          >
+            {chatListening ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="1" width="6" height="11" rx="3"/>
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            )}
+          </button>
         </div>
       )}
-    </div>
+
+      {/* ── Voice unsupported toast ── */}
+      {voiceUnsupported && (
+        <div className="voice-toast">Voice input is not supported in this browser</div>
+      )}
+    </>
   );
 }
