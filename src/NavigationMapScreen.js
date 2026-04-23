@@ -65,52 +65,6 @@ const BLOB_OFFSETS = [
   { dLat:  0.0025, dLng: -0.0012, w:  60, h:  50, rot: -15 },
 ];
 
-// ── Journey edit overlay ──────────────────────────────────────────────────
-function JourneyOverlay({ items, onRemove, onClose, onEndWalk }) {
-  return (
-    <div className="journey-overlay">
-      <div className="handle-bar" style={{ margin: "0 auto 16px" }} />
-      <h3 className="journey-title">Your journey</h3>
-
-      <div className="journey-stops">
-        {items.length === 0 && (
-          <p style={{ fontSize: 13, color: "#888", margin: 0 }}>No stops added yet.</p>
-        )}
-        {items.map((stop, i) => (
-          <React.Fragment key={stop.id}>
-            {i > 0 && (
-              <div className="add-between">
-                <div className="add-between-line" />
-                <button className="add-between-btn" disabled>+ Add stop</button>
-                <div className="add-between-line" />
-              </div>
-            )}
-            <div className="journey-stop">
-              <div className="stop-dot" />
-              <div className="stop-info">
-                <span className="stop-name">{stop.name}</span>
-                <span className="stop-desc">{stop.desc}</span>
-              </div>
-              {onRemove && (
-                <button className="stop-remove" onClick={() => onRemove(stop.id)} aria-label="Remove stop">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/>
-                  </svg>
-                </button>
-              )}
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-
-      <div className="journey-actions">
-        <button className="journey-btn journey-btn--pause" onClick={onClose}>Pause walk</button>
-        <button className="journey-btn journey-btn--end" onClick={onEndWalk}>End walk</button>
-      </div>
-    </div>
-  );
-}
-
 // ── NavigationMapScreen ────────────────────────────────────────────────────
 export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences, showVoice = true }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
@@ -121,7 +75,6 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
   const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
-  const [journeyOpen, setJourneyOpen]     = useState(false);
   const [pathHistory, setPathHistory]     = useState([]);
 
   // Track the walked trail as user location updates.
@@ -151,16 +104,6 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
 
   const handleLocate = (pos) => {
     setUserLocation(pos);
-  };
-
-  const handleRemoveStop = (id) => {
-    if (!onJourneyChange) return;
-    onJourneyChange(journeyItems.filter((s) => s.id !== id));
-  };
-
-  const handleEndWalk = () => {
-    setJourneyOpen(false);
-    if (onOpenTimeline) onOpenTimeline();
   };
 
   // Build route from user location through all stops
@@ -305,9 +248,9 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </div>
       )}
 
-      {/* ── BOTTOM-RIGHT STACK: Edit journey (flag) + Preferences + Locate ── */}
+      {/* ── BOTTOM-RIGHT STACK: Timeline (flag) + Preferences + Locate ── */}
       <div className="bottom-right-stack">
-        <button className="fab-circle bottom-right-btn" onClick={() => setJourneyOpen(true)} aria-label="Edit journey">
+        <button className="fab-circle bottom-right-btn" onClick={onOpenTimeline} aria-label="Open timeline">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <polygon points="10,2 22,7 10,12" fill="#8851D4"/>
             <rect x="8" y="2" width="2" height="20" rx="1" fill="#8851D4"/>
@@ -369,19 +312,6 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           />
         );
       })()}
-
-      {/* ── JOURNEY EDIT OVERLAY (flag opens this inline sheet) ── */}
-      {journeyOpen && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setJourneyOpen(false)} />
-          <JourneyOverlay
-            items={journeyItems}
-            onRemove={handleRemoveStop}
-            onClose={() => setJourneyOpen(false)}
-            onEndWalk={handleEndWalk}
-          />
-        </>
-      )}
 
       {/* ── VOICE FULL-SCREEN OVERLAY ── */}
       {showVoice && voiceMode === "full" && (
