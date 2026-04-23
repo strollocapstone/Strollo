@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
-import { WalkCompanionPill } from "./WalkCompanionScreen";
+import WalkCompanionWidget from "./WalkCompanionWidget";
 import VoiceFullScreen from "./VoiceFullScreen";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
@@ -42,7 +42,6 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
-  const [routeError, setRouteError]       = useState(false);
   const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
 
   const handleLocate = (pos) => {
@@ -126,7 +125,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         setWalkingRoute(result.coordinates);
         setRouteInfo({ distance: result.distance, duration: result.duration });
       }
-    }).catch(err => { console.warn("Route fetch failed:", err); setRouteError(true); });
+    }).catch(err => { console.warn("Route fetch failed:", err); });
   }, [userLocation, stopPositions]);
 
   return (
@@ -167,40 +166,17 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </MapContainer>
       </div>
 
-      {/* ── TOP BAR ── */}
-      <div className="nav-top-bar">
-        <button className="back-btn" onClick={onGoBack}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M19 12H5M12 5l-7 7 7 7"/>
-          </svg>
-        </button>
-        <div style={{ flex: 1 }} />
-        <div style={{ width: 36 }} />
-      </div>
-
-      {/* ── JOURNEY STOPS BAR ── */}
-      {journeyItems.length > 0 && (
-        <div className="nav-stops-bar">
-          <div className="nav-stops-list">
-            {journeyItems.map((s, i) => (
-              <span key={s.id} className="nav-stop-chip">
-                {i > 0 && <span className="nav-stop-arrow">→</span>}
-                {s.name.split(',')[0]}
-              </span>
-            ))}
-          </div>
-          {routeInfo && (
-            <div className="nav-route-info">
-              <span>{Math.round(routeInfo.distance / 1000 * 10) / 10} km</span>
-              <span>·</span>
-              <span>{Math.round(routeInfo.duration / 60)} min walk</span>
-            </div>
-          )}
-          {routeError && !routeInfo && (
-            <div className="nav-route-info" style={{ color: '#999' }}>
-              <span>Route unavailable — follow the pins</span>
-            </div>
-          )}
+      {/* ── TOP BAR (hidden while companion widget owns the top; back is
+           reachable via the journey flag in the bottom-right stack) ── */}
+      {!showVoice && (
+        <div className="nav-top-bar">
+          <button className="back-btn" onClick={onGoBack}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+          </button>
+          <div style={{ flex: 1 }} />
+          <div style={{ width: 36 }} />
         </div>
       )}
 
@@ -236,23 +212,38 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </button>
       </div>
 
-      {/* ── WALK COMPANION PILL (voice always available during walk) ── */}
-      {showVoice && voiceMode !== "full" && (
-        <WalkCompanionPill
-          listening={voice.listening}
-          locked={voice.locked}
-          muted={voice.muted}
-          aiSpeaking={voice.aiSpeaking}
-          userText={voice.userText}
-          aiText={voice.aiText}
-          onMuteToggle={voice.onMuteToggle}
-          onListenStart={voice.onListenStart}
-          onListenEnd={voice.onListenEnd}
-          onDragLock={voice.onDragLock}
-          onUnlock={voice.onUnlock}
-          onExpandVoice={() => setVoiceMode("full")}
-        />
-      )}
+      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
+      {showVoice && voiceMode !== "full" && (() => {
+        const nextStop = journeyItems.find((s) => s.lat && s.lng);
+        const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : "your next stop";
+        // Live route values when available, static placeholders otherwise.
+        const distance = routeInfo
+          ? routeInfo.distance < 1000
+            ? `${Math.round(routeInfo.distance)} m`
+            : `${(routeInfo.distance / 1000).toFixed(1)} km`
+          : "—";
+        const etaMin = routeInfo ? Math.max(1, Math.round(routeInfo.duration / 60)) : null;
+        const eta = etaMin !== null ? `${etaMin} min` : "—";
+        const proximity = routeInfo && routeInfo.distance < 80 ? "near" : "far";
+        return (
+          <WalkCompanionWidget
+            nextWaypoint={nextWaypoint}
+            distance={distance}
+            turn="right"
+            eta={eta}
+            proximity={proximity}
+            listening={voice.listening}
+            locked={voice.locked}
+            muted={voice.muted}
+            onMuteToggle={voice.onMuteToggle}
+            onListenStart={voice.onListenStart}
+            onListenEnd={voice.onListenEnd}
+            onDragLock={voice.onDragLock}
+            onUnlock={voice.onUnlock}
+            onExpandVoice={() => setVoiceMode("full")}
+          />
+        );
+      })()}
 
       {/* ── VOICE FULL-SCREEN OVERLAY ── */}
       {showVoice && voiceMode === "full" && (

@@ -1,14 +1,18 @@
 // LockScreen represents the phone's lock screen state during a walk —
 // it is NOT an in-app screen. When the user locks their phone mid-walk,
-// the OS shows this: a full #34233E backdrop with the Walk Companion's
-// minimized pill widget floating on top. The pill here is the same
-// component used in WalkCompanionScreen.js, minus the drag-to-expand
-// gesture (no way to open the full app from the lock screen) and
-// without the map underneath.
+// the OS shows this: a dark backdrop with the Walk Companion widget
+// pinned to the top. Same widget as NavigationMapScreen, minus the
+// drag-to-expand gesture (no way to open the full app from the lock
+// screen) and without the map underneath.
 import React, { useState } from "react";
-import { WalkCompanionPill } from "./WalkCompanionScreen";
+import WalkCompanionWidget from "./WalkCompanionWidget";
 
-export default function LockScreen() {
+export default function LockScreen({
+  nextWaypoint = "fox & feather",
+  distance = "280 ft",
+  turn = "right",
+  eta = "3:24",
+}) {
   const [muted, setMuted] = useState(false);
   const [listening, setListening] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -20,16 +24,17 @@ export default function LockScreen() {
         width: "100%",
         height: "100%",
         minHeight: "100vh",
-        background: "#34233E",
+        background: "#1E1541",
       }}
     >
-      <WalkCompanionPill
+      <WalkCompanionWidget
+        nextWaypoint={nextWaypoint}
+        distance={distance}
+        turn={turn}
+        eta={eta}
         listening={listening}
         locked={locked}
         muted={muted}
-        aiSpeaking={false}
-        userText=""
-        aiText=""
         onMuteToggle={() => setMuted((m) => !m)}
         onListenStart={() => setListening(true)}
         onListenEnd={() => setListening(false)}
