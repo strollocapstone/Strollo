@@ -2,7 +2,7 @@ const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"];
 
-export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops }) {
+export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops, mode = 'pre-walk' }) {
   const stopsDescription = journeyItems
     .map((item, i) => `${i + 1}. ${item.name}${item.desc ? ` (${item.desc})` : ''}`)
     .join('\n');
@@ -10,6 +10,20 @@ export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, 
   const stopsSection = stopsDescription
     ? `- Journey stops:\n${stopsDescription}`
     : '- No journey planned yet — the user is exploring freely';
+
+  const duringWalkActionRules = mode === 'during-walk' ? `
+
+You are now in DURING-WALK voice-edit mode. The user is already walking and wants to modify the journey by voice. In addition to the 📍 add-place list described above, you MUST emit edit commands for any removals or reorders, each on its own line, using EXACTLY these formats:
+
+REMOVE: <exact stop name as listed above>
+REORDER: [Name1, Name2, Name3]
+
+Rules:
+- ADD a stop: use the existing 📍 format. The app will geocode and append it.
+- REMOVE a stop: emit "REMOVE: <name>" matching the stop name exactly as it appears in the journey stops list. One REMOVE line per stop.
+- REORDER stops: emit a single "REORDER: [...]" line listing ALL current stops in the desired new order. Use exact stop names.
+- You may emit any combination (e.g. a REMOVE and several 📍 adds in one response).
+- If the user is just chatting and doesn't want to edit, omit all action tags.` : '';
 
   return `You are Strollo, a walking companion AI. You help users discover places to walk to.
 
@@ -48,7 +62,7 @@ Example response:
 📍 Jupiter, Berkeley | Bar
 📍 Pegasus Books, Berkeley | Bookstore"
 
-You MUST include the 📍 list whenever you suggest places. No exceptions.`;
+You MUST include the 📍 list whenever you suggest places. No exceptions.${duringWalkActionRules}`;
 }
 
 // Extract place suggestions from AI response text
@@ -64,9 +78,35 @@ export function extractPlaces(text) {
   return places;
 }
 
-// Strip the 📍 lines from the display text
+// Strip the 📍 and action lines from the display text
 export function cleanResponseText(text) {
-  return text.split('\n').filter(line => !line.match(/^📍\s/)).join('\n').trim();
+  return text
+    .split('\n')
+    .filter(line => !line.match(/^📍\s/) && !line.match(/^REMOVE:\s/i) && !line.match(/^REORDER:\s/i))
+    .join('\n')
+    .trim();
+}
+
+// Extract edit actions from during-walk AI responses.
+// Returns { adds: [{name, desc}], removes: [name], reorder: [name, ...] | null }
+export function extractActions(text) {
+  const adds = extractPlaces(text);
+  const removes = [];
+  let reorder = null;
+
+  for (const line of text.split('\n')) {
+    const remMatch = line.match(/^REMOVE:\s*(.+)$/i);
+    if (remMatch) {
+      removes.push(remMatch[1].trim());
+      continue;
+    }
+    const reoMatch = line.match(/^REORDER:\s*\[(.+)\]\s*$/i);
+    if (reoMatch) {
+      reorder = reoMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  return { adds, removes, reorder };
 }
 
 // Clean up place name for geocoding

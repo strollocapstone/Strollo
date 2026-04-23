@@ -120,7 +120,7 @@ function useStopwatch() {
 }
 
 // ── TimelineScreen ────────────────────────────────────────────────────────
-export default function TimelineScreen() {
+export default function TimelineScreen({ onBack }) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [items, setItems] = useState(TIMELINE_ITEMS);
@@ -168,6 +168,13 @@ export default function TimelineScreen() {
     <div className="tl-screen">
       {/* ── Header ── */}
       <div className="tl-header">
+        {onBack && (
+          <button className="tl-back-btn" onClick={onBack} aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+          </button>
+        )}
         <div className="tl-elapsed-time">{time}</div>
         <div className="tl-elapsed-label">Elapsed exploration time</div>
         <div className="tl-header-divider" />
