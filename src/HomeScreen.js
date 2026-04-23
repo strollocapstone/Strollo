@@ -16,7 +16,12 @@ const makePinIcon = (name, desc, added, expanded) => L.divIcon({
     <span class="sugg-pin-name">${name}</span>
     <div class="sugg-pin-extra">
       <span class="sugg-pin-desc">${desc}</span>
-      <div class="sugg-pin-btn" data-action="toggle">${added ? "Remove" : "Add"}</div>
+      <button class="sugg-pin-btn sugg-pin-btn--icon" data-action="toggle" aria-label="${added ? "Remove from itinerary" : "Add to itinerary"}">
+        ${added
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+        }
+      </button>
     </div>
   </div>`,
   iconSize: [0, 0],
@@ -619,7 +624,7 @@ export default function HomeScreen({
         <span className="app-name">strollo</span>
         {!voiceActive && !sheetOpen && (
           <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
-            {addedIds.size > 0 ? `Start walk · ${addedIds.size}` : "Start walk"}
+            {addedIds.size > 0 ? `Start walking · ${addedIds.size}` : "Start walking"}
           </button>
         )}
       </div>
