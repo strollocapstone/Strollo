@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
-import JourneyEditScreen from "./JourneyEditScreen";
-import { getWalkingRoute } from "./geminiService";
+import { WalkCompanionPill } from "./WalkCompanionScreen";
+import VoiceFullScreen from "./VoiceFullScreen";
+import { getWalkingRoute, geocodePlace } from "./geminiService";
+import { useJourneyVoice } from "./useJourneyVoice";
 import { youIcon, WatchLocation, LocateMe, FitBounds } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
@@ -31,20 +33,17 @@ const destinationIcon = L.divIcon({
   iconAnchor: [11, 30],
 });
 
-
-
-
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, journeyItems = [], startLocation }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
-  const [journeyOpen, setJourneyOpen]     = useState(false);
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
   const [routeError, setRouteError]       = useState(false);
+  const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
 
   const handleLocate = (pos) => {
     setUserLocation(pos);
@@ -54,6 +53,60 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, journe
   const stopPositions = journeyItems
     .filter((s) => s.lat && s.lng)
     .map((s) => [s.lat, s.lng]);
+
+  // Apply voice-extracted edit actions to the journey
+  const applyActions = useCallback(async ({ adds, removes, reorder }) => {
+    if (!onJourneyChange) return;
+    let next = [...journeyItems];
+
+    if (removes && removes.length) {
+      const normalized = removes.map(r => r.toLowerCase());
+      next = next.filter(stop => {
+        const stopLc = stop.name.toLowerCase();
+        return !normalized.some(r => stopLc.includes(r) || r.includes(stopLc));
+      });
+    }
+
+    if (adds && adds.length && userLocation) {
+      for (const place of adds) {
+        const result = await geocodePlace(place.name, userLocation[0], userLocation[1]);
+        if (result) {
+          next.push({
+            id: Date.now() + next.length,
+            name: place.name,
+            desc: place.desc,
+            lat: result.lat,
+            lng: result.lng,
+          });
+        }
+      }
+    }
+
+    if (reorder && reorder.length) {
+      const byName = new Map(next.map(s => [s.name.toLowerCase(), s]));
+      const reordered = [];
+      for (const name of reorder) {
+        const match = byName.get(name.toLowerCase())
+          || [...byName.values()].find(s => s.name.toLowerCase().includes(name.toLowerCase()));
+        if (match) {
+          reordered.push(match);
+          byName.delete(match.name.toLowerCase());
+        }
+      }
+      // Append any stops not mentioned in the reorder list at the end
+      next = [...reordered, ...byName.values()];
+    }
+
+    onJourneyChange(next);
+  }, [journeyItems, userLocation, onJourneyChange]);
+
+  const voice = useJourneyVoice({
+    userLocation,
+    journeyItems,
+    mode: "during-walk",
+    vibePreferences,
+    onApplyActions: applyActions,
+  });
 
   // Fetch walking route from user location through stops
   const routeFetchedFor = React.useRef(null);
@@ -151,44 +204,71 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, journe
         </div>
       )}
 
-      {/* ── MAP ACTION BUTTONS (matching HomeScreen style) ── */}
-      <div className="nav-actions">
-        <button className="map-action-btn" onClick={() => setJourneyOpen(true)} aria-label="Edit journey">
-          <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="6,2 20,8 6,14"/>
-            <rect x="4" y="2" width="2" height="18" rx="1"/>
+      {/* ── BOTTOM-RIGHT STACK: Timeline (flag) + Preferences + Locate ── */}
+      <div className="bottom-right-stack">
+        <button className="fab-circle bottom-right-btn" onClick={onOpenTimeline} aria-label="Timeline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <polygon points="10,2 22,7 10,12" fill="#8851D4"/>
+            <rect x="8" y="2" width="2" height="20" rx="1" fill="#8851D4"/>
+            <circle cx="5" cy="20" r="1" fill="#8851D4"/>
+            <circle cx="2" cy="17" r="1" fill="#8851D4"/>
           </svg>
-          <span>Journey</span>
         </button>
-        <div className="nav-actions-stack">
-          <button className="nav-prefs-circle" onClick={onSetConstraints} aria-label="Preferences">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="6" x2="20" y2="6"/>
-              <line x1="4" y1="12" x2="20" y2="12"/>
-              <line x1="4" y1="18" x2="20" y2="18"/>
-              <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
-              <circle cx="15" cy="12" r="2" fill="#8851D4"/>
-              <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
-            </svg>
-          </button>
-          <button className="locate-circle" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Locate me">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-            </svg>
-          </button>
-        </div>
+        <button className="fab-circle bottom-right-btn" onClick={onSetConstraints} aria-label="Preferences">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+            <line x1="4" y1="6" x2="20" y2="6"/>
+            <line x1="4" y1="12" x2="20" y2="12"/>
+            <line x1="4" y1="18" x2="20" y2="18"/>
+            <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+            <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+            <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
+          </svg>
+        </button>
+        <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+            <circle cx="12" cy="12" r="8"/>
+            <line x1="12" y1="2" x2="12" y2="5"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="5" y2="12"/>
+            <line x1="19" y1="12" x2="22" y2="12"/>
+          </svg>
+        </button>
       </div>
 
-      {/* ── JOURNEY OVERLAY ── */}
-      {journeyOpen && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setJourneyOpen(false)} />
-          <JourneyEditScreen items={journeyItems} onClose={() => setJourneyOpen(false)} onGoBack={onGoBack} />
-        </>
+      {/* ── WALK COMPANION PILL (voice always available during walk) ── */}
+      {voiceMode !== "full" && (
+        <WalkCompanionPill
+          listening={voice.listening}
+          locked={voice.locked}
+          muted={voice.muted}
+          aiSpeaking={voice.aiSpeaking}
+          userText={voice.userText}
+          aiText={voice.aiText}
+          onMuteToggle={voice.onMuteToggle}
+          onListenStart={voice.onListenStart}
+          onListenEnd={voice.onListenEnd}
+          onDragLock={voice.onDragLock}
+          onUnlock={voice.onUnlock}
+          onExpandVoice={() => setVoiceMode("full")}
+        />
       )}
 
-
-
+      {/* ── VOICE FULL-SCREEN OVERLAY ── */}
+      {voiceMode === "full" && (
+        <VoiceFullScreen
+          listening={voice.listening}
+          locked={voice.locked}
+          muted={voice.muted}
+          messages={voice.messages}
+          onMuteToggle={voice.onMuteToggle}
+          onListenStart={voice.onListenStart}
+          onListenEnd={voice.onListenEnd}
+          onDragLock={voice.onDragLock}
+          onUnlock={voice.onUnlock}
+          onMinimize={() => setVoiceMode(null)}
+        />
+      )}
 
     </>
   );

@@ -168,6 +168,8 @@ function SoundWaveSvg({ active }) {
 export default function HomeScreen({
   onStartWalk,
   onSetConstraints,
+  onOpenTimeline,
+  onOpenQuiz,
   initialLocation,
   initialSheetOpen,
   onSheetOpenConsumed,
@@ -522,7 +524,7 @@ export default function HomeScreen({
     const items = nearbyPlaces
       .filter((s) => addedIds.has(s.id))
       .filter((s) => isWithinWalkingRadius(origin, s));
-    if (items.length) onStartWalk(items, origin);
+    onStartWalk(items, origin);
   };
 
   const toggleVoice = () => {
@@ -615,28 +617,33 @@ export default function HomeScreen({
       {/* ── TOP BAR ── */}
       <div className="top-bar">
         <span className="app-name">strollo</span>
+        {!voiceActive && !sheetOpen && (
+          <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
+            {addedIds.size > 0 ? `Start walk · ${addedIds.size}` : "Start walk"}
+          </button>
+        )}
       </div>
 
       {/* ── PROFILE (floats over map, top-right) ── */}
-      <button className="fab-circle profile-btn" aria-label="Profile">
+      <button className="fab-circle profile-btn" onClick={onOpenQuiz} aria-label="Open quiz">
         <span className="profile-initials">E</span>
       </button>
 
-      {/* ── MAP ACTION BUTTONS ── */}
+      {/* ── BOTTOM-RIGHT STACK: Locate (flag only shown during walk) ── */}
       {!voiceActive && !sheetOpen && (
-        <div className="map-actions">
-          {addedIds.size > 0 && (
-            <button className="map-action-btn map-plan-btn" onClick={handleStartWalk}>
-              Start walk · {addedIds.size}
-            </button>
-          )}
-          <button className={`locate-circle ${locateActive ? "locate-active" : ""}`} aria-label="Locate me" onClick={() => {
-            setLocateError("");
-            setLocateTrigger((t) => t + 1);
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
+        <div className="bottom-right-stack">
+          <button
+            className="fab-circle bottom-right-btn"
+            aria-label="Focus on my location"
+            onClick={() => { setLocateError(""); setLocateTrigger((t) => t + 1); }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+              <circle cx="12" cy="12" r="8"/>
+              <line x1="12" y1="2" x2="12" y2="5"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="2" y1="12" x2="5" y2="12"/>
+              <line x1="19" y1="12" x2="22" y2="12"/>
             </svg>
           </button>
         </div>
