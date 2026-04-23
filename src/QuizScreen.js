@@ -24,7 +24,7 @@ const QUIZ_DECK = [
 // ── Swipe directions ──────────────────────────────────────────────────────
 const LABELS = {
   up:    { text: "YES, please",  weight:  2, pinned: true  },
-  right: { text: "Could go",     weight:  1, pinned: true  },
+  right: { text: "Would go",     weight:  1, pinned: true  },
   left:  { text: "Meh",          weight: -1, pinned: false },
   down:  { text: "Hard pass",    weight: -2, pinned: false },
 };
@@ -74,6 +74,9 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const [exitDir, setExitDir] = useState(null);
   const [peekDir, setPeekDir] = useState(null);
+  // "drag" uses CSS transition (card has momentum from the finger); "button"
+  // uses a keyframes animation with a subtle wind-up so the tap doesn't feel teleport-y.
+  const exitSourceRef = useRef("drag");
 
   const startPos = useRef({ x: 0, y: 0, t: 0 });
   const lastPos = useRef({ x: 0, y: 0, t: 0 });
@@ -135,12 +138,13 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
     });
   }, [done, history, onComplete]);
 
-  const commitSwipe = useCallback((direction) => {
+  const commitSwipe = useCallback((direction, source = "drag") => {
     if (!current || animatingRef.current) return;
     animatingRef.current = true;
+    exitSourceRef.current = source;
     setExitDir(direction);
 
-    const exitMs = prefersReducedMotion() ? 160 : 380;
+    const exitMs = prefersReducedMotion() ? 200 : (exitSourceRef.current === "button" ? 720 : 640);
     setTimeout(() => {
       setHistory(h => [...h, { polaroidId: current.id, direction }]);
       setIndex(i => i + 1);
@@ -202,13 +206,20 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
   // Active-card transform
   const cardStyle = (() => {
     if (exitDir) {
+      // Button-triggered exits use a CSS keyframe animation with a small wind-up
+      // so the tap feels intentional instead of an instant teleport.
+      if (exitSourceRef.current === "button") {
+        return {
+          animation: `quiz-exit-${exitDir} 720ms cubic-bezier(0.5, 0.05, 0.3, 1) forwards`,
+        };
+      }
       const travel = 800;
       const map = { up: [0, -travel], down: [0, travel], left: [-travel, 0], right: [travel, 0] };
       const [tx, ty] = map[exitDir];
       const rot = exitDir === "left" ? -15 : exitDir === "right" ? 15 : 0;
       return {
         transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg)`,
-        transition: "transform 380ms cubic-bezier(0.22, 1, 0.36, 1), opacity 380ms ease-out",
+        transition: "transform 640ms cubic-bezier(0.22, 1, 0.36, 1), opacity 520ms ease-out 80ms",
         opacity: 0,
       };
     }
@@ -305,11 +316,32 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
         </div>
       </div>
 
-      {/* Direction labels around the polaroid */}
-      <div className="quiz-dir quiz-dir--top">YES, please</div>
-      <div className="quiz-dir quiz-dir--right">Could go</div>
-      <div className="quiz-dir quiz-dir--left">Meh</div>
-      <div className="quiz-dir quiz-dir--bottom">Hard pass</div>
+      {/* Direction labels around the polaroid — arrows hint at the swipe direction.
+          Also clickable: tap commits the same swipe action for users who don't want to drag. */}
+      <button type="button" className="quiz-dir quiz-dir--top" onClick={() => commitSwipe("up", "button")} aria-label="YES, please">
+        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+        </svg>
+        <span>YES, please</span>
+      </button>
+      <button type="button" className="quiz-dir quiz-dir--right" onClick={() => commitSwipe("right", "button")} aria-label="Would go">
+        <span>Would go</span>
+        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+      <button type="button" className="quiz-dir quiz-dir--left" onClick={() => commitSwipe("left", "button")} aria-label="Meh">
+        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+        </svg>
+        <span>Meh</span>
+      </button>
+      <button type="button" className="quiz-dir quiz-dir--bottom" onClick={() => commitSwipe("down", "button")} aria-label="Hard pass">
+        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+        </svg>
+        <span>Hard pass</span>
+      </button>
 
       {/* Polaroid stack */}
       <div className="quiz-stack">
@@ -371,10 +403,6 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
                 </svg>
               );
             })()}
-            {/* Peek stamps only for positive swipes — left/down use the scribble scratch-out instead. */}
-            {peekDir && (peekDir === "up" || peekDir === "right") && (
-              <div className={`quiz-stamp quiz-stamp--${peekDir}`}>{LABELS[peekDir].text}</div>
-            )}
           </div>
         )}
       </div>
