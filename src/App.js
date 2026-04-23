@@ -41,7 +41,7 @@ function App() {
   return (
     <div className="App">
       <div className="phone-frame">
-        {screen === 'home' && (
+        {(screen === 'home' || screen === 'constraints') && (
           <HomeScreen
             onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
@@ -72,7 +72,7 @@ function App() {
             onClose={quizPreferences ? () => setScreen('home') : null}
           />
         )}
-        {screen === 'navigation' && (
+        {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
             onGoBack={() => setScreen('home')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
@@ -81,6 +81,7 @@ function App() {
             startLocation={startLocation}
             onJourneyChange={setJourneyItems}
             vibePreferences={quizPreferences}
+            showVoice={screen === 'navigation'}
           />
         )}
         {screen === 'reward' && (

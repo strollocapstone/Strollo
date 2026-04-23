@@ -34,7 +34,7 @@ const destinationIcon = L.divIcon({
 });
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences, showVoice = true }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -237,7 +237,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       </div>
 
       {/* ── WALK COMPANION PILL (voice always available during walk) ── */}
-      {voiceMode !== "full" && (
+      {showVoice && voiceMode !== "full" && (
         <WalkCompanionPill
           listening={voice.listening}
           locked={voice.locked}
@@ -255,7 +255,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       )}
 
       {/* ── VOICE FULL-SCREEN OVERLAY ── */}
-      {voiceMode === "full" && (
+      {showVoice && voiceMode === "full" && (
         <VoiceFullScreen
           listening={voice.listening}
           locked={voice.locked}
