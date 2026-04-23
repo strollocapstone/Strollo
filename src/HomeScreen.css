@@ -174,7 +174,6 @@
   flex-direction: column;
   align-items: center;
   gap: 22px;
-
   z-index: 20;
 }
 .app-name {
