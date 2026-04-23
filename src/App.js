@@ -4,6 +4,7 @@ import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
 import QuizScreen from './QuizScreen';
+import RewardScreen from './RewardScreen';
 import './App.css';
 
 const QUIZ_STORAGE_KEY = 'strollo_quiz_preferences';
@@ -82,6 +83,9 @@ function App() {
             vibePreferences={quizPreferences}
           />
         )}
+        {screen === 'reward' && (
+          <RewardScreen onComplete={() => setScreen('home')} />
+        )}
         {screen === 'constraints' && (
           <PreWalkConstraintsScreen
             onGoBack={() => setScreen(constraintsReturnScreen)}
@@ -94,7 +98,7 @@ function App() {
           />
         )}
         {screen === 'timeline' && (
-          <TimelineScreen onBack={() => setScreen('home')} />
+          <TimelineScreen onBack={() => setScreen('home')} onEndWalk={() => setScreen('reward')} />
         )}
       </div>
     </div>

@@ -120,11 +120,20 @@ function useStopwatch() {
 }
 
 // ── TimelineScreen ────────────────────────────────────────────────────────
-export default function TimelineScreen({ onBack }) {
+export default function TimelineScreen({ onBack, onEndWalk, onPauseWalk }) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [items, setItems] = useState(TIMELINE_ITEMS);
+  const [isPaused, setIsPaused] = useState(false);
   const time = useStopwatch();
+
+  const handleTogglePause = () => {
+    setIsPaused((prev) => {
+      const next = !prev;
+      if (onPauseWalk) onPauseWalk(next);
+      return next;
+    });
+  };
 
   const handleAdd = (id) => {
     setItems((prev) =>
@@ -267,9 +276,26 @@ export default function TimelineScreen({ onBack }) {
         })}
       </div>
 
-      {/* ── End walk ── */}
+      {/* ── Pause + End exploration ── */}
       <div className="tl-footer">
-        <button className="tl-end-btn">End Walk</button>
+        <button
+          className={`tl-pause-btn${isPaused ? " tl-pause-btn--paused" : ""}`}
+          onClick={handleTogglePause}
+          aria-label={isPaused ? "Resume exploring" : "Pause exploring"}
+        >
+          {isPaused ? (
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M8 5v14l11-7z" fill="currentColor" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor" />
+              <rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor" />
+            </svg>
+          )}
+          <span>{isPaused ? "Resume" : "Pause"}</span>
+        </button>
+        <button className="tl-end-btn" onClick={onEndWalk}>End exploration</button>
       </div>
     </div>
   );

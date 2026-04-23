@@ -621,10 +621,9 @@ export default function HomeScreen({
 
       {/* ── TOP BAR ── */}
       <div className="top-bar">
-        <span className="app-name">strollo</span>
         {!voiceActive && !sheetOpen && (
           <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
-            {addedIds.size > 0 ? `Start walking · ${addedIds.size}` : "Start walking"}
+            {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : "Start exploring"}
           </button>
         )}
       </div>

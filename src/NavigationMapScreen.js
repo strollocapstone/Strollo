@@ -174,7 +174,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
             <path d="M19 12H5M12 5l-7 7 7 7"/>
           </svg>
         </button>
-        <span className="app-name">strollo</span>
+        <div style={{ flex: 1 }} />
         <div style={{ width: 36 }} />
       </div>
 
