@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import "./TimelineScreen.css";
 
 // Fallback image when the place doesn't have one
@@ -47,15 +47,6 @@ function estimateWalkMin(a, b) {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────
-function PlusIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
 function WarningIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF9900" stroke="none">
@@ -200,19 +191,19 @@ function CardDetail({ item, onCollapse, onAdd, onRemove }) {
   );
 }
 
-// ── Stopwatch hook ────────────────────────────────────────────────────────
-function useStopwatch() {
-  const startTime = useRef(Date.now());
-  const [elapsed, setElapsed] = useState(0);
+// ── Stopwatch hook — driven by an external start timestamp ───────────────
+// When tripStartTime is null (trip not started / ended), the timer shows 00:00.
+function useStopwatch(tripStartTime) {
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setElapsed(Date.now() - startTime.current);
-    }, 1000);
+    if (!tripStartTime) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [tripStartTime]);
 
-  const totalSec = Math.floor(elapsed / 1000);
+  const elapsed = tripStartTime ? now - tripStartTime : 0;
+  const totalSec = Math.max(0, Math.floor(elapsed / 1000));
   const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
   const ss = String(totalSec % 60).padStart(2, "0");
   return `${mm}:${ss}`;
@@ -221,10 +212,18 @@ function useStopwatch() {
 // ── TimelineScreen ────────────────────────────────────────────────────────
 const MAX_SUGGESTIONS = 3;
 
-export default function TimelineScreen({ nearbyPlaces = [], addedIds, setAddedIds, userLocation, onGoBack }) {
+export default function TimelineScreen({
+  nearbyPlaces = [],
+  addedIds,
+  setAddedIds,
+  userLocation,
+  tripStartTime,
+  onEndWalk,
+  onGoBack,
+}) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const time = useStopwatch();
+  const time = useStopwatch(tripStartTime);
 
   // Split places by added state
   const confirmedPlaces = nearbyPlaces.filter((p) => addedIds?.has(p.id));
@@ -365,20 +364,17 @@ export default function TimelineScreen({ nearbyPlaces = [], addedIds, setAddedId
 
         {rows.map((row) => {
           if (row.kind === "add") {
+            // Users can no longer add stops from the timeline. Keep only the
+            // walk-time label between confirmed cards; drop boundary rows.
+            if (!row.showWalk) return null;
             return (
-              <div className="tl-row tl-row--add" key={row.key}>
-                <div className="tl-rail-cell">
-                  <button className="tl-add-btn" aria-label="Add stop">
-                    <PlusIcon />
-                  </button>
-                </div>
+              <div className="tl-row tl-row--walk" key={row.key}>
+                <div className="tl-rail-cell" />
                 <div className="tl-content-cell">
-                  {row.showWalk && (
-                    <span className="tl-walk-label">
-                      {row.walkMin} min walk
-                      {row.warning && <WarningIcon />}
-                    </span>
-                  )}
+                  <span className="tl-walk-label">
+                    {row.walkMin} min walk
+                    {row.warning && <WarningIcon />}
+                  </span>
                 </div>
               </div>
             );
@@ -446,7 +442,7 @@ export default function TimelineScreen({ nearbyPlaces = [], addedIds, setAddedId
           <span className="tl-bottom-time">{time}</span>
           <span className="tl-bottom-label">elapsed</span>
         </div>
-        <button className="tl-end-btn">End Walk</button>
+        <button className="tl-end-btn" onClick={onEndWalk}>End Walk</button>
       </div>
     </div>
   );

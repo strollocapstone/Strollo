@@ -135,8 +135,9 @@
 
 /* Dot stays vertically centered with the card via flex align-items: center on the row */
 
-.tl-row--add {
-  min-height: 40px;
+.tl-row--add,
+.tl-row--walk {
+  min-height: 32px;
 }
 
 /* Right column — cards and walk labels */
@@ -433,12 +434,13 @@
   flex-shrink: 0;
 }
 
-/* ── Sticky bottom bar ── */
+/* ── Sticky bottom bar — always on top of every other element ── */
 .tl-bottom-bar {
   position: sticky;
   bottom: 0;
   left: 0;
   right: 0;
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: space-between;

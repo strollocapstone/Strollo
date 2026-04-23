@@ -3,7 +3,6 @@ import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
-import { MOCK_LOCATION } from './mapUtils';
 import './App.css';
 
 function App() {
@@ -11,15 +10,30 @@ function App() {
   const [screen, setScreen] = useState('home');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
-  const [lastKnownLocation, setLastKnownLocation] = useState(MOCK_LOCATION);
+  const [lastKnownLocation, setLastKnownLocation] = useState(null);
   const [preferences, setPreferences] = useState(null);
   const [openSheetOnHome, setOpenSheetOnHome] = useState(false);
   const [constraintsReturnScreen, setConstraintsReturnScreen] = useState('home');
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
   const [favedIds, setFavedIds] = useState(() => new Set());
+  const [tripStartTime, setTripStartTime] = useState(null);
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
+
+  const handleStartWalk = (items, userLoc) => {
+    setJourneyItems(items);
+    setStartLocation(userLoc);
+    setLastKnownLocation(userLoc);
+    setTripStartTime(Date.now()); // start the trip stopwatch
+    setScreen('navigation');
+  };
+
+  const handleEndWalk = () => {
+    setTripStartTime(null); // stop the stopwatch
+    setTab('map');
+    setScreen('home');
+  };
 
   return (
     <div className="App">
@@ -28,9 +42,8 @@ function App() {
           <>
             {screen === 'home' && (
               <HomeScreen
-                onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
+                onStartWalk={handleStartWalk}
                 onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
-                onOpenTimeline={() => setTab('timeline')}
                 initialLocation={lastKnownLocation}
                 initialSheetOpen={openSheetOnHome}
                 onSheetOpenConsumed={() => setOpenSheetOnHome(false)}
@@ -49,6 +62,7 @@ function App() {
               <NavigationMapScreen
                 onGoBack={() => setScreen('home')}
                 onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
+                onOpenTimeline={() => setTab('timeline')}
                 journeyItems={journeyItems}
                 startLocation={startLocation}
               />
@@ -73,6 +87,8 @@ function App() {
             addedIds={addedIds}
             setAddedIds={setAddedIds}
             userLocation={lastKnownLocation}
+            tripStartTime={tripStartTime}
+            onEndWalk={handleEndWalk}
             onGoBack={() => setTab('map')}
           />
         )}

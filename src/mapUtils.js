@@ -29,38 +29,74 @@ export const youIcon = L.divIcon({
   iconAnchor: [21, 32],
 });
 
-// ── Hardcoded dev location (UC Berkeley, Sproul Plaza) ───────────────────
+// ── Fallback location if GPS is unavailable (UC Berkeley, Sproul Plaza) ──
 export const MOCK_LOCATION = [37.8691, -122.2596];
 
-// ── Watch user location — MOCKED to UC Berkeley ──────────────────────────
+// ── Watch user location (with 10m threshold to avoid waggle) ─────────────
 export function WatchLocation({ onUpdate }) {
   const onUpdateRef = useRef(onUpdate);
+  const lastPos = useRef(null);
   onUpdateRef.current = onUpdate;
 
   useEffect(() => {
-    onUpdateRef.current(MOCK_LOCATION);
+    const id = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        if (lastPos.current) {
+          const dlat = Math.abs(coords.latitude - lastPos.current[0]);
+          const dlng = Math.abs(coords.longitude - lastPos.current[1]);
+          if (dlat < 0.0001 && dlng < 0.0001) return;
+        }
+        const pos = [coords.latitude, coords.longitude];
+        lastPos.current = pos;
+        onUpdateRef.current(pos);
+      },
+      (err) => { console.warn("[Strollo] Geolocation watch error:", err.message); },
+      { enableHighAccuracy: false, maximumAge: 5000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
   return null;
 }
 
-// ── Locate user — MOCKED to UC Berkeley ──────────────────────────────────
-export function LocateMe({ trigger, onLocate }) {
+// ── Locate user (instant on first call, animated on subsequent) ──────────
+export function LocateMe({ trigger, onLocate, onError }) {
   const map = useMap();
   const onLocateRef = useRef(onLocate);
+  const onErrorRef = useRef(onError);
   const isFirstLocate = useRef(true);
   onLocateRef.current = onLocate;
+  if (onError) onErrorRef.current = onError;
 
   useEffect(() => {
     if (!trigger) return;
-    try {
-      if (isFirstLocate.current) {
-        map.setView(MOCK_LOCATION, 16);
-        isFirstLocate.current = false;
-      } else {
-        map.flyTo(MOCK_LOCATION, 16, { duration: 1.4 });
-      }
-    } catch (_) { /* map may be unmounted */ }
-    onLocateRef.current(MOCK_LOCATION);
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        if (cancelled) return;
+        const pos = [coords.latitude, coords.longitude];
+        try {
+          if (isFirstLocate.current) {
+            map.setView(pos, 16);
+            isFirstLocate.current = false;
+          } else {
+            map.flyTo(pos, 16, { duration: 1.4 });
+          }
+        } catch (_) { /* map may be unmounted */ }
+        onLocateRef.current(pos);
+      },
+      (err) => {
+        if (cancelled) return;
+        if (onErrorRef.current) {
+          if (err.code === 1) {
+            onErrorRef.current("Location permission denied. Please enable it in your browser settings.");
+          } else {
+            onErrorRef.current("Unable to get your location. Please try again.");
+          }
+        }
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5000 }
+    );
+    return () => { cancelled = true; };
   }, [trigger, map]);
   return null;
 }

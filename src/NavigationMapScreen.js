@@ -35,7 +35,7 @@ const destinationIcon = L.divIcon({
 
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, journeyItems = [], startLocation }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -153,7 +153,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, journe
 
       {/* ── MAP ACTION BUTTONS (matching HomeScreen style) ── */}
       <div className="nav-actions">
-        <button className="map-action-btn" onClick={() => setJourneyOpen(true)} aria-label="Edit journey">
+        <button className="map-action-btn" onClick={onOpenTimeline} aria-label="Open timeline">
           <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="6,2 20,8 6,14"/>
             <rect x="4" y="2" width="2" height="18" rx="1"/>
