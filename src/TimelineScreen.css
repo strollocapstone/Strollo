@@ -10,6 +10,23 @@
   display: flex;
   flex-direction: column;
   z-index: 30;
+
+  /* Expand-from-bottom entrance; matches the bottom-card origin on the nav screen */
+  transform-origin: 50% 100%;
+  animation: tl-expand-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+.tl-screen--closing {
+  animation: tl-shrink-out 0.28s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  pointer-events: none;
+}
+@keyframes tl-expand-in {
+  from { opacity: 0; transform: translateY(30px) scale(0.88); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes tl-shrink-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(30px) scale(0.88); }
 }
 
 /* ── Top-right X close (matches Preferences pwc-close) ── */
@@ -43,8 +60,9 @@
 .tl-suggestions-title {
   flex: 1;
   font-family: var(--font-brand);
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: #34233E;
 }
 
@@ -104,15 +122,16 @@
   margin: 0 auto !important;
 }
 
-/* Single continuous vertical rail — centered on the rail-cell axis (44px) */
+/* Slim continuous vertical rail — centered on the rail-cell axis (40px) */
 .tl-rail {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 44px; /* 20px timeline padding + 24px = half of the 48px rail-cell */
-  width: 3px;
-  transform: translateX(-50%); /* centers the 3px rail exactly on the 44px axis */
-  background: #E1B1FF;
+  left: 40px;
+  width: 2px;
+  transform: translateX(-50%);
+  background: rgba(136, 81, 212, 0.22);
+  border-radius: 2px;
   z-index: 0;
 }
 
@@ -127,15 +146,27 @@
   align-items: center;
 }
 
-/* Left column — fixed width, centers dots and plus buttons on the rail */
+/* Left column — fixed width, centers rail nodes on the rail */
 .tl-rail-cell {
-  width: 48px;
+  width: 40px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   z-index: 2;
+}
+/* Small node on the rail — filled purple dot for planned, outlined for suggestions */
+.tl-rail-node {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8851D4;
+  box-shadow: 0 0 0 3px rgba(247, 244, 250, 0.95);
+}
+.tl-rail-node--suggest {
+  background: rgba(247, 244, 250, 0.95);
+  border: 1.5px solid #8851D4;
 }
 
 /* Dot stays vertically centered with the card via flex align-items: center on the row */
@@ -226,7 +257,7 @@
 .tl-card-swipe {
   position: relative;
   margin: 8px 0;
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
 }
 .tl-card-remove-action {
@@ -247,79 +278,124 @@
 }
 .tl-card-remove-action:active { background: #B91C1C; }
 
-/* ── Collapsed card ── */
-.tl-content-cell .tl-card-swipe { margin: 8px 0; }
+/* ── Collapsed card — compact, icon + name + category ── */
+.tl-content-cell .tl-card-swipe { margin: 6px 0; }
 .tl-card {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 10px;
   background: white;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
+  border: 1px solid rgba(30, 21, 65, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
   cursor: pointer;
-  min-height: 72px;
+  min-height: 52px;
   touch-action: pan-y;
+  -webkit-user-select: none;
   user-select: none;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
 }
 
 .tl-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+  border-color: rgba(136, 81, 212, 0.20);
 }
 
 .tl-card--suggestion {
-  background: rgba(255, 255, 255, 0.40);
-  border: 1px dashed rgba(136, 81, 212, 0.25);
+  background: transparent;
+  border: 1px dashed rgba(136, 81, 212, 0.30);
   box-shadow: none;
 }
 
 .tl-card--suggestion:hover {
-  box-shadow: 0 2px 12px rgba(136, 81, 212, 0.08);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 10px rgba(136, 81, 212, 0.08);
 }
 
-/* Swipe-to-remove: the inline transform is on each card; this lets the
-   removing card fade cleanly without fighting the hover transition. */
 .tl-card--removing {
   pointer-events: none;
+}
+
+/* Circular icon badge on the left of the card */
+.tl-card-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(136, 81, 212, 0.10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tl-card-icon .material-symbols-rounded {
+  font-size: 18px;
+  color: #8851D4;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+  line-height: 1;
+}
+.tl-card--suggestion .tl-card-icon {
+  background: rgba(136, 81, 212, 0.06);
 }
 
 .tl-card-text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 14px 12px;
+  gap: 2px;
   min-width: 0;
 }
 
 .tl-card-name {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--color-body);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tl-card-time {
+.tl-card-cat {
   font-size: 11px;
   color: #5A4B64;
-  margin-top: 10px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
-.tl-card-thumb {
-  width: 90px;
+/* "Skip" button on planned cards — removes the stop from the journey */
+.tl-card-skip-btn {
   flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(30, 21, 65, 0.18);
+  background: transparent;
+  color: #5A4B64;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.tl-card-skip-btn:hover {
+  background: rgba(30, 21, 65, 0.06);
+  color: var(--color-body);
+  border-color: rgba(30, 21, 65, 0.32);
 }
 
-.tl-card-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+/* ── Suggestion carousel — reuses HomeScreen's .location-card visual vocabulary.
+   This override just flushes the left padding so the cards align with the timeline gutter. */
+.tl-row--suggest-row { align-items: flex-start; margin-top: 4px; }
+.tl-suggest-carousel {
+  padding: 4px 16px 8px 0;
+}
+
+/* Distance · walk time separator dot */
+.tl-walk-dot {
+  color: rgba(90, 75, 100, 0.55);
+  font-weight: 400;
 }
 
 /* ── Expanded card detail ── */
@@ -497,58 +573,92 @@
   flex-shrink: 0;
 }
 
-/* ── Sticky bottom bar — always on top of every other element ── */
+/* ── Bottom bar — Back (icon) · Skip (primary) · End (secondary) ── */
 .tl-bottom-bar {
+  position: -webkit-sticky;
   position: sticky;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 9999;
-  display: grid;
-  grid-template-columns: 56px 1fr 56px;
-  align-items: center;
-  padding: 10px 16px;
-  background: rgba(247, 244, 250, 0.50);
-  backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
-  border-top: 1px solid rgba(90, 75, 100, 0.10);
-  margin-top: 8px;
-}
-.tl-bottom-bar .tl-pause-btn { justify-self: start; }
-.tl-bottom-bar .tl-end-btn { justify-self: center; }
-
-.tl-pause-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(8px) saturate(1.4);
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-.tl-pause-btn:active {
-  transform: scale(0.95);
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-top: 1px solid rgba(30, 21, 65, 0.08);
+  box-shadow: 0 -2px 12px rgba(30, 21, 65, 0.04);
 }
 
-.tl-end-btn {
-  padding: 10px 20px;
-  border-radius: var(--radius-pill);
+/* Map — primary yellow pill: fills the bar, icon + label */
+.tl-back-btn {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 16px;
   border: none;
+  border-radius: var(--radius-pill);
   background: var(--color-primary);
+  color: var(--color-accent);
   font-family: var(--font-ui);
   font-weight: 700;
   font-size: 14px;
-  color: var(--color-body);
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
+.tl-back-btn:hover { filter: brightness(1.04); }
+.tl-back-btn:active { transform: scale(0.985); }
 
-.tl-end-btn:active {
-  transform: scale(0.97);
+/* Skip {current destination} — secondary outline, compact */
+.tl-skip-btn {
+  flex-shrink: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(30, 21, 65, 0.18);
+  background: transparent;
+  color: var(--color-body);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
+.tl-skip-btn:hover {
+  background: rgba(30, 21, 65, 0.04);
+  border-color: rgba(30, 21, 65, 0.28);
+}
+.tl-skip-btn:active { transform: scale(0.985); }
+
+/* End — compact secondary outline */
+.tl-end-btn {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(30, 21, 65, 0.18);
+  background: transparent;
+  color: var(--color-body);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.tl-end-btn:hover {
+  background: rgba(30, 21, 65, 0.04);
+  border-color: rgba(30, 21, 65, 0.28);
+}
+.tl-end-btn:active { transform: scale(0.97); }

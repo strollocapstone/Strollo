@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreferencesScreen';
@@ -7,20 +7,10 @@ import QuizScreen from './QuizScreen';
 import RewardScreen from './RewardScreen';
 import './App.css';
 
-const QUIZ_STORAGE_KEY = 'strollo_quiz_preferences';
-
-function loadQuizPreferences() {
-  try {
-    const raw = localStorage.getItem(QUIZ_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function App() {
-  const initialQuizPrefs = loadQuizPreferences();
-  const [screen, setScreen] = useState(initialQuizPrefs ? 'home' : 'quiz');
+  // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
+  const initialQuizPrefs = null;
+  const [screen, setScreen] = useState('quiz');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
@@ -29,15 +19,33 @@ function App() {
   const [quizPreferences, setQuizPreferences] = useState(initialQuizPrefs);
   const [openSheetOnHome, setOpenSheetOnHome] = useState(false);
   const [constraintsReturnScreen, setConstraintsReturnScreen] = useState('home');
+  const [settingsHighlight, setSettingsHighlight] = useState(false);
+  const [quizPending, setQuizPending] = useState(false);
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
   const [favedIds, setFavedIds] = useState(() => new Set());
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
 
-  const persistQuiz = (prefs) => {
-    try { localStorage.setItem(QUIZ_STORAGE_KEY, JSON.stringify(prefs)); } catch {}
+  const persistQuiz = () => {
+    // no-op — preferences reset on each reload by design
   };
+
+  // Prefetch user location as early as possible (even while the quiz is open)
+  // so HomeScreen can start loading nearby places the moment it mounts.
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        if (cancelled) return;
+        setLastKnownLocation([coords.latitude, coords.longitude]);
+      },
+      () => { /* permission denied / timeout — HomeScreen will prompt again */ },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    );
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="App">
@@ -60,6 +68,8 @@ function App() {
             setFavedIds={setFavedIds}
             lastFetchedLocationRef={lastFetchedLocationRef}
             lastFetchTimeRef={lastFetchTimeRef}
+            settingsHighlight={settingsHighlight}
+            quizPending={quizPending}
           />
         )}
         {screen === 'quiz' && (
@@ -68,9 +78,30 @@ function App() {
             onComplete={(prefs) => {
               setQuizPreferences(prefs);
               persistQuiz(prefs);
+              if (prefs.mergedPreset) {
+                setPreferences((prev) => {
+                  const seed = prefs.mergedPreset;
+                  if (!prev) return seed;
+                  const hasItems = (arr) => Array.isArray(arr) && arr.length > 0;
+                  return {
+                    destination: prev.destination ?? seed.destination,
+                    destChosen: prev.destChosen ?? seed.destChosen,
+                    duration: prev.duration ?? seed.duration,
+                    customDuration: prev.customDuration ?? seed.customDuration,
+                    distance: prev.distance ?? seed.distance,
+                    accessibility: hasItems(prev.accessibility) ? prev.accessibility : (seed.accessibility || []),
+                    avoidances: hasItems(prev.avoidances) ? prev.avoidances : (seed.avoidances || []),
+                    mapFilters: hasItems(prev.mapFilters) ? prev.mapFilters : (seed.mapFilters || []),
+                  };
+                });
+              }
               setScreen('home');
+              setSettingsHighlight(true);
+              setTimeout(() => setSettingsHighlight(false), 4200);
+              setQuizPending(false);
             }}
             onClose={quizPreferences ? () => setScreen('home') : null}
+            onSkip={() => { setScreen('home'); setQuizPending(true); }}
           />
         )}
         {screen === 'navigation' && (
@@ -81,6 +112,7 @@ function App() {
             journeyItems={journeyItems}
             startLocation={startLocation}
             onJourneyChange={setJourneyItems}
+            setAddedIds={setAddedIds}
             vibePreferences={quizPreferences}
             showVoice={screen === 'navigation'}
           />
@@ -108,6 +140,9 @@ function App() {
             setAddedIds={setAddedIds}
             userLocation={lastKnownLocation}
             tripStartTime={tripStartTime}
+            journeyItems={journeyItems}
+            onJourneyChange={setJourneyItems}
+            preferences={preferences}
           />
         )}
       </div>

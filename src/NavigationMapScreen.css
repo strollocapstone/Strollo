@@ -5,6 +5,24 @@
   position: absolute;
   inset: 0;
   z-index: 0;
+  overflow: hidden; /* clip rotated tiles at the phone-frame edges */
+}
+/* Heading-up mode: rotate the outer Leaflet container so the road ahead points up.
+   Leaflet sets inline transforms on .leaflet-map-pane every pan, so rotating THAT gets
+   stomped; rotating the outer .leaflet-container (our .map-container) is untouched.
+   Scale up slightly so the rotated corners stay covered. */
+.map-wrapper.heading-up .map-container {
+  transform-origin: center center;
+  transform: scale(1.35) rotate(calc(-1 * var(--map-rotation, 0deg)));
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Counter-rotate marker contents so text labels and icons stay upright. */
+.map-wrapper.heading-up .sugg-pin {
+  transform: translate(-50%, calc(-100% - 5px)) rotate(var(--map-rotation, 0deg));
+}
+.map-wrapper.heading-up .marauder-marker {
+  transform: rotate(var(--map-rotation, 0deg));
+  transform-origin: 50% 100%;
 }
 
 /* ── Nav top bar ── */
@@ -859,4 +877,24 @@
 /* ── Final destination pin ── */
 .dest-pin-wrap {
   filter: drop-shadow(0 0 6px rgba(136, 81, 212, 0.40));
+}
+
+/* Lift the locate FAB above the bottom-pinned companion card (~ card height + gap),
+   and make sure it floats over the card + map (z-index 31 > .wcw at z-index 30). */
+.bottom-right-stack--nav {
+  right: 16px;
+  bottom: 240px;
+  z-index: 31;
+}
+/* Orientation toggle FAB: single-character label, clearly legible */
+.nav-orient-label {
+  font-family: var(--font-brand, var(--font-ui));
+  font-size: 18px;
+  font-weight: 800;
+  color: #8851D4;
+  line-height: 1;
+}
+/* Subtle active tint on the orientation toggle when heading-up is on */
+.nav-orient-btn--heading {
+  background: #EDE5FA !important;
 }

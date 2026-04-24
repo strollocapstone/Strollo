@@ -59,7 +59,9 @@ export function WatchLocation({ onUpdate }) {
 }
 
 // ── Locate user (instant on first call, animated on subsequent) ──────────
-export function LocateMe({ trigger, onLocate, onError }) {
+// The caller passes the screen's default zoom so pressing "locate" always returns
+// to that screen's baseline (HomeScreen = 15, NavigationMapScreen used 16 before).
+export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
   const map = useMap();
   const onLocateRef = useRef(onLocate);
   const onErrorRef = useRef(onError);
@@ -76,10 +78,11 @@ export function LocateMe({ trigger, onLocate, onError }) {
         const pos = [coords.latitude, coords.longitude];
         try {
           if (isFirstLocate.current) {
-            map.setView(pos, 16);
+            map.setView(pos, zoom);
             isFirstLocate.current = false;
           } else {
-            map.flyTo(pos, 16, { duration: 1.4 });
+            // Always fly to user at the default zoom — animates even if we're already there
+            map.flyTo(pos, zoom, { duration: 0.9 });
           }
         } catch (_) { /* map may be unmounted */ }
         onLocateRef.current(pos);
@@ -116,6 +119,16 @@ export function TrackUserPosition({ userPos, onScreenPos }) {
   return null;
 }
 
+// ── Listen for map background clicks (empty area, not markers) ───────────
+export function MapClickListener({ onClick }) {
+  const map = useMap();
+  useEffect(() => {
+    map.on("click", onClick);
+    return () => map.off("click", onClick);
+  }, [map, onClick]);
+  return null;
+}
+
 // ── Listen for map drag ──────────────────────────────────────────────────
 export function MapDragListener({ onDrag }) {
   const map = useMap();
@@ -123,6 +136,18 @@ export function MapDragListener({ onDrag }) {
     map.on("dragstart", onDrag);
     return () => map.off("dragstart", onDrag);
   }, [map, onDrag]);
+  return null;
+}
+
+// ── Track map zoom level (fires on zoomend) ──────────────────────────────
+export function ZoomTracker({ onZoom }) {
+  const map = useMap();
+  useEffect(() => {
+    const handler = () => onZoom(map.getZoom());
+    handler();
+    map.on("zoomend", handler);
+    return () => map.off("zoomend", handler);
+  }, [map, onZoom]);
   return null;
 }
 

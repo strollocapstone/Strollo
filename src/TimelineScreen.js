@@ -124,6 +124,16 @@ const WARNING_TAGS = [
   },
 ];
 
+// Category → Material Symbol glyph (mirrors HomeScreen / NavigationMapScreen).
+const TL_CATEGORY_ICONS = {
+  "Coffee": "local_cafe", "Restaurant": "restaurant", "Bar": "local_bar",
+  "Ice Cream": "icecream", "Bakery": "bakery", "Bookstore": "menu_book",
+  "Library": "local_library", "Theatre": "theater_comedy", "Florist": "local_florist",
+  "Museum": "museum", "Gallery": "palette", "Art": "brush",
+  "Viewpoint": "landscape", "Attraction": "attractions", "Arts": "theater_comedy",
+  "Park": "park", "Garden": "yard",
+};
+
 // Deterministic "random" subset of warning tags for a given place id.
 function warningTagsForItem(item) {
   const hash = Math.abs(Number(item.id) || item.name.length * 31);
@@ -228,6 +238,32 @@ function useStopwatch(tripStartTime) {
 // ── TimelineScreen ────────────────────────────────────────────────────────
 const MAX_SUGGESTIONS = 3;
 
+// Mirrors HomeScreen's preference → place-category mapping for suggestion filtering.
+const TL_FILTER_DESCS = {
+  cafes:      ["Coffee", "Bakery"],
+  food:       ["Restaurant"],
+  bars:       ["Bar"],
+  museums:    ["Museum", "Gallery"],
+  parks:      ["Park", "Garden"],
+  attractions:["Attraction", "Viewpoint", "Arts", "Theatre"],
+};
+
+// Haversine (km) — used for the between-stop distance label
+function tlHaversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+const fmtImperial = (meters) => {
+  const ft = meters * 3.28084;
+  if (ft < 528) return `${Math.round(ft)} ft`;
+  return `${(meters / 1609.344).toFixed(1)} mi`;
+};
+
 export default function TimelineScreen({
   nearbyPlaces = [],
   addedIds,
@@ -236,10 +272,18 @@ export default function TimelineScreen({
   tripStartTime,
   onEndWalk,
   onGoBack,
+  journeyItems = [],
+  onJourneyChange,
+  preferences,
 }) {
-  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [closing, setClosing] = useState(false);
+  const handleClose = () => {
+    if (closing || !onGoBack) return;
+    setClosing(true);
+    // Let the shrink animation play before the parent unmounts the component
+    setTimeout(() => onGoBack(), 280);
+  };
   const [expandedId, setExpandedId] = useState(null);
-  const [isPaused, setIsPaused] = useState(false);
   // Swipe-to-reveal: while dragging, track {id, dx}. On release past the
   // threshold, set revealedId so a '−' button appears to the right of the
   // card; the user then taps '−' to actually remove. Tapping the revealed
@@ -298,12 +342,24 @@ export default function TimelineScreen({
   const confirmedPlaces = nearbyPlaces.filter((p) => addedIds?.has(p.id));
   const suggestionPool = nearbyPlaces.filter((p) => !addedIds?.has(p.id));
 
-  // Sort suggestions by distance from user, take top N
+  // Filter suggestions by the user's vibe preferences (if any are active)
+  const activeFilters = preferences?.mapFilters?.filter((id) => TL_FILTER_DESCS[id]) ?? [];
+  const allowedDescs = new Set();
+  activeFilters.forEach((id) => TL_FILTER_DESCS[id].forEach((d) => allowedDescs.add(d)));
+  const relevantPool = allowedDescs.size === 0
+    ? suggestionPool
+    : suggestionPool.filter((p) => allowedDescs.has(p.desc));
+
+  // Suggestion proximity origin: the LAST confirmed stop if any, otherwise the user
+  const lastConfirmed = confirmedPlaces[confirmedPlaces.length - 1];
+  const suggestOrigin = lastConfirmed
+    ? { lat: lastConfirmed.lat, lng: lastConfirmed.lng }
+    : (userLocation ? { lat: userLocation[0], lng: userLocation[1] } : null);
   const originPoint = userLocation
     ? { lat: userLocation[0], lng: userLocation[1] }
     : null;
-  const rankedSuggestions = [...suggestionPool]
-    .map((p) => ({ p, d: estimateWalkMin(originPoint, p) }))
+  const rankedSuggestions = [...relevantPool]
+    .map((p) => ({ p, d: estimateWalkMin(suggestOrigin, p) }))
     .sort((a, b) => a.d - b.d)
     .slice(0, MAX_SUGGESTIONS)
     .map(({ p }) => p);
@@ -330,6 +386,12 @@ export default function TimelineScreen({
   });
 
   const handleAdd = (id) => {
+    // Append the newly-added place to the end of the journey so navigation
+    // naturally heads to it after all the existing stops.
+    const place = nearbyPlaces.find((p) => p.id === id);
+    if (place && onJourneyChange && !journeyItems.some((j) => j.id === id)) {
+      onJourneyChange([...journeyItems, place]);
+    }
     setAddedIds?.((prev) => {
       const next = new Set(prev);
       next.add(id);
@@ -347,88 +409,54 @@ export default function TimelineScreen({
     setExpandedId(null);
   };
 
-  const visibleItems = showSuggestions
-    ? items
-    : items.filter((it) => it.type === "confirmed");
+  // Per-card Skip: drop this specific stop from the live journey so navigation
+  // advances past it (or skips over it if it's not the current target).
+  const handleSkipStop = (id) => {
+    if (onJourneyChange) {
+      onJourneyChange(journeyItems.filter((j) => j.id !== id));
+    }
+    setAddedIds?.((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setExpandedId(null);
+  };
 
-  // Build rows.
-  // Add buttons + walk-time labels appear only around CONFIRMED cards:
-  //   - 0 confirmed  → one add button at the top (no walk label)
-  //   - 1 confirmed  → add button before + card + add button after
-  //   - 2+ confirmed → add button before, walk+add between pairs, add button after
-  // Suggestion cards stack below without add/walk rows between them.
+  // Planned stops first, then a single row of nearby suggestion pills.
   const confirmedItems = items.filter((it) => it.type === "confirmed");
-  const suggestionItems = visibleItems.filter((it) => it.type === "suggestion");
+  const suggestionItems = items.filter((it) => it.type === "suggestion");
+
+  // Helper: distance between two coord-bearing items in meters (straight-line)
+  const distMetersBetween = (a, b) => {
+    if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return null;
+    return tlHaversineKm([a.lat, a.lng], [b.lat, b.lng]) * 1000;
+  };
 
   const rows = [];
-
-  if (confirmedItems.length === 0) {
-    rows.push({ kind: "add", showWalk: false, key: "add-start" });
-  } else {
-    rows.push({ kind: "add", showWalk: false, key: "add-start" });
-    confirmedItems.forEach((item, i) => {
-      rows.push({ kind: "card", item, isFirst: i === 0, key: `card-${item.id}` });
-      if (i < confirmedItems.length - 1) {
-        const next = confirmedItems[i + 1];
-        rows.push({
-          kind: "add",
-          showWalk: true,
-          walkMin: next.walkMin,
-          key: `add-between-${item.id}`,
-        });
-      }
-    });
-    rows.push({ kind: "add", showWalk: false, key: "add-end" });
+  confirmedItems.forEach((item, i) => {
+    rows.push({ kind: "card", item, isFirst: i === 0, key: `card-${item.id}` });
+    if (i < confirmedItems.length - 1) {
+      const next = confirmedItems[i + 1];
+      rows.push({
+        kind: "walk",
+        walkMin: next.walkMin,
+        distM: distMetersBetween(item, next),
+        key: `walk-between-${item.id}`,
+      });
+    }
+  });
+  // Single horizontally-scrolling row of suggestion pills (same look as the
+  // HomeScreen's add-state pills — dot+icon + name + "+").
+  if (suggestionItems.length > 0) {
+    rows.push({ kind: "suggest-row", items: suggestionItems, key: "suggest-row" });
   }
 
-  // Suggestions — plain card rows, no add/walk in between
-  suggestionItems.forEach((item) => {
-    rows.push({ kind: "card", item, isFirst: false, key: `card-${item.id}` });
-  });
-
   return (
-    <div className="tl-screen">
-      {/* Top-right X close — matches Preferences screen */}
-      {onGoBack && (
-        <button className="tl-close" onClick={onGoBack} aria-label="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-            <line x1="6" y1="6" x2="18" y2="18" />
-            <line x1="6" y1="18" x2="18" y2="6" />
-          </svg>
-        </button>
-      )}
-
-      {/* ── Top bar: title + lightbulb toggle ── */}
+    <div className={`tl-screen${closing ? " tl-screen--closing" : ""}`}>
+      {/* ── Top bar: title only ── */}
       <div className="tl-topbar">
         <span className="tl-suggestions-title">Your current exploration</span>
-        <button
-          className={`tl-bulb-btn ${showSuggestions ? "" : "tl-bulb-btn--off"}`}
-          onClick={() => setShowSuggestions((v) => !v)}
-          aria-label={showSuggestions ? "Hide suggestions" : "Show suggestions"}
-          aria-pressed={!showSuggestions}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24">
-            <path
-              d="M9 3.5c-2.8 1-4.5 3.6-4.5 6.4 0 1.9.8 3.6 2.2 4.8.6.5.9 1.2.9 2v.8h8.8v-.8c0-.8.3-1.5.9-2 1.4-1.2 2.2-2.9 2.2-4.8 0-4-3.5-7.1-7.6-6.4z"
-              fill={showSuggestions ? "#FFD501" : "none"}
-              stroke={showSuggestions ? "#B38600" : "#8851D4"}
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M9 18h6M10 20.5h4"
-              fill="none"
-              stroke={showSuggestions ? "#B38600" : "#8851D4"}
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-          {!showSuggestions && (
-            <svg className="tl-bulb-slash" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.2" strokeLinecap="round">
-              <line x1="4" y1="20" x2="20" y2="4" />
-            </svg>
-          )}
-        </button>
       </div>
 
       {/* ── Timeline ── */}
@@ -446,17 +474,52 @@ export default function TimelineScreen({
         {rows.length > 0 && <div className="tl-rail" />}
 
         {rows.map((row) => {
-          if (row.kind === "add") {
-            // Users can no longer add stops from the timeline. Keep only the
-            // walk-time label between confirmed cards; drop boundary rows.
-            if (!row.showWalk) return null;
+          if (row.kind === "suggest-row") {
+            return (
+              <div className="tl-row tl-row--suggest-row" key={row.key}>
+                <div className="tl-rail-cell" />
+                <div className="tl-content-cell">
+                  <div className="location-card-carousel tl-suggest-carousel">
+                    {row.items.map((it) => (
+                      <div className="location-card" key={`suggest-${it.id}`}>
+                        <div className="location-card-info">
+                          <div className="location-card-name-row">
+                            <span className="location-card-name">{it.name}</span>
+                            <button
+                              type="button"
+                              className="location-card-add"
+                              onClick={() => handleAdd(it.id)}
+                              aria-label={`Add ${it.name} to your journey`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.6" strokeLinecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="location-card-category">
+                            <span className="material-symbols-rounded location-card-icon">
+                              {TL_CATEGORY_ICONS[it.category] || "location_on"}
+                            </span>
+                            <span className="location-card-address">{it.category}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          if (row.kind === "walk") {
             return (
               <div className="tl-row tl-row--walk" key={row.key}>
                 <div className="tl-rail-cell" />
                 <div className="tl-content-cell">
                   <span className="tl-walk-label">
-                    {row.walkMin} min walk
-                    {row.warning && <WarningIcon />}
+                    {row.distM !== null && <span>{fmtImperial(row.distM)}</span>}
+                    {row.distM !== null && <span className="tl-walk-dot">·</span>}
+                    <span>{row.walkMin} min walk</span>
                   </span>
                 </div>
               </div>
@@ -470,31 +533,7 @@ export default function TimelineScreen({
           return (
             <div className={`tl-row tl-row--card ${isSuggestion ? "tl-row--suggestion" : ""}`} key={row.key}>
               <div className="tl-rail-cell">
-                {isSuggestion ? (
-                  <button
-                    type="button"
-                    className="tl-rail-plus"
-                    onClick={(e) => { e.stopPropagation(); handleAdd(item.id); }}
-                    aria-label={`Add ${item.name} to your exploration`}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="tl-rail-flag"
-                    onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
-                    aria-label={`Remove ${item.name} from your exploration`}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <polygon points="10,2 22,7 10,12" fill="currentColor" />
-                      <rect x="8" y="2" width="2" height="20" rx="1" fill="currentColor" />
-                    </svg>
-                  </button>
-                )}
+                <div className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}`} aria-hidden="true" />
               </div>
               <div className="tl-content-cell">
                 {isExpanded ? (
@@ -532,27 +571,27 @@ export default function TimelineScreen({
                     onPointerCancel={onCardPointerUp}
                     style={{ transform: `translateX(${dx}px)`, transition }}
                   >
+                    <div className="tl-card-icon" aria-hidden="true">
+                      <span className="material-symbols-rounded">
+                        {TL_CATEGORY_ICONS[item.category] || "location_on"}
+                      </span>
+                    </div>
                     <div className="tl-card-text">
                       <span className="tl-card-name">{item.name}</span>
-                      <span className="tl-card-time">{item.time}</span>
-                      {(() => {
-                        const tags = warningTagsForItem(item);
-                        if (tags.length === 0) return null;
-                        return (
-                          <div className="tl-card-tags">
-                            {tags.map((t) => (
-                              <span key={t.id} className="tl-card-tag">
-                                {t.icon}
-                                <span>{t.label}</span>
-                              </span>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                      <span className="tl-card-cat">{item.category}</span>
                     </div>
-                    <div className="tl-card-thumb">
-                      <img src={item.image} alt={item.name} />
-                    </div>
+                    {!isSuggestion
+                      && journeyItems.length > 1
+                      && item.id !== confirmedItems[confirmedItems.length - 1]?.id && (
+                      <button
+                        type="button"
+                        className="tl-card-skip-btn"
+                        onClick={(e) => { e.stopPropagation(); handleSkipStop(item.id); }}
+                        aria-label={`Skip ${item.name}`}
+                      >
+                        Skip
+                      </button>
+                    )}
                   </div>
                 </div>
                   );
@@ -563,25 +602,17 @@ export default function TimelineScreen({
         })}
       </div>
 
-      {/* ── Sticky bottom bar: pause + End exploration ── */}
+      {/* ── Sticky bottom bar: Map (primary) · End ── */}
       <div className="tl-bottom-bar">
-        <button
-          className={`tl-pause-btn ${isPaused ? "tl-pause-btn--paused" : ""}`}
-          onClick={() => setIsPaused((p) => !p)}
-          aria-label={isPaused ? "Resume exploration" : "Pause exploration"}
-        >
-          {isPaused ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#8851D4">
-              <polygon points="7,5 20,12 7,19" />
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#8851D4">
-              <rect x="6" y="5" width="4" height="14" rx="1" />
-              <rect x="14" y="5" width="4" height="14" rx="1" />
-            </svg>
-          )}
+        <button className="tl-back-btn" onClick={handleClose} aria-label="Back to map">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21" />
+            <line x1="8" y1="3" x2="8" y2="18" />
+            <line x1="16" y1="6" x2="16" y2="21" />
+          </svg>
+          <span>Back to map</span>
         </button>
-        <button className="tl-end-btn" onClick={onEndWalk}>End exploration</button>
+        <button className="tl-end-btn" onClick={onEndWalk}>End</button>
       </div>
     </div>
   );
