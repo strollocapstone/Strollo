@@ -294,7 +294,6 @@ export default function TimelineScreen({
     if (revealedId && revealedId !== id) { setRevealedId(null); return; }
     setExpandedId((cur) => (cur === id ? null : id));
   };
-
   // Split places by added state
   const confirmedPlaces = nearbyPlaces.filter((p) => addedIds?.has(p.id));
   const suggestionPool = nearbyPlaces.filter((p) => !addedIds?.has(p.id));
@@ -464,7 +463,7 @@ export default function TimelineScreen({
             );
           }
 
-          const { item, isFirst } = row;
+          const { item } = row;
           const isSuggestion = item.type === "suggestion";
           const isExpanded = expandedId === item.id;
 

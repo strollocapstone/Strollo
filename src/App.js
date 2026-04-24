@@ -73,7 +73,7 @@ function App() {
             onClose={quizPreferences ? () => setScreen('home') : null}
           />
         )}
-        {(screen === 'navigation' || screen === 'timeline') && (
+        {screen === 'navigation' && (
           <NavigationMapScreen
             onGoBack={() => setScreen('home')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
