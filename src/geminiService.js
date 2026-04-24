@@ -166,19 +166,29 @@ export async function geocodePlace(name, nearLat, nearLon) {
   return null;
 }
 
-// Get walking route between two points via OSRM
+// Get walking route between two points via OSRM (with turn-by-turn steps)
 export async function getWalkingRoute(points) {
   if (points.length < 2) return [];
   const coords = points.map(p => `${p[1]},${p[0]}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson&steps=true`;
   const res = await fetch(url);
   const data = await res.json();
   if (data.code === 'Ok' && data.routes.length > 0) {
     const route = data.routes[0];
+    const steps = (route.legs || []).flatMap(leg => leg.steps || []).map(s => ({
+      distance: s.distance,
+      duration: s.duration,
+      maneuver: {
+        type: s.maneuver?.type,
+        modifier: s.maneuver?.modifier,
+        location: s.maneuver?.location, // [lng, lat]
+      },
+    }));
     return {
       coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
       distance: route.distance,
       duration: route.duration,
+      steps,
     };
   }
   return null;

@@ -112,6 +112,7 @@ function App() {
             journeyItems={journeyItems}
             startLocation={startLocation}
             onJourneyChange={setJourneyItems}
+            setAddedIds={setAddedIds}
             vibePreferences={quizPreferences}
             showVoice={screen === 'navigation'}
           />
@@ -139,6 +140,9 @@ function App() {
             setAddedIds={setAddedIds}
             userLocation={lastKnownLocation}
             tripStartTime={tripStartTime}
+            journeyItems={journeyItems}
+            onJourneyChange={setJourneyItems}
+            preferences={preferences}
           />
         )}
       </div>

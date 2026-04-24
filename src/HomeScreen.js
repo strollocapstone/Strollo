@@ -758,14 +758,25 @@ export default function HomeScreen({
   // Show all nearby places; tiering (pill / dot / hidden) decides visibility
   const visibleNearbyPlaces = nearbyPlaces;
 
-  const allItems = visibleNearbyPlaces;
+  // Carousel ordering: closest place to the user first, farthest last.
+  // Falls back to unsorted order when we don't yet have a user location.
+  const allItems = useMemo(() => {
+    if (!userLocation) return visibleNearbyPlaces;
+    return [...visibleNearbyPlaces]
+      .filter((p) => p.lat != null && p.lng != null)
+      .sort((a, b) => {
+        const dA = (a.lat - userLocation[0]) ** 2 + (a.lng - userLocation[1]) ** 2;
+        const dB = (b.lat - userLocation[0]) ** 2 + (b.lng - userLocation[1]) ** 2;
+        return dA - dB;
+      });
+  }, [visibleNearbyPlaces, userLocation]);
 
   return (
     <>
 
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
-        <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 15 : 2} zoomControl={false} attributionControl={false} className="map-container">
+        <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" maxZoom={19} />
           {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isAdded = addedIds.has(s.id);
@@ -825,7 +836,7 @@ export default function HomeScreen({
           })}
           {userLocation && <Marker position={userLocation} icon={youIcon} />}
           {userLocation && <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />}
-          <LocateMe trigger={locateTrigger} onLocate={handleLocate} onError={setLocateError} />
+          <LocateMe trigger={locateTrigger} zoom={17} onLocate={handleLocate} onError={setLocateError} />
           <WatchLocation onUpdate={setUserLocation} />
           <MapDragListener onDrag={handleMapDrag} />
           <MapCenterTracker onCenterChange={handleMapCenterChange} />

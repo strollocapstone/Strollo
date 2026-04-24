@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
@@ -7,31 +7,36 @@ import WalkCompanionWidget from "./WalkCompanionWidget";
 import VoiceFullScreen from "./VoiceFullScreen";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
-import { youIcon, WatchLocation, LocateMe, FitBounds } from "./mapUtils";
+import { youIcon, WatchLocation, haversineKm } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
-const stopLabelIcon = (name) => L.divIcon({
-  className: "",
-  html: `<div class="nav-stop-pin">
-    <div class="nav-stop-dot"></div>
-    <span class="nav-stop-name">${name}</span>
-  </div>`,
-  iconSize: [0, 0],
-  iconAnchor: [0, 0],
-});
+// Category → Material Symbol glyph (mirrors the one used on HomeScreen for added pins).
+const NAV_CATEGORY_ICONS = {
+  "Coffee": "local_cafe", "Restaurant": "restaurant", "Bar": "local_bar",
+  "Ice Cream": "icecream", "Bakery": "bakery", "Bookstore": "menu_book",
+  "Library": "local_library", "Theatre": "theater_comedy", "Florist": "local_florist",
+  "Museum": "museum", "Gallery": "palette", "Art": "brush",
+  "Viewpoint": "landscape", "Attraction": "attractions", "Arts": "theater_comedy",
+  "Park": "park", "Garden": "yard",
+};
 
-// ── Final destination pin (purple teardrop with accent dot) ───────────────
-const destinationIcon = L.divIcon({
-  className: "",
-  html: `<div class="dest-pin-wrap">
-    <svg width="22" height="30" viewBox="0 0 22 30" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11 29 C11 29 2 18 2 10 A9 9 0 1 1 20 10 C20 18 11 29 11 29Z" fill="#8851D4"/>
-      <circle cx="11" cy="10" r="3.5" fill="#FFD501"/>
-    </svg>
-  </div>`,
-  iconSize: [22, 30],
-  iconAnchor: [11, 30],
-});
+// Added-pill stop pin — identical look to the HomeScreen "added" pill so navigation
+// and home share one visual vocabulary (purple icon circle + name + sequence badge).
+const stopLabelIcon = (name, desc, sequence) => {
+  const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  return L.divIcon({
+    className: "",
+    html: `<div class="sugg-pin sugg-pin--added">
+      <div class="sugg-pin-dot">
+        <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+      </div>
+      <span class="sugg-pin-name">${name}</span>
+      ${sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
 
 // ── Organic area-of-interest blob markers (atmospheric, behind route) ─────
 const ORGANIC_RADII = [
@@ -51,6 +56,38 @@ const makeBlob = (w, h, rot, idx) => L.divIcon({
   iconAnchor: [w / 2, h / 2],
 });
 
+// Auto-zoom the map to fit both the user and the next destination in the visible
+// area above the bottom card, at the highest zoom level that still fits. Padding
+// reserves vertical space for the navigation card (~260px including gap) and the
+// top bar (~60px), so the route sits centered between them.
+function NavFitRoute({ userLocation, destination, trigger }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!userLocation || !destination) return;
+    const bounds = L.latLngBounds([userLocation, destination]);
+    map.fitBounds(bounds, {
+      paddingTopLeft: [50, 60],
+      paddingBottomRight: [50, 260],
+      maxZoom: 18,
+      animate: true,
+      duration: 0.6,
+    });
+  }, [userLocation, destination, trigger, map]);
+  return null;
+}
+
+// Bearing from point A to point B in degrees clockwise from north (0..360).
+function computeBearing([lat1, lng1], [lat2, lng2]) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const toDeg = (r) => (r * 180) / Math.PI;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
 // Scatter pattern — applied relative to a center lat/lng.
 const BLOB_OFFSETS = [
   { dLat:  0.0045, dLng:  0.0025, w: 120, h:  90, rot:  15 },
@@ -66,14 +103,16 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, setAddedIds, vibePreferences, showVoice = true }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
+  const [headingUp, setHeadingUp] = useState(false);     // false = north-up, true = next-maneuver-up
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
+  const [routeSteps, setRouteSteps]       = useState([]);
   const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
   const [pathHistory, setPathHistory]     = useState([]);
 
@@ -165,32 +204,63 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
     onApplyActions: applyActions,
   });
 
-  // Fetch walking route from user location through stops
+  // Fetch walking route from user location to the next stop.
+  // Re-fetch whenever (a) the target stop changes (e.g. user skipped a stop),
+  // or (b) the user has moved > ~200m since the last fetch.
   const routeFetchedFor = React.useRef(null);
+  const routeTargetRef = React.useRef(null);
   useEffect(() => {
     if (!userLocation || stopPositions.length < 1) return;
-    // Only re-fetch if user moved significantly (~200m) from last route origin
-    if (routeFetchedFor.current) {
+    const target = stopPositions[0];
+    const targetKey = `${target[0]},${target[1]}`;
+    const targetChanged = routeTargetRef.current !== targetKey;
+    if (routeFetchedFor.current && !targetChanged) {
       const [prevLat, prevLng] = routeFetchedFor.current;
       const dlat = Math.abs(userLocation[0] - prevLat);
       const dlng = Math.abs(userLocation[1] - prevLng);
       if (dlat < 0.002 && dlng < 0.002) return;
     }
     routeFetchedFor.current = userLocation;
-    const waypoints = [userLocation, ...stopPositions];
+    routeTargetRef.current = targetKey;
+    // Clear stale route/steps immediately so the UI doesn't point at the skipped stop
+    if (targetChanged) {
+      setWalkingRoute(null);
+      setRouteInfo(null);
+      setRouteSteps([]);
+    }
+    const waypoints = [userLocation, target];
     getWalkingRoute(waypoints).then((result) => {
       if (result) {
         setWalkingRoute(result.coordinates);
         setRouteInfo({ distance: result.distance, duration: result.duration });
+        setRouteSteps(result.steps || []);
       }
     }).catch(err => { console.warn("Route fetch failed:", err); });
   }, [userLocation, stopPositions]);
+
+  // Bearing from user to the next maneuver (falls back to destination).
+  // The map rotates by -bearing when headingUp is on, so the road ahead points "up".
+  const navBearing = useMemo(() => {
+    if (!userLocation) return 0;
+    const nextTurn = routeSteps.find(
+      (s) => s.maneuver?.location && s.maneuver?.modifier
+          && s.maneuver?.type !== "depart" && s.maneuver?.type !== "arrive"
+    );
+    let target;
+    if (nextTurn) target = [nextTurn.maneuver.location[1], nextTurn.maneuver.location[0]];
+    else if (stopPositions[0]) target = stopPositions[0];
+    else return 0;
+    return computeBearing(userLocation, target);
+  }, [userLocation, routeSteps, stopPositions]);
 
   return (
     <>
 
       {/* ── MAP ── */}
-      <div className="map-wrapper">
+      <div
+        className={`map-wrapper${headingUp ? " heading-up" : ""}`}
+        style={{ "--map-rotation": `${navBearing}deg` }}
+      >
         <MapContainer center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
 
@@ -213,24 +283,27 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
-          {/* Journey stop pins with labels */}
-          {journeyItems.filter((s) => s.lat && s.lng).map((s, i, arr) => (
+          {/* Only the NEXT destination is pinned while navigating —
+              other stops are hidden until the user advances. */}
+          {journeyItems.filter((s) => s.lat && s.lng).slice(0, 1).map((s) => (
             <Marker
               key={`stop-${s.id}`}
               position={[s.lat, s.lng]}
-              icon={i === arr.length - 1 ? destinationIcon : stopLabelIcon(s.name)}
+              icon={stopLabelIcon(s.name, s.desc, 1)}
             />
           ))}
 
           {/* User position */}
           <Marker position={userLocation} icon={youIcon} />
-          <LocateMe trigger={locateTrigger} onLocate={handleLocate} />
           <WatchLocation onUpdate={setUserLocation} />
 
-          {/* Fit map to show user + all stops */}
-          {stopPositions.length > 0 && (
-            <FitBounds points={[userLocation, ...stopPositions]} />
-          )}
+          {/* Zoom the map to fit user + next destination with max zoom possible.
+              Re-runs whenever userLocation, destination, or the locate button trigger changes. */}
+          <NavFitRoute
+            userLocation={userLocation}
+            destination={stopPositions[0] || null}
+            trigger={locateTrigger}
+          />
         </MapContainer>
       </div>
 
@@ -248,26 +321,8 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </div>
       )}
 
-      {/* ── BOTTOM-RIGHT STACK: Timeline (flag) + Preferences + Locate ── */}
-      <div className="bottom-right-stack">
-        <button className="fab-circle bottom-right-btn" onClick={onOpenTimeline} aria-label="Open timeline">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <polygon points="10,2 22,7 10,12" fill="#8851D4"/>
-            <rect x="8" y="2" width="2" height="20" rx="1" fill="#8851D4"/>
-            <circle cx="5" cy="20" r="1" fill="#8851D4"/>
-            <circle cx="2" cy="17" r="1" fill="#8851D4"/>
-          </svg>
-        </button>
-        <button className="fab-circle bottom-right-btn" onClick={onSetConstraints} aria-label="Preferences">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
-            <line x1="4" y1="6" x2="20" y2="6"/>
-            <line x1="4" y1="12" x2="20" y2="12"/>
-            <line x1="4" y1="18" x2="20" y2="18"/>
-            <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
-            <circle cx="15" cy="12" r="2" fill="#8851D4"/>
-            <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
-          </svg>
-        </button>
+      {/* ── BOTTOM-RIGHT STACK: just Locate (map is always north-up) ── */}
+      <div className="bottom-right-stack bottom-right-stack--nav">
         <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
@@ -285,49 +340,72 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         const nextStop = journeyItems.find((s) => s.lat && s.lng);
         const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : "your next stop";
         // Live route values when available, static placeholders otherwise.
-        const distance = routeInfo
-          ? routeInfo.distance < 1000
-            ? `${Math.round(routeInfo.distance)} m`
-            : `${(routeInfo.distance / 1000).toFixed(1)} km`
-          : "—";
-        const etaMin = routeInfo ? Math.max(1, Math.round(routeInfo.duration / 60)) : null;
+        // DIST stat: TOTAL route distance from user to the next destination (along streets),
+        // from OSRM — longer than straight-line because it follows the route geometry.
+        // Imperial units: feet when under 0.1 mile, miles above
+        const fmtDist = (m) => {
+          const feet = m * 3.28084;
+          if (feet < 528) return `${Math.round(feet)} ft`;
+          return `${(m / 1609.344).toFixed(1)} mi`;
+        };
+        // Live straight-line distance to the NEXT destination — updates every time
+        // userLocation ticks or nextStop changes (e.g. after a skip). No OSRM dependency,
+        // so it refreshes immediately on every render rather than waiting for a refetch.
+        const WALK_M_PER_MIN = 80; // ≈ 4.8 km/h walking pace
+        const liveDistToStopM = nextStop && userLocation
+          ? haversineKm(userLocation, [nextStop.lat, nextStop.lng]) * 1000
+          : null;
+        const distance = liveDistToStopM !== null ? fmtDist(liveDistToStopM) : "—";
+        const etaMin = liveDistToStopM !== null
+          ? Math.max(1, Math.round(liveDistToStopM / WALK_M_PER_MIN))
+          : null;
         const eta = etaMin !== null ? `${etaMin} min` : "—";
-        const proximity = routeInfo && routeInfo.distance < 80 ? "near" : "far";
+        // Instruction: live distance to the NEXT maneuver (turn), from OSRM step data.
+        // Switch to "TURN {direction}" once we're within ~15m of that maneuver point.
+        const nextTurn = routeSteps.find((s) =>
+          s.maneuver?.location && s.maneuver?.modifier && s.maneuver?.type !== "depart" && s.maneuver?.type !== "arrive"
+        );
+        const distToTurnM = nextTurn
+          ? haversineKm(userLocation, [nextTurn.maneuver.location[1], nextTurn.maneuver.location[0]]) * 1000
+          : null;
+        let instruction;
+        if (!userLocation || liveDistToStopM === null) {
+          instruction = "HEAD OUT";
+        } else if (distToTurnM !== null && distToTurnM <= 15) {
+          instruction = `TURN ${String(nextTurn.maneuver.modifier || "right").toUpperCase()}`;
+        } else if (distToTurnM !== null) {
+          instruction = `WALK FORWARD ${fmtDist(distToTurnM)}`;
+        } else if (liveDistToStopM <= 15) {
+          instruction = "ARRIVING";
+        } else {
+          instruction = `WALK FORWARD ${fmtDist(liveDistToStopM)}`;
+        }
         return (
           <WalkCompanionWidget
-            nextWaypoint={nextWaypoint}
+            destination={nextWaypoint}
+            instruction={instruction}
             distance={distance}
-            turn="right"
             eta={eta}
-            proximity={proximity}
-            listening={voice.listening}
-            locked={voice.locked}
-            muted={voice.muted}
-            onMuteToggle={voice.onMuteToggle}
-            onListenStart={voice.onListenStart}
-            onListenEnd={voice.onListenEnd}
-            onDragLock={voice.onDragLock}
-            onUnlock={voice.onUnlock}
-            onExpandVoice={() => setVoiceMode("full")}
+            canSkip={journeyItems.filter(s => s.lat && s.lng).length > 1}
+            onSkip={() => {
+              if (!onJourneyChange) return;
+              // Drop the current (next) stop so the one after it becomes the destination,
+              // AND remove it from addedIds so Timeline no longer shows it as planned.
+              const skippedId = journeyItems[0]?.id;
+              onJourneyChange(journeyItems.slice(1));
+              if (skippedId != null && setAddedIds) {
+                setAddedIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(skippedId);
+                  return next;
+                });
+              }
+            }}
+            onCheckJourney={onOpenTimeline}
+            onEnd={onGoBack}
           />
         );
       })()}
-
-      {/* ── VOICE FULL-SCREEN OVERLAY ── */}
-      {showVoice && voiceMode === "full" && (
-        <VoiceFullScreen
-          listening={voice.listening}
-          locked={voice.locked}
-          muted={voice.muted}
-          messages={voice.messages}
-          onMuteToggle={voice.onMuteToggle}
-          onListenStart={voice.onListenStart}
-          onListenEnd={voice.onListenEnd}
-          onDragLock={voice.onDragLock}
-          onUnlock={voice.onUnlock}
-          onMinimize={() => setVoiceMode(null)}
-        />
-      )}
 
     </>
   );

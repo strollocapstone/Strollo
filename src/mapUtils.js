@@ -59,9 +59,9 @@ export function WatchLocation({ onUpdate }) {
 }
 
 // ── Locate user (instant on first call, animated on subsequent) ──────────
-const LOCATE_ZOOM = 16; // "default" zoom when the locate button is pressed
-
-export function LocateMe({ trigger, onLocate, onError }) {
+// The caller passes the screen's default zoom so pressing "locate" always returns
+// to that screen's baseline (HomeScreen = 15, NavigationMapScreen used 16 before).
+export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
   const map = useMap();
   const onLocateRef = useRef(onLocate);
   const onErrorRef = useRef(onError);
@@ -78,11 +78,11 @@ export function LocateMe({ trigger, onLocate, onError }) {
         const pos = [coords.latitude, coords.longitude];
         try {
           if (isFirstLocate.current) {
-            map.setView(pos, LOCATE_ZOOM);
+            map.setView(pos, zoom);
             isFirstLocate.current = false;
           } else {
             // Always fly to user at the default zoom — animates even if we're already there
-            map.flyTo(pos, LOCATE_ZOOM, { duration: 0.9 });
+            map.flyTo(pos, zoom, { duration: 0.9 });
           }
         } catch (_) { /* map may be unmounted */ }
         onLocateRef.current(pos);
