@@ -29,6 +29,9 @@ export const youIcon = L.divIcon({
   iconAnchor: [21, 32],
 });
 
+// ── Fallback location if GPS is unavailable (UC Berkeley, Sproul Plaza) ──
+export const MOCK_LOCATION = [37.8691, -122.2596];
+
 // ── Watch user location (with 10m threshold to avoid waggle) ─────────────
 export function WatchLocation({ onUpdate }) {
   const onUpdateRef = useRef(onUpdate);

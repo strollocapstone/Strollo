@@ -221,6 +221,9 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
             desc: categoryMap[tag] || tag || "Place",
             lat: el.lat,
             lng: el.lon,
+            hours: el.tags.opening_hours || null,
+            website: el.tags.website || el.tags["contact:website"] || null,
+            phone: el.tags.phone || el.tags["contact:phone"] || null,
           };
         });
     } catch (err) {
