@@ -24,6 +24,7 @@ function App() {
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
+  const [tripStartTime, setTripStartTime] = useState(null);
   const [preferences, setPreferences] = useState(null);
   const [quizPreferences, setQuizPreferences] = useState(initialQuizPrefs);
   const [openSheetOnHome, setOpenSheetOnHome] = useState(false);
@@ -43,7 +44,7 @@ function App() {
       <div className="phone-frame">
         {(screen === 'home' || screen === 'constraints') && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setScreen('navigation'); }}
+            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setScreen('navigation'); }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             onOpenQuiz={() => setScreen('quiz')}
@@ -72,7 +73,7 @@ function App() {
             onClose={quizPreferences ? () => setScreen('home') : null}
           />
         )}
-        {(screen === 'navigation' || screen === 'timeline') && (
+        {screen === 'navigation' && (
           <NavigationMapScreen
             onGoBack={() => setScreen('home')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
@@ -99,7 +100,15 @@ function App() {
           />
         )}
         {screen === 'timeline' && (
-          <TimelineScreen onBack={() => setScreen('home')} onEndWalk={() => setScreen('reward')} />
+          <TimelineScreen
+            onGoBack={() => setScreen('navigation')}
+            onEndWalk={() => setScreen('reward')}
+            nearbyPlaces={nearbyPlaces}
+            addedIds={addedIds}
+            setAddedIds={setAddedIds}
+            userLocation={lastKnownLocation}
+            tripStartTime={tripStartTime}
+          />
         )}
       </div>
     </div>
