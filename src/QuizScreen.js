@@ -1,44 +1,120 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import "./QuizScreen.css";
 
-// ── Deck (12 polaroids) ───────────────────────────────────────────────────
-// Images are interior shots of each kind of space.
-// Interior shots from Unsplash. If any of these don't look like the inside of the
-// described space, swap the photo ID for a better match.
-const IMG = (id) => `https://images.unsplash.com/photo-${id}?w=520&h=680&fit=crop&q=80`;
+// ── Deck (6 lifestyle bundles) ────────────────────────────────────────────
+// Each polaroid is a complete lifestyle preset: caption sells the vibe,
+// preset fields seed PreferencesScreen when the card is liked. Fields use
+// the exact option values from src/PreferencesScreen.js (DESTINATION_OPTIONS,
+// DURATION_OPTIONS, ACCESSIBILITY_OPTIONS, AVOIDANCE_OPTIONS, MAP_FILTERS ids).
+// antiAvoidances apply when the card is hard-passed.
+// Six cards cover every preference dimension at least once between them.
 const QUIZ_DECK = [
-  { id: "p1",  image: IMG("1524995997946-a1c2e315a42f"),  caption: "bookshop with gothic aesthetic",     vibes: ["bookish", "moody", "quiet"] },
-  { id: "p2",  image: IMG("1559305289-4c31d1a4d5dd"),     caption: "boba shop with biophilic decor",     vibes: ["leafy", "foodie", "playful"] },
-  { id: "p3",  image: IMG("1586023492125-27b2c045efd7"),  caption: "coffeeshop with nook seating",       vibes: ["cozy", "quiet", "bookish"] },
-  { id: "p4",  image: IMG("1528605248644-14dd04022da1"),  caption: "leafy courtyard, mismatched chairs", vibes: ["leafy", "boho", "social"] },
-  { id: "p5",  image: IMG("1526318896980-cf78c088247c"),  caption: "neon ramen bar",                     vibes: ["foodie", "moody", "social"] },
-  { id: "p6",  image: IMG("1526669281048-b7e6f0cdd66e"),  caption: "vintage record store",               vibes: ["retro", "artsy", "indoor"] },
-  { id: "p7",  image: IMG("1509600110300-21b9d5fedeb7"),  caption: "quiet rooftop garden",               vibes: ["leafy", "quiet", "bright"] },
-  { id: "p8",  image: IMG("1555507036-ab1f4038808a"),     caption: "bakery with copper ovens",           vibes: ["foodie", "cozy", "maker"] },
-  { id: "p9",  image: IMG("1544967082-d9d25d867d66"),     caption: "gallery of tiny sculptures",         vibes: ["artsy", "quiet", "maker"] },
-  { id: "p10", image: IMG("1514933651103-005eec06c04b"),  caption: "dive bar with a disco ball",         vibes: ["retro", "social", "playful"] },
-  { id: "p11", image: IMG("1441986300917-64674bd600d8"),  caption: "botanical greenhouse café",          vibes: ["leafy", "bright", "foodie"] },
-  { id: "p12", image: IMG("1565193566173-7a0ee3dbe261"),  caption: "pottery studio you can wander in",   vibes: ["maker", "artsy", "cozy"] },
+  { id: "p1",  image: "https://mycahvauae.com/cdn/shop/articles/aromatic-coffee-cup-rustic-table-refreshing-caffeine-boost-generated-by-artificial-intelligence.webp?v=1737708271&width=2200",
+    caption: "slow latte, short loop, back before noon",
+    vibes: ["cozy", "quiet", "foodie"],
+    preset: { destination: "loop", duration: "30 min", distance: 1.0,
+              avoidances: ["Hilly terrain", "Busy roads"],
+              mapFilters: ["cafes", "ai-highlights", "saved-places"] } },
+  { id: "p2",  image: "https://fastly.picsum.photos/id/190/2048/1365.jpg?hmac=NWS1_X_JJ-Edi-9SZRhNwHyjKt1nECckxrGLS8_idjY",
+    caption: "leafy paths, benches, no time limit",
+    vibes: ["leafy", "quiet", "cozy", "bright"],
+    preset: { destination: "open", duration: "120 min", distance: 3.0,
+              accessibility: ["Wheelchair"],
+              avoidances: ["Big crowds", "Construction"],
+              mapFilters: ["parks", "benches", "ai-highlights", "saved-places"] } },
+  { id: "p3",  image: "https://ca-times.brightspotcdn.com/dims4/default/3effaf1/2147483647/strip/true/crop/4999x2624+1+535/resize/1200x630!/quality/75/?url=https%3A%2F%2Fcalifornia-times-brightspot.s3.amazonaws.com%2Fd7%2Fac%2F36d9ec5b4d559a8fbc7e710a9cab%2F1-exclusive.jpg",
+    caption: "museums, landmarks, postcard stops",
+    vibes: ["artsy", "bookish", "bright", "social"],
+    preset: { destination: "specific", duration: "120 min", distance: 2.5,
+              mapFilters: ["museums", "attractions", "ai-highlights", "saved-places"],
+              antiAvoidances: ["Touristy spots"] } },
+  { id: "p4",  image: "https://media.istockphoto.com/id/1399630042/photo/personal-perspective-shot-of-a-womans-hand-holding-a-bao-bun-with-tofu-at-a-street-market.jpg?s=612x612&w=0&k=20&c=Gf6nwc3z-Sxthx5tlnJqDNeXhSi7J4rghMtcM49UsvQ=",
+    caption: "street food, neon, one more block",
+    vibes: ["foodie", "social", "moody", "retro"],
+    preset: { destination: "specific", duration: "60 min", distance: 1.5,
+              avoidances: ["Busy roads"],
+              mapFilters: ["food", "attractions", "ai-highlights", "saved-places"],
+              antiAvoidances: ["Bars & nightlife"] } },
+  { id: "p5",  image: "https://thumbs.dreamstime.com/b/picnic-blanket-grass-park-picnic-blanket-basket-grass-park-158134356.jpg",
+    caption: "picnics, playgrounds, naptime at noon",
+    vibes: ["playful", "leafy", "bright"],
+    preset: { destination: "loop", duration: "60 min", distance: 0.8,
+              accessibility: ["Stroller"],
+              avoidances: ["Hilly terrain", "Construction"],
+              mapFilters: ["parks", "dog-friendly", "ai-highlights", "saved-places"] } },
+  { id: "p6",  image: "https://malt.org/wp-content/uploads/2024/03/wildflower_hikes_san_francisco_MALT.jpg",
+    caption: "wildflower trails, long views, no crowds",
+    vibes: ["leafy", "moody", "boho", "bright"],
+    preset: { destination: "open", duration: "No time limit", distance: 4.0,
+              avoidances: ["Touristy spots", "Big crowds", "Places I've already explored"],
+              mapFilters: ["parks", "sights", "attractions", "ai-highlights", "saved-places"] } },
 ];
 
-// ── Swipe directions ──────────────────────────────────────────────────────
+// ── Preset aggregation ────────────────────────────────────────────────────
+const DURATION_ORDER = ["15 min", "30 min", "60 min", "120 min", "No time limit"];
+
+function buildMergedPreset(history, deck) {
+  const liked = [], hated = [];
+  for (const h of history) {
+    const card = deck.find(d => d.id === h.polaroidId);
+    if (!card?.preset) continue;
+    const w = LABELS[h.direction].weight;
+    if (w >= 1) liked.push(card);
+    else if (w <= -1) hated.push(card);
+  }
+  if (liked.length === 0 && hated.length === 0) return null;
+
+  const destCounts = {};
+  for (const c of liked) if (c.preset.destination) destCounts[c.preset.destination] = (destCounts[c.preset.destination] || 0) + 1;
+  const destination = Object.keys(destCounts).sort((a, b) => destCounts[b] - destCounts[a])[0] || null;
+
+  const durIdxs = liked
+    .map(c => DURATION_ORDER.indexOf(c.preset.duration))
+    .filter(i => i >= 0)
+    .sort((a, b) => a - b);
+  const duration = durIdxs.length ? DURATION_ORDER[durIdxs[Math.floor(durIdxs.length / 2)]] : null;
+
+  const customDuration = liked.find(c => c.preset.customDuration)?.preset.customDuration || null;
+
+  const dists = liked.map(c => c.preset.distance).filter(v => typeof v === "number");
+  const distance = dists.length ? Math.round((dists.reduce((a, b) => a + b, 0) / dists.length) * 2) / 2 : null;
+
+  const accessibility = [...new Set(liked.flatMap(c => c.preset.accessibility || []))];
+
+  const avoidSet = new Set();
+  for (const c of liked) for (const a of (c.preset.avoidances || [])) avoidSet.add(a);
+  for (const c of hated) for (const a of (c.preset.antiAvoidances || [])) avoidSet.add(a);
+  const avoidances = [...avoidSet];
+
+  const mapFiltersArr = [...new Set(liked.flatMap(c => c.preset.mapFilters || []))];
+
+  return {
+    destination,
+    destChosen: null,
+    duration: customDuration ? null : duration,
+    customDuration,
+    distance,
+    accessibility,
+    avoidances,
+    mapFilters: mapFiltersArr.length ? mapFiltersArr : null,
+  };
+}
+
+// ── Swipe directions (binary: up = yes, down = no) ───────────────────────
 const LABELS = {
-  up:    { text: "YES, please",  weight:  2, pinned: true  },
-  right: { text: "Would go",     weight:  1, pinned: true  },
-  left:  { text: "Meh",          weight: -1, pinned: false },
-  down:  { text: "Hard pass",    weight: -2, pinned: false },
+  up:   { text: "YES, please", weight:  1, pinned: true  },
+  down: { text: "NO, thanks",  weight: -1, pinned: false },
 };
 
-const THRESHOLD_PX = 80;
-const VELOCITY_MIN = 0.6;
+// Low threshold — any meaningful vertical intent commits.
+const THRESHOLD_PX = 10;
+const VELOCITY_MIN = 0.3;
 
 function classifyDrag(dx, dy, vx, vy) {
-  const absX = Math.abs(dx);
   const absY = Math.abs(dy);
-  const overThreshold = absX > THRESHOLD_PX || absY > THRESHOLD_PX;
-  const fastEnough = Math.abs(vx) > VELOCITY_MIN || Math.abs(vy) > VELOCITY_MIN;
+  const overThreshold = absY > THRESHOLD_PX;
+  const fastEnough = Math.abs(vy) > VELOCITY_MIN;
   if (!overThreshold && !fastEnough) return null;
-  if (absX > absY) return dx > 0 ? "right" : "left";
   return dy > 0 ? "down" : "up";
 }
 
@@ -68,12 +144,13 @@ function MiniPolaroid({ item, angle, delay }) {
 }
 
 // ── Quiz Screen ───────────────────────────────────────────────────────────
-export default function QuizScreen({ initialPreferences, onComplete, onClose }) {
+export default function QuizScreen({ initialPreferences, onComplete, onClose, onSkip }) {
   const [index, setIndex] = useState(0);
   const [history, setHistory] = useState([]); // [{ polaroidId, direction }]
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const [exitDir, setExitDir] = useState(null);
   const [peekDir, setPeekDir] = useState(null);
+  const [closing, setClosing] = useState(false);
   // "drag" uses CSS transition (card has momentum from the finger); "button"
   // uses a keyframes animation with a subtle wind-up so the tap doesn't feel teleport-y.
   const exitSourceRef = useRef("drag");
@@ -117,13 +194,17 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
 
   useEffect(() => {
     if (!drag.active) { setPeekDir(null); return; }
-    const { x, y } = drag;
-    if (Math.abs(x) < 20 && Math.abs(y) < 20) { setPeekDir(null); return; }
-    setPeekDir(Math.abs(x) > Math.abs(y) ? (x > 0 ? "right" : "left") : (y > 0 ? "down" : "up"));
+    if (Math.abs(drag.y) < 6) { setPeekDir(null); return; }
+    setPeekDir(drag.y > 0 ? "down" : "up");
   }, [drag]);
 
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const completionScheduledRef = useRef(false);
   useEffect(() => {
-    if (!done || !onComplete) return;
+    if (!done || completionScheduledRef.current) return;
+    completionScheduledRef.current = true;
+    setClosing(true);
     const vibeScores = {};
     for (const h of history) {
       const card = QUIZ_DECK.find(d => d.id === h.polaroidId);
@@ -131,12 +212,17 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
       const w = LABELS[h.direction].weight;
       for (const v of card.vibes) vibeScores[v] = (vibeScores[v] || 0) + w;
     }
-    onComplete({
+    const payload = {
       vibeScores,
+      mergedPreset: buildMergedPreset(history, QUIZ_DECK),
       quizHistory: history,
       completedAt: new Date().toISOString(),
-    });
-  }, [done, history, onComplete]);
+    };
+    const t = setTimeout(() => {
+      onCompleteRef.current?.(payload);
+    }, 900);
+    return () => clearTimeout(t);
+  }, [done, history]);
 
   const commitSwipe = useCallback((direction, source = "drag") => {
     if (!current || animatingRef.current) return;
@@ -214,11 +300,9 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
         };
       }
       const travel = 800;
-      const map = { up: [0, -travel], down: [0, travel], left: [-travel, 0], right: [travel, 0] };
-      const [tx, ty] = map[exitDir];
-      const rot = exitDir === "left" ? -15 : exitDir === "right" ? 15 : 0;
+      const ty = exitDir === "up" ? -travel : travel;
       return {
-        transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg)`,
+        transform: `translate(0, ${ty}px) rotate(0deg)`,
         transition: "transform 640ms cubic-bezier(0.22, 1, 0.36, 1), opacity 520ms ease-out 80ms",
         opacity: 0,
       };
@@ -238,19 +322,28 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
 
   if (done) {
     return (
-      <div className="quiz-screen quiz-done">
-        <div className="quiz-done-inner">
+      <div className={`quiz-screen quiz-done${closing ? " quiz-screen--closing" : ""}`}>
+        <div className="quiz-blobs">
+          <div className="quiz-blob quiz-blob--1" />
+          <div className="quiz-blob quiz-blob--2" />
+          <div className="quiz-blob quiz-blob--3" />
+        </div>
+        <div className={`quiz-done-inner${closing ? " quiz-done-inner--fading" : ""}`}>
           <h1>All set!</h1>
           <p>We've got a feel for your vibe.</p>
+          <p className="quiz-done-hint">You can always tweak these later in the settings button.</p>
         </div>
       </div>
     );
   }
 
-  const progressLabel = `${index + 1}/${total}`;
-
   return (
     <div className="quiz-screen">
+      <div className={`quiz-blobs${closing ? " quiz-blobs--genie" : ""}`}>
+        <div className="quiz-blob quiz-blob--1" />
+        <div className="quiz-blob quiz-blob--2" />
+        <div className="quiz-blob quiz-blob--3" />
+      </div>
       {/* Close */}
       <div className="quiz-topbar">
         <div style={{ flex: 1 }} />
@@ -272,10 +365,8 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
           <span className="quiz-subtitle-arrows">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </span>
-          <span>to sort</span>
+          <span>to decide</span>
         </p>
       </div>
 
@@ -324,87 +415,74 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
         </svg>
         <span>YES, please</span>
       </button>
-      <button type="button" className="quiz-dir quiz-dir--right" onClick={() => commitSwipe("right", "button")} aria-label="Would go">
-        <span>Would go</span>
-        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-        </svg>
-      </button>
-      <button type="button" className="quiz-dir quiz-dir--left" onClick={() => commitSwipe("left", "button")} aria-label="Meh">
-        <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-        </svg>
-        <span>Meh</span>
-      </button>
-      <button type="button" className="quiz-dir quiz-dir--bottom" onClick={() => commitSwipe("down", "button")} aria-label="Hard pass">
+      <button type="button" className="quiz-dir quiz-dir--bottom" onClick={() => commitSwipe("down", "button")} aria-label="NO, thanks">
         <svg className="quiz-dir-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
         </svg>
-        <span>Hard pass</span>
+        <span>NO, thanks</span>
       </button>
 
-      {/* Polaroid stack */}
+      {/* Polaroid stack — rendered as a keyed list so the same DOM element
+          carries a card through under2 → under1 → active. When the active card
+          leaves, React keeps card(n+1)'s element mounted and only swaps its
+          layer class, which lets CSS transitions handle the "float up". */}
       <div className="quiz-stack">
-        {nextNext && (
-          <div className="quiz-card quiz-card--under2" aria-hidden>
-            <div className="quiz-card-photo" style={nextNext.image ? { backgroundImage: `url(${nextNext.image})` } : undefined} />
-            <div className="quiz-card-caption"><span className="quiz-card-index">{index + 3}/{total}</span> {nextNext.caption}</div>
-          </div>
-        )}
-        {next && (
-          <div className="quiz-card quiz-card--under1" aria-hidden>
-            <div className="quiz-card-photo" style={next.image ? { backgroundImage: `url(${next.image})` } : undefined} />
-            <div className="quiz-card-caption"><span className="quiz-card-index">{index + 2}/{total}</span> {next.caption}</div>
-          </div>
-        )}
-        {current && (
-          <div
-            ref={cardRef}
-            className={`quiz-card quiz-card--active ${exitDir ? `quiz-card--exit-${exitDir}` : ""}`}
-            style={cardStyle}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-          >
-            <div className="quiz-card-photo" style={current.image ? { backgroundImage: `url(${current.image})` } : undefined} />
-            <div className="quiz-card-caption">
-              <span className="quiz-card-index">{progressLabel}</span> {current.caption}
-            </div>
-            {(() => {
-              const dir = exitDir || peekDir;
-              if (dir !== "left" && dir !== "down") return null;
-              return (
-                <svg className={`quiz-scribble quiz-scribble--${dir}`} viewBox="0 0 220 320" preserveAspectRatio="none">
-                  <path
-                    className="quiz-scribble-line quiz-scribble-line--1"
-                    pathLength="1"
-                    d="M 22 28 Q 72 8, 118 42 T 200 30 L 210 72 Q 150 96, 88 72 T 18 104 Q 82 126, 160 108 L 212 148 Q 152 176, 74 152 T 20 192 Q 92 216, 178 196 L 210 236 Q 136 268, 64 246 T 16 292 Q 86 312, 172 290"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    className="quiz-scribble-line quiz-scribble-line--2"
-                    pathLength="1"
-                    d="M 206 22 Q 138 56, 70 24 T 14 58 Q 70 88, 150 66 L 210 100 Q 152 138, 82 112 T 22 148 L 18 182 Q 104 168, 186 184 T 208 218 Q 136 246, 60 230 L 20 268 Q 94 282, 180 268"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    className="quiz-scribble-line quiz-scribble-line--3"
-                    pathLength="1"
-                    d="M 40 60 Q 110 34, 180 80 Q 120 110, 54 92 L 90 140 Q 160 128, 200 166 Q 130 196, 60 178 L 100 220 Q 170 208, 196 244 Q 130 276, 56 258"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              );
-            })()}
-          </div>
-        )}
+        {(() => {
+          const layers = [];
+          if (nextNext) layers.push({ card: nextNext, cls: "under2", label: index + 3 });
+          if (next)     layers.push({ card: next,     cls: "under1", label: index + 2 });
+          if (current)  layers.push({ card: current,  cls: "active", label: index + 1 });
+          return layers.map(({ card, cls, label }) => {
+            const isActive = cls === "active";
+            const scribbleDir = isActive ? (exitDir || peekDir) : null;
+            return (
+              <div
+                key={card.id}
+                ref={isActive ? cardRef : null}
+                className={`quiz-card quiz-card--${cls}${isActive && exitDir ? ` quiz-card--exit-${exitDir}` : ""}`}
+                style={isActive ? cardStyle : undefined}
+                aria-hidden={!isActive}
+                onPointerDown={isActive ? onPointerDown : undefined}
+                onPointerMove={isActive ? onPointerMove : undefined}
+                onPointerUp={isActive ? onPointerUp : undefined}
+                onPointerCancel={isActive ? onPointerUp : undefined}
+              >
+                <div className="quiz-card-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
+                <div className="quiz-card-caption">
+                  <span className="quiz-card-index">{label}/{total}</span> {card.caption}
+                </div>
+                {isActive && scribbleDir === "down" && (
+                  <svg className={`quiz-scribble quiz-scribble--${scribbleDir}`} viewBox="0 0 220 320" preserveAspectRatio="none">
+                    <path
+                      className="quiz-scribble-line quiz-scribble-line--1"
+                      pathLength="1"
+                      d="M 22 28 Q 72 8, 118 42 T 200 30 L 210 72 Q 150 96, 88 72 T 18 104 Q 82 126, 160 108 L 212 148 Q 152 176, 74 152 T 20 192 Q 92 216, 178 196 L 210 236 Q 136 268, 64 246 T 16 292 Q 86 312, 172 290"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      className="quiz-scribble-line quiz-scribble-line--2"
+                      pathLength="1"
+                      d="M 206 22 Q 138 56, 70 24 T 14 58 Q 70 88, 150 66 L 210 100 Q 152 138, 82 112 T 22 148 L 18 182 Q 104 168, 186 184 T 208 218 Q 136 246, 60 230 L 20 268 Q 94 282, 180 268"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      className="quiz-scribble-line quiz-scribble-line--3"
+                      pathLength="1"
+                      d="M 40 60 Q 110 34, 180 80 Q 120 110, 54 92 L 90 140 Q 160 128, 200 166 Q 130 196, 60 178 L 100 220 Q 170 208, 196 244 Q 130 276, 56 258"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {/* Footer */}
@@ -415,6 +493,11 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose }) 
               <path d="M9 14L4 9l5-5" />
               <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
             </svg>
+          </button>
+        )}
+        {onSkip && (
+          <button type="button" className="quiz-skip" onClick={onSkip}>
+            Skip for now
           </button>
         )}
       </div>

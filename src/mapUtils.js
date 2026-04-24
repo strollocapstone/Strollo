@@ -59,6 +59,8 @@ export function WatchLocation({ onUpdate }) {
 }
 
 // ── Locate user (instant on first call, animated on subsequent) ──────────
+const LOCATE_ZOOM = 16; // "default" zoom when the locate button is pressed
+
 export function LocateMe({ trigger, onLocate, onError }) {
   const map = useMap();
   const onLocateRef = useRef(onLocate);
@@ -76,10 +78,11 @@ export function LocateMe({ trigger, onLocate, onError }) {
         const pos = [coords.latitude, coords.longitude];
         try {
           if (isFirstLocate.current) {
-            map.setView(pos, 16);
+            map.setView(pos, LOCATE_ZOOM);
             isFirstLocate.current = false;
           } else {
-            map.flyTo(pos, 16, { duration: 1.4 });
+            // Always fly to user at the default zoom — animates even if we're already there
+            map.flyTo(pos, LOCATE_ZOOM, { duration: 0.9 });
           }
         } catch (_) { /* map may be unmounted */ }
         onLocateRef.current(pos);
@@ -116,6 +119,16 @@ export function TrackUserPosition({ userPos, onScreenPos }) {
   return null;
 }
 
+// ── Listen for map background clicks (empty area, not markers) ───────────
+export function MapClickListener({ onClick }) {
+  const map = useMap();
+  useEffect(() => {
+    map.on("click", onClick);
+    return () => map.off("click", onClick);
+  }, [map, onClick]);
+  return null;
+}
+
 // ── Listen for map drag ──────────────────────────────────────────────────
 export function MapDragListener({ onDrag }) {
   const map = useMap();
@@ -123,6 +136,18 @@ export function MapDragListener({ onDrag }) {
     map.on("dragstart", onDrag);
     return () => map.off("dragstart", onDrag);
   }, [map, onDrag]);
+  return null;
+}
+
+// ── Track map zoom level (fires on zoomend) ──────────────────────────────
+export function ZoomTracker({ onZoom }) {
+  const map = useMap();
+  useEffect(() => {
+    const handler = () => onZoom(map.getZoom());
+    handler();
+    map.on("zoomend", handler);
+    return () => map.off("zoomend", handler);
+  }, [map, onZoom]);
   return null;
 }
 

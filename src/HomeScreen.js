@@ -7,21 +7,68 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, isWithinWalkingRadius } from "./mapUtils";
+import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius } from "./mapUtils";
 
-const makePinIcon = (name, desc, added, expanded) => L.divIcon({
+const CATEGORY_ICONS = {
+  "Coffee":     "local_cafe",
+  "Restaurant": "restaurant",
+  "Bar":        "local_bar",
+  "Ice Cream":  "icecream",
+  "Bakery":     "bakery",
+  "Bookstore":  "menu_book",
+  "Library":    "local_library",
+  "Theatre":    "theater_comedy",
+  "Florist":    "local_florist",
+  "Museum":     "museum",
+  "Gallery":    "palette",
+  "Art":        "brush",
+  "Viewpoint":  "landscape",
+  "Attraction": "attractions",
+  "Arts":       "theater_comedy",
+  "Park":       "park",
+  "Garden":     "yard",
+};
+
+const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
+  const icon = CATEGORY_ICONS[desc] || "location_on";
+  const isDot = mode === 'dot';
+  const isMini = mode === 'mini';
+  const isPill = mode === 'pill';
+  const classes = ['sugg-pin'];
+  if (isDot) classes.push('sugg-pin--dot');
+  if (isMini) classes.push('sugg-pin--mini');
+  if (isPill && expanded) classes.push('sugg-pin--open');
+  if (added) classes.push('sugg-pin--added');
+  return L.divIcon({
+    className: "",
+    html: `<div class="${classes.join(' ')}">
+    <div class="sugg-pin-dot">
+      <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+    </div>
+    ${!isMini ? `<span class="${isPill ? 'sugg-pin-name' : 'sugg-pin-label'}">${name}</span>` : ''}
+    ${isPill && expanded ? `<div class="sugg-pin-extra">
+      <button class="sugg-pin-add-btn${added ? ' sugg-pin-add-btn--remove' : ''}" data-action="toggle" aria-label="${added ? 'Remove from itinerary' : 'Add to itinerary'}">
+        ${added
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D44" stroke-width="3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>`
+          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
+      </button>
+    </div>` : ''}
+    ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
+  </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
+
+const makeAiPinIcon = (name, desc, expanded) => L.divIcon({
   className: "",
-  html: `<div class="sugg-pin${expanded ? " sugg-pin--open" : ""}${added ? " sugg-pin--added" : ""}">
-    <div class="sugg-pin-dot"></div>
+  html: `<div class="sugg-pin sugg-pin--ai${expanded ? " sugg-pin--open" : ""}">
+    <div class="sugg-pin-dot sugg-pin-dot--ai">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+    </div>
     <span class="sugg-pin-name">${name}</span>
     <div class="sugg-pin-extra">
       <span class="sugg-pin-desc">${desc}</span>
-      <button class="sugg-pin-btn sugg-pin-btn--icon" data-action="toggle" aria-label="${added ? "Remove from itinerary" : "Add to itinerary"}">
-        ${added
-          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
-        }
-      </button>
     </div>
   </div>`,
   iconSize: [0, 0],
@@ -29,55 +76,35 @@ const makePinIcon = (name, desc, added, expanded) => L.divIcon({
 });
 
 // ── Location card ──────────────────────────────────────────────────────────
-const LOVED_PLACES = ["Sightglass Coffee", "Dolores Park", "Ferry Building"];
-
-const trustTagFor = (id) => {
-  const variant = id % 3;
-  if (variant === 0) return "From your last walk";
-  if (variant === 1) return `Because you loved ${LOVED_PLACES[id % LOVED_PLACES.length]}`;
-  return "Based on your preferences";
-};
-
-const LocationCard = memo(function LocationCard({ item, added, faved, onToggle, onFave }) {
+const LocationCard = memo(function LocationCard({ item, added, onToggle }) {
   return (
     <div className="location-card">
-      <div
-        className="location-card-image"
-        style={item.image ? { backgroundImage: `url(${item.image})` } : undefined}
-      >
-        <div className="location-card-gradient" />
-        <button
-          className={`location-card-add ${added ? "added" : ""}`}
-          onClick={() => onToggle(item.id)}
-          aria-label={added ? "Remove from itinerary" : "Add to itinerary"}
-        >
-          {added ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="3" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          )}
-        </button>
-      </div>
       <div className="location-card-info">
         <div className="location-card-name-row">
           <span className="location-card-name">{item.name}</span>
           <button
-            className={`location-card-fave ${faved ? "faved" : ""}`}
-            onClick={() => onFave(item.id)}
-            aria-label={faved ? "Unfave" : "Fave"}
+            className={`location-card-add ${added ? "added" : ""}`}
+            onClick={() => onToggle(item.id)}
+            aria-label={added ? "Remove from itinerary" : "Add to itinerary"}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={faved ? "#FF6B6B" : "none"} stroke={faved ? "#FF6B6B" : "#ccc"} strokeWidth="2">
-              <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z"/>
-            </svg>
+            {added ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="3" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            )}
           </button>
         </div>
-        <span className="location-card-address">{item.desc || item.address || ""}</span>
-        <span className="location-card-tag">{trustTagFor(item.id)}</span>
+        <div className="location-card-category">
+          <span className="material-symbols-rounded location-card-icon">
+            {CATEGORY_ICONS[item.desc] || "location_on"}
+          </span>
+          <span className="location-card-address">{item.desc || ""}</span>
+        </div>
       </div>
     </div>
   );
@@ -187,6 +214,8 @@ export default function HomeScreen({
   setFavedIds,
   lastFetchedLocationRef,
   lastFetchTimeRef,
+  settingsHighlight,
+  quizPending,
 }) {
   const [userLocation, setUserLocation]   = useState(initialLocation || null);
   const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
@@ -222,16 +251,65 @@ export default function HomeScreen({
   const [viewingHistory, setViewingHistory]     = useState(null);
   const [listenTextMode, setListenTextMode]     = useState(false);
   const [suggestedStops, setSuggestedStops]     = useState([]);
+  const [geocodedSuggestions, setGeocodedSuggestions] = useState([]);
   const [planLoading, setPlanLoading]           = useState(false);
   const [selectedPoi, setSelectedPoi]           = useState(null);
+  const [mapZoom, setMapZoom]                   = useState(15);
   const chatHistoryIdCounter = useRef(0);
   const chatIdCounter = useRef(0);
   const resultTimer = useRef(null);
   const nearbyAbortRef = useRef(null);
+  const dragDebounceRef = useRef(null);
+  const geocodeReqRef = useRef(0);
+  const userLocationRef = useRef(userLocation);
+  userLocationRef.current = userLocation;
 
   // Clean up resultTimer on unmount
   useEffect(() => { return () => clearTimeout(resultTimer.current); }, []);
   useEffect(() => () => { nearbyAbortRef.current?.abort(); }, []);
+  useEffect(() => () => clearTimeout(dragDebounceRef.current), []);
+
+  // Track bottom-search height and push button stack above it (per-frame, no re-renders)
+  useEffect(() => {
+    const el = bottomSearchRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const h = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height;
+      if (buttonStackRef.current) buttonStackRef.current.style.bottom = `${h + 12}px`;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [voiceExpanded]);
+
+  const geocodeSuggestions = useCallback((places) => {
+    const loc = userLocationRef.current;
+    if (!loc || !places || places.length === 0) return;
+    const reqId = ++geocodeReqRef.current;
+    setGeocodedSuggestions([]);
+    (async () => {
+      for (let i = 0; i < places.length; i++) {
+        const place = places[i];
+        const result = await geocodePlace(place.name, loc[0], loc[1]);
+        if (geocodeReqRef.current !== reqId) return;
+        if (!result) continue;
+        // Drop if outside ~3km
+        const dlat = Math.abs(result.lat - loc[0]);
+        const dlng = Math.abs(result.lng - loc[1]);
+        if (dlat >= 0.027 || dlng >= 0.027) continue;
+        setGeocodedSuggestions(prev => {
+          // Dedup by rough coords
+          if (prev.some(p => Math.abs(p.lat - result.lat) < 0.0002 && Math.abs(p.lng - result.lng) < 0.0002)) return prev;
+          return [...prev, {
+            id: `ai-${reqId}-${i}`,
+            name: place.name,
+            desc: place.desc,
+            lat: result.lat,
+            lng: result.lng,
+          }];
+        });
+      }
+    })();
+  }, []);
 
   const loadNearbyPlaces = useCallback(async (loc, force = false) => {
     const now = Date.now();
@@ -244,18 +322,45 @@ export default function HomeScreen({
 
     setNearbyLoading(true);
     setNearbyError("");
+
+    const RADII = [300, 800, 1500];
+    const seen = new Set();
+    let merged = [];
+    let gotAny = false;
+    let loadingCleared = false;
+
     try {
-      const places = await fetchNearbyPlaces(loc[0], loc[1], 800, { signal: controller.signal });
-      if (controller.signal.aborted) return; // superseded — drop result
-      setNearbyPlaces(places);
-      lastFetchedLocationRef.current = loc;
-      lastFetchTimeRef.current = Date.now();
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      console.warn("[Strollo] Failed to fetch nearby places:", err);
-      setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
+      // Fire all rings in parallel — smallest returns first, larger ones fill in later.
+      // Each ring races both Overpass endpoints via Promise.any inside fetchNearbyPlaces.
+      await Promise.all(RADII.map(async (r) => {
+        try {
+          const places = await fetchNearbyPlaces(loc[0], loc[1], r, { signal: controller.signal });
+          if (controller.signal.aborted) return;
+          const fresh = places.filter(p => !seen.has(p.id));
+          fresh.forEach(p => seen.add(p.id));
+          merged = [...merged, ...fresh];
+          setNearbyPlaces(merged);
+          gotAny = true;
+          // Drop the spinner the moment we have anything to show
+          if (!loadingCleared) {
+            loadingCleared = true;
+            setNearbyLoading(false);
+          }
+        } catch (err) {
+          if (err?.name === "AbortError") return;
+          console.warn(`[Strollo] Ring ${r}m failed:`, err);
+        }
+      }));
+
+      if (controller.signal.aborted) return;
+      if (gotAny) {
+        lastFetchedLocationRef.current = loc;
+        lastFetchTimeRef.current = Date.now();
+      } else {
+        setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
+      }
     } finally {
-      if (!controller.signal.aborted) setNearbyLoading(false);
+      if (!controller.signal.aborted && !loadingCleared) setNearbyLoading(false);
       if (nearbyAbortRef.current === controller) nearbyAbortRef.current = null;
     }
   }, []);
@@ -318,7 +423,10 @@ export default function HomeScreen({
           const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
           setChatMessages(prev => {
             const updated = [...prev, aiMsg];
-            if (places.length > 0) setSuggestedStops(places);
+            if (places.length > 0) {
+              setSuggestedStops(places);
+              geocodeSuggestions(places);
+            }
             return updated;
           });
         } catch (err) {
@@ -334,7 +442,7 @@ export default function HomeScreen({
       setListenTextMode(false);
       setVoiceActive(false);
     }
-  }, [userLocation]);
+  }, [userLocation, geocodeSuggestions]);
 
   const speech = useSpeechRecognition({ onAutoStop: handleAutoStop });
 
@@ -364,7 +472,10 @@ export default function HomeScreen({
       const displayText = cleanResponseText(response);
       const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
       setChatMessages(prev => [...prev, aiMsg]);
-      if (places.length > 0) setSuggestedStops(places);
+      if (places.length > 0) {
+        setSuggestedStops(places);
+        geocodeSuggestions(places);
+      }
     } catch (err) {
       console.error("Gemini error:", err);
       const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" };
@@ -372,7 +483,7 @@ export default function HomeScreen({
     } finally {
       setChatLoading(false);
     }
-  }, [userLocation]);
+  }, [userLocation, geocodeSuggestions]);
   const sendChatMessageRef = useRef(sendChatMessage);
   sendChatMessageRef.current = sendChatMessage;
 
@@ -391,11 +502,14 @@ export default function HomeScreen({
       const places = extractPlaces(response);
       const displayText = cleanResponseText(response);
       setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: displayText }]);
-      if (places.length > 0) setSuggestedStops(places);
+      if (places.length > 0) {
+        setSuggestedStops(places);
+        geocodeSuggestions(places);
+      }
     }).catch(() => {
       setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" }]);
     }).finally(() => setChatLoading(false));
-  }, [userLocation]);
+  }, [userLocation, geocodeSuggestions]);
 
   const handlePlanWalk = useCallback(async () => {
     if (suggestedStops.length === 0) return;
@@ -430,6 +544,8 @@ export default function HomeScreen({
       setChatMode(false);
       setChatMessages([]);
       setSuggestedStops([]);
+      geocodeReqRef.current++;
+      setGeocodedSuggestions([]);
       onStartWalk(nearby, userLocation);
     } catch (err) {
       console.error("Plan walk error:", err);
@@ -458,6 +574,9 @@ export default function HomeScreen({
       setChatClosing(false);
       setShowHistory(false);
       setViewingHistory(null);
+      setSuggestedStops([]);
+      geocodeReqRef.current++;
+      setGeocodedSuggestions([]);
     }, 350);
   }, []);
 
@@ -468,7 +587,13 @@ export default function HomeScreen({
     setShowLocatePrompt(false);
     setLocateActive(true);
   }, []);
-  const handleMapDrag = useCallback(() => setLocateActive(false), []);
+  const handleMapDrag = useCallback(() => {
+    setLocateActive(false);
+    clearTimeout(dragDebounceRef.current);
+    dragDebounceRef.current = setTimeout(() => {
+      if (mapCenterRef.current) loadNearbyPlaces(mapCenterRef.current, true);
+    }, 1500);
+  }, [loadNearbyPlaces]);
   const handleToggleAdd = useCallback((id) => setAddedIds((p) => {
     const next = new Set(p);
     if (next.has(id)) next.delete(id);
@@ -481,6 +606,9 @@ export default function HomeScreen({
     else next.add(id);
     return next;
   }), []);
+
+  const bottomSearchRef = useRef(null);
+  const buttonStackRef = useRef(null);
 
   const carouselRef = useRef(null);
   const carouselDrag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false });
@@ -561,13 +689,74 @@ export default function HomeScreen({
 
   const { x, y } = userScreenPos;
 
-  const visibleNearbyPlaces = useMemo(() => {
-    const active = preferences?.mapFilters?.filter((id) => FILTER_DESCS[id]) ?? [];
-    if (active.length === 0) return nearbyPlaces;
-    const allowed = new Set();
-    for (const id of active) FILTER_DESCS[id].forEach((d) => allowed.add(d));
-    return nearbyPlaces.filter((p) => allowed.has(p.desc));
-  }, [nearbyPlaces, preferences]);
+  const sequenceMap = useMemo(() => {
+    const m = new Map();
+    let i = 1;
+    for (const id of addedIds) m.set(id, i++);
+    return m;
+  }, [addedIds]);
+
+  // Distance rank (0 = closest to user) — used for z-stacking so nearer pins appear on top
+  const distanceRankMap = useMemo(() => {
+    const m = new Map();
+    if (!userLocation) return m;
+    const ranked = nearbyPlaces
+      .filter((p) => p.lat && p.lng)
+      .map((p) => {
+        const dLat = p.lat - userLocation[0];
+        const dLng = p.lng - userLocation[1];
+        return { id: p.id, dist2: dLat * dLat + dLng * dLng };
+      })
+      .sort((a, b) => a.dist2 - b.dist2);
+    ranked.forEach((p, i) => m.set(p.id, i));
+    return m;
+  }, [nearbyPlaces, userLocation]);
+
+  // Icon cache: reuse identical-state icons so Leaflet only replaces DOM for pins that actually changed
+  const iconCacheRef = useRef(new Map());
+
+  // Spatial dedup: two-tier territory model.
+  //   - Added pins always claim their label-cell first (never downgrade to mini).
+  //   - Big cell (~90px) represents dot + name-label footprint → winner shows as labeled dot.
+  //   - Small cell (~16px) dedupes the rest into tiny purple mini-dots (no icon/label).
+  const { labeledDotIdSet, miniDotIdSet } = useMemo(() => {
+    if (!userLocation) return { labeledDotIdSet: null, miniDotIdSet: null };
+    const pxToDeg = 360 / (256 * Math.pow(2, mapZoom));
+    const labelCellDeg = 90 * pxToDeg;
+    const miniCellDeg = 16 * pxToDeg;
+    const labelOwner = new Map();
+    const miniOwner = new Map();
+    const labeled = new Set();
+    // Added pins reserve their label cells first (they always render as pills),
+    // so nearby non-added pins can't crowd them.
+    for (const p of nearbyPlaces) {
+      if (!p.lat || !p.lng || !addedIds.has(p.id)) continue;
+      const key = `${Math.floor(p.lat / labelCellDeg)},${Math.floor(p.lng / labelCellDeg)}`;
+      if (!labelOwner.has(key)) labelOwner.set(key, p.id); // reserve only, don't mark as "labeled dot"
+    }
+    const ranked = nearbyPlaces
+      .filter((p) => p.lat && p.lng && !addedIds.has(p.id))
+      .map((p) => {
+        const dLat = p.lat - userLocation[0];
+        const dLng = p.lng - userLocation[1];
+        return { id: p.id, lat: p.lat, lng: p.lng, dist2: dLat * dLat + dLng * dLng };
+      })
+      .sort((a, b) => a.dist2 - b.dist2);
+    for (const p of ranked) {
+      const key = `${Math.floor(p.lat / labelCellDeg)},${Math.floor(p.lng / labelCellDeg)}`;
+      if (!labelOwner.has(key)) { labelOwner.set(key, p.id); labeled.add(p.id); }
+    }
+    const mini = new Set();
+    for (const p of ranked) {
+      if (labeled.has(p.id)) continue;
+      const key = `${Math.floor(p.lat / miniCellDeg)},${Math.floor(p.lng / miniCellDeg)}`;
+      if (!miniOwner.has(key)) { miniOwner.set(key, p.id); mini.add(p.id); }
+    }
+    return { labeledDotIdSet: labeled, miniDotIdSet: mini };
+  }, [nearbyPlaces, mapZoom, userLocation, addedIds]);
+
+  // Show all nearby places; tiering (pill / dot / hidden) decides visibility
+  const visibleNearbyPlaces = nearbyPlaces;
 
   const allItems = visibleNearbyPlaces;
 
@@ -577,25 +766,59 @@ export default function HomeScreen({
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 15 : 2} zoomControl={false} attributionControl={false} className="map-container">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" maxZoom={19} />
           {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
-            const isExpanded = selectedPoi === s.id;
             const isAdded = addedIds.has(s.id);
+            const isExpanded = selectedPoi === s.id;
+            const sequence = sequenceMap.get(s.id);
+            // Tier: pill when tapped or already added; otherwise labeled dot or mini.
+            // After two zoom-outs from default 15 (so zoom ≤ 13), demote labels to mini dots —
+            // the map is too crowded at that scale for any name text to be legible.
+            let mode;
+            if (isAdded || isExpanded) mode = 'pill';
+            else if (mapZoom < 12) mode = 'hidden';
+            else if (mapZoom < 14) {
+              mode = (labeledDotIdSet?.has(s.id) || miniDotIdSet?.has(s.id)) ? 'mini' : 'hidden';
+            }
+            else if (labeledDotIdSet && labeledDotIdSet.has(s.id)) mode = 'dot';
+            else if (miniDotIdSet && miniDotIdSet.has(s.id)) mode = 'mini';
+            else mode = 'hidden';
+            if (mode === 'hidden') return null;
+            // Stable icon cache — keeps Leaflet from replacing DOM on unrelated state changes
+            const cacheKey = `${s.id}|${s.name}|${s.desc}|${isAdded}|${isExpanded}|${sequence || 0}|${mode}`;
+            let icon = iconCacheRef.current.get(cacheKey);
+            if (!icon) {
+              icon = makePinIcon(s.name, s.desc, isAdded, isExpanded, sequence, mode);
+              iconCacheRef.current.set(cacheKey, icon);
+            }
+            const rank = distanceRankMap.get(s.id) ?? 0;
+            const tierBase = isExpanded ? 5000 : isAdded ? 3000 : mode === 'pill' ? 1500 : mode === 'dot' ? 500 : 0;
             return (
               <Marker key={s.id} position={[s.lat, s.lng]}
-                icon={makePinIcon(s.name, s.desc, isAdded, isExpanded)}
-                zIndexOffset={isExpanded ? 1000 : 0}
+                icon={icon}
+                zIndexOffset={tierBase - rank}
                 eventHandlers={{
                   click: (e) => {
                     const target = e.originalEvent?.target;
-                    if (target && target.closest && target.closest('[data-action="toggle"]')) {
+                    if (target?.closest?.('[data-action="toggle"]')) {
                       handleToggleAdd(s.id);
-                    } else if (isExpanded) {
                       setSelectedPoi(null);
-                    } else {
-                      setSelectedPoi(s.id);
+                      return;
                     }
+                    setSelectedPoi(isExpanded ? null : s.id);
                   },
+                }}
+              />
+            );
+          })}
+          {geocodedSuggestions.map((s) => {
+            const isExpanded = selectedPoi === s.id;
+            return (
+              <Marker key={s.id} position={[s.lat, s.lng]}
+                icon={makeAiPinIcon(s.name, s.desc, isExpanded)}
+                zIndexOffset={isExpanded ? 1001 : 1}
+                eventHandlers={{
+                  click: () => setSelectedPoi(isExpanded ? null : s.id),
                 }}
               />
             );
@@ -606,6 +829,8 @@ export default function HomeScreen({
           <WatchLocation onUpdate={setUserLocation} />
           <MapDragListener onDrag={handleMapDrag} />
           <MapCenterTracker onCenterChange={handleMapCenterChange} />
+          <ZoomTracker onZoom={setMapZoom} />
+          <MapClickListener onClick={() => setSelectedPoi(null)} />
         </MapContainer>
       </div>
 
@@ -619,36 +844,57 @@ export default function HomeScreen({
       }} />
 
       {/* ── TOP BAR ── */}
-      <div className="top-bar">
-        {!voiceActive && !sheetOpen && (
-          <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
-            {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : "Start exploring"}
-          </button>
-        )}
-      </div>
+      <div className="top-bar" />
 
-      {/* ── PROFILE (floats over map, top-right) ── */}
-      <button className="fab-circle profile-btn" onClick={onOpenQuiz} aria-label="Open quiz">
-        <span className="profile-initials">E</span>
-      </button>
-
-      {/* ── BOTTOM-RIGHT STACK: Locate (flag only shown during walk) ── */}
-      {!voiceActive && !sheetOpen && (
-        <div className="bottom-right-stack">
-          <button
-            className="fab-circle bottom-right-btn"
-            aria-label="Focus on my location"
-            onClick={() => { setLocateError(""); setLocateTrigger((t) => t + 1); }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
-              <circle cx="12" cy="12" r="8"/>
-              <line x1="12" y1="2" x2="12" y2="5"/>
-              <line x1="12" y1="19" x2="12" y2="22"/>
-              <line x1="2" y1="12" x2="5" y2="12"/>
-              <line x1="19" y1="12" x2="22" y2="12"/>
-            </svg>
-          </button>
+      {/* ── BOTTOM FLOAT BAR: Start exploring + Preferences + Locate ── */}
+      {!voiceActive && !voiceExpanded && (
+        <div className="bottom-float-bar" ref={buttonStackRef}>
+          {addedIds.size > 0 && (
+            <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
+              Start exploring · {addedIds.size}
+            </button>
+          )}
+          <div className="bottom-right-stack">
+            {quizPending && (
+              <button
+                className="fab-circle bottom-right-btn quiz-gateway-btn"
+                aria-label="Retake vibe quiz"
+                onClick={onOpenQuiz}
+              >
+                <div className="quiz-gateway-blob quiz-gateway-blob--1" />
+                <div className="quiz-gateway-blob quiz-gateway-blob--2" />
+                <div className="quiz-gateway-blob quiz-gateway-blob--3" />
+              </button>
+            )}
+            <button
+              className={`fab-circle bottom-right-btn${settingsHighlight ? " bottom-right-btn--halo" : ""}`}
+              aria-label="Preferences"
+              onClick={onSetConstraints}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+                <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+                <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+                <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
+              </svg>
+            </button>
+            <button
+              className="fab-circle bottom-right-btn"
+              aria-label="Focus on my location"
+              onClick={() => { setLocateError(""); setLocateTrigger((t) => t + 1); }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+                <circle cx="12" cy="12" r="8"/>
+                <line x1="12" y1="2" x2="12" y2="5"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+                <line x1="2" y1="12" x2="5" y2="12"/>
+                <line x1="19" y1="12" x2="22" y2="12"/>
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 
@@ -811,6 +1057,7 @@ export default function HomeScreen({
       {/* ── BOTTOM SEARCH / SHEET ── */}
       {!voiceExpanded && (
         <div
+          ref={bottomSearchRef}
           className={`bottom-search ${sheetOpen ? "open" : ""} ${listenCardMode ? "listening" : ""}`}
           onMouseDown={onDragStart} onMouseUp={onDragEnd}
           onTouchStart={onDragStart} onTouchEnd={onDragEnd}
@@ -959,31 +1206,6 @@ export default function HomeScreen({
           )}
 
           <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
-            <div className="sheet-tabs">
-              <span className="sheet-tabs-label">Suggested</span>
-              <button
-                className={`sheet-refresh-btn ${nearbyLoading ? "sheet-refresh-btn--spinning" : ""}`}
-                aria-label="Refresh nearby places"
-                onClick={() => loadNearbyPlaces(mapCenterRef.current || userLocation, true)}
-                disabled={nearbyLoading}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10"/>
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                </svg>
-              </button>
-              <button className="sheet-prefs-btn" aria-label="Preferences" onClick={onSetConstraints}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="4" y1="6" x2="20" y2="6"/>
-                  <line x1="4" y1="12" x2="20" y2="12"/>
-                  <line x1="4" y1="18" x2="20" y2="18"/>
-                  <circle cx="9"  cy="6"  r="2" fill="currentColor"/>
-                  <circle cx="15" cy="12" r="2" fill="currentColor"/>
-                  <circle cx="8"  cy="18" r="2" fill="currentColor"/>
-                </svg>
-              </button>
-            </div>
-
             <div
               className="location-card-carousel"
               ref={carouselRef}
@@ -1008,9 +1230,7 @@ export default function HomeScreen({
                   key={item.id}
                   item={item}
                   added={addedIds.has(item.id)}
-                  faved={favedIds.has(item.id)}
                   onToggle={handleToggleAdd}
-                  onFave={handleFave}
                 />
               ))}
             </div>

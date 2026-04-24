@@ -11,12 +11,15 @@ export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, 
     ? `- Journey stops:\n${stopsDescription}`
     : '- No journey planned yet — the user is exploring freely';
 
+  // Quiz now emits binary +1 / -1 per card (up = yes, down = no) across the
+  // card's vibe tags. Score magnitude reflects how many yes/no votes landed on
+  // that vibe across the deck.
   let vibeSection = '';
   if (vibePreferences && vibePreferences.vibeScores) {
     const sorted = Object.entries(vibePreferences.vibeScores).sort((a, b) => b[1] - a[1]);
     const loves = sorted.filter(([, s]) => s >= 2).map(([v]) => v);
     const likes = sorted.filter(([, s]) => s === 1).map(([v]) => v);
-    const dislikes = sorted.filter(([, s]) => s < 0).map(([v]) => v);
+    const dislikes = sorted.filter(([, s]) => s <= -1).map(([v]) => v);
     const parts = [];
     if (loves.length) parts.push(`strongly prefers ${loves.join(', ')}`);
     if (likes.length) parts.push(`likes ${likes.join(', ')}`);
@@ -188,7 +191,7 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal } = {}) {
-  const query = `[out:json][timeout:10];(node["amenity"~"cafe|restaurant|bar|ice_cream|bakery|library|theatre"](around:${radiusMeters},${lat},${lon});node["tourism"~"museum|gallery|attraction|viewpoint"](around:${radiusMeters},${lat},${lon});node["leisure"~"park|garden"](around:${radiusMeters},${lat},${lon});node["shop"~"books|florist"](around:${radiusMeters},${lat},${lon}););out body 15;`;
+  const query = `[out:json][timeout:6];(node["amenity"~"cafe|restaurant|bar|ice_cream|bakery|library|theatre"](around:${radiusMeters},${lat},${lon});node["tourism"~"museum|gallery|attraction|viewpoint"](around:${radiusMeters},${lat},${lon});node["leisure"~"park|garden"](around:${radiusMeters},${lat},${lon});node["shop"~"books|florist"](around:${radiusMeters},${lat},${lon}););out body 40;`;
 
   const categoryMap = {
     cafe: "Coffee", restaurant: "Restaurant", bar: "Bar",
@@ -199,40 +202,50 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
     arts_centre: "Arts", park: "Park", garden: "Garden",
   };
 
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: `data=${encodeURIComponent(query)}`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        signal,
+  // Race all endpoints in parallel — whichever responds first wins; the rest are aborted.
+  const inner = new AbortController();
+  const abortInner = () => inner.abort();
+  signal?.addEventListener('abort', abortInner);
+
+  const attempt = (endpoint) =>
+    fetch(endpoint, {
+      method: "POST",
+      body: `data=${encodeURIComponent(query)}`,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: inner.signal,
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    });
+
+  try {
+    const data = await Promise.any(OVERPASS_ENDPOINTS.map(attempt));
+    inner.abort(); // cancel slower endpoint
+    return data.elements
+      .filter((el) => el.tags?.name)
+      .map((el) => {
+        const tag = el.tags.amenity || el.tags.tourism || el.tags.leisure || el.tags.shop || "";
+        return {
+          id: el.id,
+          name: el.tags.name,
+          desc: categoryMap[tag] || tag || "Place",
+          lat: el.lat,
+          lng: el.lon,
+          hours: el.tags.opening_hours || null,
+          website: el.tags.website || el.tags["contact:website"] || null,
+          phone: el.tags.phone || el.tags["contact:phone"] || null,
+        };
       });
-      if (res.status === 429 || res.status === 504) continue; // try next endpoint
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      return data.elements
-        .filter((el) => el.tags?.name)
-        .map((el) => {
-          const tag = el.tags.amenity || el.tags.tourism || el.tags.leisure || el.tags.shop || "";
-          return {
-            id: el.id,
-            name: el.tags.name,
-            desc: categoryMap[tag] || tag || "Place",
-            lat: el.lat,
-            lng: el.lon,
-            hours: el.tags.opening_hours || null,
-            website: el.tags.website || el.tags["contact:website"] || null,
-            phone: el.tags.phone || el.tags["contact:phone"] || null,
-          };
-        });
-    } catch (err) {
-      if (err?.name === "AbortError") throw err;
-      continue; // try next endpoint
+  } catch (err) {
+    if (signal?.aborted) {
+      const e = new Error("Aborted");
+      e.name = "AbortError";
+      throw e;
     }
+    throw new Error("All Overpass endpoints unavailable");
+  } finally {
+    signal?.removeEventListener('abort', abortInner);
   }
-
-  throw new Error("All Overpass endpoints unavailable");
 }
 
 export async function sendMessage(conversationHistory, systemPrompt) {

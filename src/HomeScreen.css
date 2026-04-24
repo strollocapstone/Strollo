@@ -54,41 +54,83 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255,255,255,0.22);
-  backdrop-filter: blur(8px) saturate(1.4);
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  background: #ffffff;
   border-radius: 20px;
   padding: 3px 8px 3px 4px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.14);
   white-space: nowrap;
   font-family: var(--font-ui);
   cursor: pointer;
   border: 1.5px solid transparent;
-  transition: padding 0.25s ease, border-radius 0.25s ease,
-              box-shadow 0.25s ease, border-color 0.25s ease,
-              background 0.25s ease;
 }
 
-/* Dot indicator */
+/* Triangular pointer at bottom of pill */
+.sugg-pin::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid #ffffff;
+}
+.sugg-pin--added::after {
+  border-top-color: #F4EEFB;
+}
+.sugg-pin--ai::after {
+  border-top-color: #f0e4ff;
+}
+.sugg-pin--open::after {
+  display: none;
+}
+
+/* Dot indicator — filled purple circle with centered icon */
 .sugg-pin-dot {
   width: 18px; height: 18px;
   border-radius: 50%;
-  background: rgba(136,81,212,0.12);
+  background: #8851D4;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.25s ease;
 }
+.sugg-pin-dot-icon {
+  font-size: 10px;
+  color: #ffffff;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
-/* Purple dot when added */
+/* Purple dot when added — stays same color, already purple */
 .sugg-pin--added .sugg-pin-dot {
   background: #8851D4;
+}
+
+/* ── AI-suggested pin variant ── */
+.sugg-pin--ai {
+  border-color: rgba(136,81,212,0.45);
+  background: linear-gradient(135deg, #faf6ff 0%, #f0e4ff 100%);
+}
+.sugg-pin-dot--ai {
+  background: #8851D4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sugg-pin--ai.sugg-pin--open {
+  background: linear-gradient(135deg, #faf6ff 0%, #f0e4ff 100%);
 }
 
 /* Added border tint */
 .sugg-pin--added {
   border-color: rgba(136,81,212,0.35);
-  background: rgba(244,238,251,0.45);
-  backdrop-filter: blur(8px) saturate(1.4);
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  background: #F4EEFB;
 }
 
 /* Name */
@@ -142,28 +184,112 @@
   color: #FFFFFF;
 }
 
-/* ── Expanded state ── */
-.sugg-pin--open {
-  padding: 4px 6px 4px 8px;
-  border-radius: 14px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-  background: rgba(255,255,255,0.22);
-  backdrop-filter: blur(8px) saturate(1.4);
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
-}
-.sugg-pin--open.sugg-pin--added {
-  background: rgba(244,238,251,0.45);
-}
-.sugg-pin--open .sugg-pin-dot {
-  display: none;
-}
-.sugg-pin--open .sugg-pin-name {
-  font-size: 13px;
-  font-weight: 700;
-}
+/* ── Expanded state: same look as collapsed, reveals the extra (add button) ── */
 .sugg-pin--open .sugg-pin-extra {
   max-width: 200px;
   opacity: 1;
+}
+
+/* Small "+" add button shown in the expanded pill */
+.sugg-pin-add-btn {
+  width: 22px; height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: #F4EEFB;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition: background 0.15s ease;
+}
+.sugg-pin-add-btn:hover { background: #E6DAF5; }
+.sugg-pin-add-btn--remove { background: #FDEDEE; }
+.sugg-pin-add-btn--remove:hover { background: #FBD9DC; }
+
+/* Dot variant — just the icon chip, no pill / name / triangle / badge */
+.sugg-pin--dot {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+.sugg-pin--dot .sugg-pin-name,
+.sugg-pin--dot .sugg-pin-extra,
+.sugg-pin--dot .sugg-pin-badge { display: none; }
+.sugg-pin--dot::after { display: none; }
+.sugg-pin--dot .sugg-pin-dot {
+  width: 18px; height: 18px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+.sugg-pin--dot .sugg-pin-dot-icon { font-size: 10px; }
+
+/* Name under the dot at default/close zoom — text-shadow halo for legibility */
+.sugg-pin-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 1px;
+  padding: 0 3px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: #8851D4;
+  white-space: nowrap;
+  cursor: pointer;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 4px #fff,
+    0 0 6px #fff,
+    0 0 10px #fff,
+    0 1px 2px #fff;
+}
+
+/* Mini dot — tiny purple circle representing a deduped POI inside a crowded cell.
+   Clicking it expands to a full pill; zooming in promotes it to a labeled dot. */
+.sugg-pin--mini {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+.sugg-pin--mini .sugg-pin-name,
+.sugg-pin--mini .sugg-pin-extra,
+.sugg-pin--mini .sugg-pin-badge,
+.sugg-pin--mini .sugg-pin-label { display: none; }
+.sugg-pin--mini::after { display: none; }
+.sugg-pin--mini .sugg-pin-dot {
+  width: 10px; height: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+  border: 1.5px solid #fff;
+}
+.sugg-pin--mini .sugg-pin-dot-icon { display: none; }
+
+/* Smooth fade-in when a pin's icon is replaced (only changing pins trigger this thanks to iconCache) */
+.sugg-pin {
+  animation: sugg-pin-fade 0.18s ease-out;
+}
+@keyframes sugg-pin-fade {
+  from { opacity: 0.35; transform: translate(-50%, calc(-100% - 5px)) scale(0.94); }
+  to   { opacity: 1;    transform: translate(-50%, calc(-100% - 5px)) scale(1); }
+}
+
+/* Sequence number badge on added pills (top-right) */
+.sugg-pin-badge {
+  position: absolute;
+  top: -5px; right: -5px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #8851D4;
+  color: #ffffff;
+  font-family: var(--font-ui);
+  font-size: 10px; font-weight: 700;
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.22);
+  z-index: 1;
 }
 
 /* ── Top bar ── */
@@ -204,12 +330,25 @@
   filter: brightness(1.05);
 }
 
-/* Bottom-right stack: timeline (flag) + locate (above the search pill) */
+/* Full-width bar floating above the bottom sheet — JS sets bottom via ResizeObserver */
+.bottom-float-bar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 100px; /* JS overrides via ResizeObserver */
+  z-index: 26; /* above sheet-backdrop (24) and bottom-search (25) */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none; /* transparent gap area */
+}
+.bottom-float-bar > * { pointer-events: auto; }
+
+/* Stacked prefs + locate — absolute so they don't affect the centered start pill */
 .bottom-right-stack {
   position: absolute;
-  right: 16px;
-  bottom: 170px;
-  z-index: 21;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -217,10 +356,54 @@
 .bottom-right-btn {
   width: 40px !important;
   height: 40px !important;
-  background: rgba(255,255,255,0.22) !important;
-  backdrop-filter: blur(8px) saturate(1.4) !important;
-  -webkit-backdrop-filter: blur(8px) saturate(1.4) !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10) !important;
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.14) !important;
+}
+
+/* Halo pulse cueing the settings button right after the quiz ends */
+@keyframes bottom-right-btn-halo {
+  0%   { box-shadow: 0 2px 10px rgba(0,0,0,0.14), 0 0 0 0    rgba(136,81,212,0.55); }
+  70%  { box-shadow: 0 2px 10px rgba(0,0,0,0.14), 0 0 0 16px rgba(136,81,212,0);    }
+  100% { box-shadow: 0 2px 10px rgba(0,0,0,0.14), 0 0 0 0    rgba(136,81,212,0);    }
+}
+.bottom-right-btn--halo {
+  animation: bottom-right-btn-halo 1.4s ease-out infinite !important;
+}
+
+/* Quiz-gateway FAB: same size/shape as the settings button, sits above it in the
+   bottom-right stack when the quiz is pending. Inside, three drifting blurred blobs
+   reuse the voice-modal `blob1/2/3` keyframes so the motion reads as the same family. */
+.quiz-gateway-btn {
+  position: relative;
+  overflow: hidden;
+  padding: 0 !important;
+  background: #ffffff !important;
+}
+.quiz-gateway-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(14px);
+  pointer-events: none;
+}
+.quiz-gateway-blob--1 {
+  width: 38px; height: 28px;
+  left: -20%; top: -10%;
+  background: radial-gradient(circle, #B026FF 0%, #7A00FF 55%, transparent 100%);
+  animation: blob1 6s ease-in-out infinite alternate;
+}
+.quiz-gateway-blob--2 {
+  width: 34px; height: 26px;
+  left: 25%; top: 45%;
+  background: radial-gradient(circle, #00BFFF 0%, #0066FF 55%, transparent 100%);
+  animation: blob2 7s ease-in-out infinite alternate;
+}
+.quiz-gateway-blob--3 {
+  width: 36px; height: 28px;
+  right: -25%; top: 10%;
+  background: radial-gradient(circle, #FF1493 0%, #FF006E 55%, transparent 100%);
+  animation: blob3 8s ease-in-out infinite alternate;
 }
 
 /* ── Map action buttons (Preferences / Map filters) ── */
@@ -1290,24 +1473,6 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── Preferences button (inside bottom sheet tabs) ── */
-.sheet-prefs-btn {
-  margin-left: auto;
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255,255,255,0.22);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  color: var(--color-accent-2);
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-.sheet-prefs-btn:hover { background: rgba(255,255,255,0.4); }
-.sheet-prefs-btn svg { flex-shrink: 0; }
 
 /* ── Location card carousel ── */
 .location-card-carousel {
@@ -1322,7 +1487,7 @@
 .location-card-carousel::-webkit-scrollbar { display: none; }
 
 .location-card {
-  flex: 0 0 200px;
+  flex: 0 0 160px;
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(14px) saturate(1.25);
@@ -1337,92 +1502,57 @@
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
 }
 
-.location-card-image {
-  position: relative;
-  width: 100%;
-  height: 130px;
-  background: #E8E4EE;
-  background-size: cover;
-  background-position: center;
-}
-.location-card-gradient {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0) 60%, rgba(0,0,0,0.10) 100%);
-  pointer-events: none;
-}
-.location-card-add {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-  transition: background 0.15s;
-}
-.location-card-add.added {
-  background: #8851D4;
-}
-
 .location-card-info {
-  padding: 10px 12px 14px;
+  padding: 12px 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .location-card-name-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
+  gap: 6px;
 }
 .location-card-name {
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 600;
   color: var(--color-body);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
 }
-.location-card-fave {
-  background: none;
+.location-card-add {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   border: none;
-  padding: 0;
-  cursor: pointer;
+  background: #F4F0FA;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.location-card-add.added {
+  background: #8851D4;
+}
+.location-card-category {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.location-card-icon {
+  font-size: 14px;
+  color: #8851D4;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  line-height: 1;
   flex-shrink: 0;
 }
 .location-card-address {
   font-family: var(--font-ui);
   font-size: 12px;
   color: #aaa;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.location-card-tag {
-  align-self: flex-start;
-  margin-top: 4px;
-  padding: 3px 8px;
-  background: #F4F0FA;
-  color: #5A4B64;
-  border-radius: 8px;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  pointer-events: none;
 }
 
 .empty-state {
