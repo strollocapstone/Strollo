@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
-import JourneyEditScreen from "./JourneyEditScreen";
-import { getWalkingRoute } from "./geminiService";
+import WalkCompanionWidget from "./WalkCompanionWidget";
+import VoiceFullScreen from "./VoiceFullScreen";
+import { getWalkingRoute, geocodePlace } from "./geminiService";
+import { useJourneyVoice } from "./useJourneyVoice";
 import { youIcon, WatchLocation, LocateMe, FitBounds } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
@@ -31,20 +33,74 @@ const destinationIcon = L.divIcon({
   iconAnchor: [11, 30],
 });
 
+// ── Organic area-of-interest blob markers (atmospheric, behind route) ─────
+const ORGANIC_RADII = [
+  "65% 35% 50% 50% / 40% 60% 40% 60%",
+  "40% 60% 45% 55% / 55% 45% 60% 40%",
+  "55% 45% 60% 40% / 50% 50% 45% 55%",
+  "45% 55% 35% 65% / 60% 40% 55% 45%",
+  "60% 40% 55% 45% / 35% 65% 50% 50%",
+  "50% 50% 40% 60% / 45% 55% 60% 40%",
+  "35% 65% 55% 45% / 50% 50% 40% 60%",
+];
 
+const makeBlob = (w, h, rot, idx) => L.divIcon({
+  className: "",
+  html: `<div style="width:${w}px;height:${h}px;border-radius:${ORGANIC_RADII[idx % ORGANIC_RADII.length]};background:radial-gradient(ellipse at 42% 42%,rgba(136,81,212,0.15) 0%,rgba(136,81,212,0.06) 45%,transparent 70%);transform:rotate(${rot}deg);pointer-events:none;"></div>`,
+  iconSize: [w, h],
+  iconAnchor: [w / 2, h / 2],
+});
 
+// Scatter pattern — applied relative to a center lat/lng.
+const BLOB_OFFSETS = [
+  { dLat:  0.0045, dLng:  0.0025, w: 120, h:  90, rot:  15 },
+  { dLat: -0.0010, dLng: -0.0060, w: 180, h: 110, rot: -25 },
+  { dLat:  0.0008, dLng: -0.0005, w:  90, h:  70, rot:  40 },
+  { dLat: -0.0012, dLng:  0.0015, w:  70, h:  55, rot: -10 },
+  { dLat:  0.0030, dLng:  0.0050, w: 110, h:  80, rot:  55 },
+  { dLat: -0.0030, dLng: -0.0070, w: 140, h: 100, rot: -35 },
+  { dLat:  0.0015, dLng:  0.0035, w:  80, h:  65, rot:  20 },
+  { dLat:  0.0050, dLng:  0.0005, w: 100, h:  75, rot: -45 },
+  { dLat: -0.0010, dLng: -0.0030, w:  75, h:  55, rot:  30 },
+  { dLat:  0.0025, dLng: -0.0012, w:  60, h:  50, rot: -15 },
+];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, vibePreferences, showVoice = true }) {
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
-  const [journeyOpen, setJourneyOpen]     = useState(false);
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
-  const [routeError, setRouteError]       = useState(false);
+  const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
+  const [pathHistory, setPathHistory]     = useState([]);
+
+  // Track the walked trail as user location updates.
+  useEffect(() => {
+    if (!userLocation) return;
+    setPathHistory((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && Math.abs(last[0] - userLocation[0]) < 1e-5 && Math.abs(last[1] - userLocation[1]) < 1e-5) {
+        return prev;
+      }
+      return [...prev, userLocation].slice(-200);
+    });
+  }, [userLocation]);
+
+  // Atmospheric blob markers pinned around the initial center (once).
+  const blobs = useMemo(() => {
+    const [lat, lng] = initialCenter;
+    if (!lat || !lng) return [];
+    return BLOB_OFFSETS.map((b, i) => ({
+      pos: [lat + b.dLat, lng + b.dLng],
+      w: b.w, h: b.h, rot: b.rot, idx: i,
+    }));
+    // initialCenter is computed on every render but its value only changes when
+    // startLocation/journeyItems change; memo guards against churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCenter[0], initialCenter[1]]);
 
   const handleLocate = (pos) => {
     setUserLocation(pos);
@@ -54,6 +110,60 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
   const stopPositions = journeyItems
     .filter((s) => s.lat && s.lng)
     .map((s) => [s.lat, s.lng]);
+
+  // Apply voice-extracted edit actions to the journey
+  const applyActions = useCallback(async ({ adds, removes, reorder }) => {
+    if (!onJourneyChange) return;
+    let next = [...journeyItems];
+
+    if (removes && removes.length) {
+      const normalized = removes.map(r => r.toLowerCase());
+      next = next.filter(stop => {
+        const stopLc = stop.name.toLowerCase();
+        return !normalized.some(r => stopLc.includes(r) || r.includes(stopLc));
+      });
+    }
+
+    if (adds && adds.length && userLocation) {
+      for (const place of adds) {
+        const result = await geocodePlace(place.name, userLocation[0], userLocation[1]);
+        if (result) {
+          next.push({
+            id: Date.now() + next.length,
+            name: place.name,
+            desc: place.desc,
+            lat: result.lat,
+            lng: result.lng,
+          });
+        }
+      }
+    }
+
+    if (reorder && reorder.length) {
+      const byName = new Map(next.map(s => [s.name.toLowerCase(), s]));
+      const reordered = [];
+      for (const name of reorder) {
+        const match = byName.get(name.toLowerCase())
+          || [...byName.values()].find(s => s.name.toLowerCase().includes(name.toLowerCase()));
+        if (match) {
+          reordered.push(match);
+          byName.delete(match.name.toLowerCase());
+        }
+      }
+      // Append any stops not mentioned in the reorder list at the end
+      next = [...reordered, ...byName.values()];
+    }
+
+    onJourneyChange(next);
+  }, [journeyItems, userLocation, onJourneyChange]);
+
+  const voice = useJourneyVoice({
+    userLocation,
+    journeyItems,
+    mode: "during-walk",
+    vibePreferences,
+    onApplyActions: applyActions,
+  });
 
   // Fetch walking route from user location through stops
   const routeFetchedFor = React.useRef(null);
@@ -73,7 +183,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         setWalkingRoute(result.coordinates);
         setRouteInfo({ distance: result.distance, duration: result.duration });
       }
-    }).catch(err => { console.warn("Route fetch failed:", err); setRouteError(true); });
+    }).catch(err => { console.warn("Route fetch failed:", err); });
   }, [userLocation, stopPositions]);
 
   return (
@@ -84,13 +194,23 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         <MapContainer center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
 
+          {/* Atmospheric purple area-of-interest blobs */}
+          {blobs.map((b, i) => (
+            <Marker key={`blob-${i}`} position={b.pos} icon={makeBlob(b.w, b.h, b.rot, b.idx)} />
+          ))}
+
+          {/* Walked trail — dashed dots behind the user */}
+          {pathHistory.length > 1 && (
+            <Polyline positions={pathHistory} pathOptions={{ color: "rgba(136,81,212,0.50)", weight: 4, dashArray: "6 10", lineCap: "round" }} />
+          )}
+
           {/* Walking route along streets (from OSRM) */}
           {walkingRoute && (
-            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 3, opacity: 0.5, lineCap: "round", lineJoin: "round" }} />
+            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
           )}
           {/* Fallback dashed line while route loads */}
           {!walkingRoute && stopPositions.length > 0 && (
-            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 2, opacity: 0.3, dashArray: "6 8", lineCap: "round" }} />
+            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
           {/* Journey stop pins with labels */}
@@ -114,81 +234,100 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </MapContainer>
       </div>
 
-      {/* ── TOP BAR ── */}
-      <div className="nav-top-bar">
-        <button className="back-btn" onClick={onGoBack}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M19 12H5M12 5l-7 7 7 7"/>
-          </svg>
-        </button>
-        <span className="app-name">strollo</span>
-        <div style={{ width: 36 }} />
-      </div>
-
-      {/* ── JOURNEY STOPS BAR ── */}
-      {journeyItems.length > 0 && (
-        <div className="nav-stops-bar">
-          <div className="nav-stops-list">
-            {journeyItems.map((s, i) => (
-              <span key={s.id} className="nav-stop-chip">
-                {i > 0 && <span className="nav-stop-arrow">→</span>}
-                {s.name.split(',')[0]}
-              </span>
-            ))}
-          </div>
-          {routeInfo && (
-            <div className="nav-route-info">
-              <span>{Math.round(routeInfo.distance / 1000 * 10) / 10} km</span>
-              <span>·</span>
-              <span>{Math.round(routeInfo.duration / 60)} min walk</span>
-            </div>
-          )}
-          {routeError && !routeInfo && (
-            <div className="nav-route-info" style={{ color: '#999' }}>
-              <span>Route unavailable — follow the pins</span>
-            </div>
-          )}
+      {/* ── TOP BAR (hidden while companion widget owns the top; back is
+           reachable via the journey flag in the bottom-right stack) ── */}
+      {!showVoice && (
+        <div className="nav-top-bar">
+          <button className="back-btn" onClick={onGoBack}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+          </button>
+          <div style={{ flex: 1 }} />
+          <div style={{ width: 36 }} />
         </div>
       )}
 
-      {/* ── MAP ACTION BUTTONS (matching HomeScreen style) ── */}
-      <div className="nav-actions">
-        <button className="map-action-btn" onClick={onOpenTimeline} aria-label="Open timeline">
-          <svg width="14" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="6,2 20,8 6,14"/>
-            <rect x="4" y="2" width="2" height="18" rx="1"/>
+      {/* ── BOTTOM-RIGHT STACK: Timeline (flag) + Preferences + Locate ── */}
+      <div className="bottom-right-stack">
+        <button className="fab-circle bottom-right-btn" onClick={onOpenTimeline} aria-label="Open timeline">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <polygon points="10,2 22,7 10,12" fill="#8851D4"/>
+            <rect x="8" y="2" width="2" height="20" rx="1" fill="#8851D4"/>
+            <circle cx="5" cy="20" r="1" fill="#8851D4"/>
+            <circle cx="2" cy="17" r="1" fill="#8851D4"/>
           </svg>
-          <span>Journey</span>
         </button>
-        <div className="nav-actions-stack">
-          <button className="nav-prefs-circle" onClick={onSetConstraints} aria-label="Preferences">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
-              <line x1="4" y1="6" x2="20" y2="6"/>
-              <line x1="4" y1="12" x2="20" y2="12"/>
-              <line x1="4" y1="18" x2="20" y2="18"/>
-              <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
-              <circle cx="15" cy="12" r="2" fill="#8851D4"/>
-              <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
-            </svg>
-          </button>
-          <button className="locate-circle" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Locate me">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-            </svg>
-          </button>
-        </div>
+        <button className="fab-circle bottom-right-btn" onClick={onSetConstraints} aria-label="Preferences">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+            <line x1="4" y1="6" x2="20" y2="6"/>
+            <line x1="4" y1="12" x2="20" y2="12"/>
+            <line x1="4" y1="18" x2="20" y2="18"/>
+            <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+            <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+            <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
+          </svg>
+        </button>
+        <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+            <circle cx="12" cy="12" r="8"/>
+            <line x1="12" y1="2" x2="12" y2="5"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="5" y2="12"/>
+            <line x1="19" y1="12" x2="22" y2="12"/>
+          </svg>
+        </button>
       </div>
 
-      {/* ── JOURNEY OVERLAY ── */}
-      {journeyOpen && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setJourneyOpen(false)} />
-          <JourneyEditScreen items={journeyItems} onClose={() => setJourneyOpen(false)} onGoBack={onGoBack} />
-        </>
+      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
+      {showVoice && voiceMode !== "full" && (() => {
+        const nextStop = journeyItems.find((s) => s.lat && s.lng);
+        const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : "your next stop";
+        // Live route values when available, static placeholders otherwise.
+        const distance = routeInfo
+          ? routeInfo.distance < 1000
+            ? `${Math.round(routeInfo.distance)} m`
+            : `${(routeInfo.distance / 1000).toFixed(1)} km`
+          : "—";
+        const etaMin = routeInfo ? Math.max(1, Math.round(routeInfo.duration / 60)) : null;
+        const eta = etaMin !== null ? `${etaMin} min` : "—";
+        const proximity = routeInfo && routeInfo.distance < 80 ? "near" : "far";
+        return (
+          <WalkCompanionWidget
+            nextWaypoint={nextWaypoint}
+            distance={distance}
+            turn="right"
+            eta={eta}
+            proximity={proximity}
+            listening={voice.listening}
+            locked={voice.locked}
+            muted={voice.muted}
+            onMuteToggle={voice.onMuteToggle}
+            onListenStart={voice.onListenStart}
+            onListenEnd={voice.onListenEnd}
+            onDragLock={voice.onDragLock}
+            onUnlock={voice.onUnlock}
+            onExpandVoice={() => setVoiceMode("full")}
+          />
+        );
+      })()}
+
+      {/* ── VOICE FULL-SCREEN OVERLAY ── */}
+      {showVoice && voiceMode === "full" && (
+        <VoiceFullScreen
+          listening={voice.listening}
+          locked={voice.locked}
+          muted={voice.muted}
+          messages={voice.messages}
+          onMuteToggle={voice.onMuteToggle}
+          onListenStart={voice.onListenStart}
+          onListenEnd={voice.onListenEnd}
+          onDragLock={voice.onDragLock}
+          onUnlock={voice.onUnlock}
+          onMinimize={() => setVoiceMode(null)}
+        />
       )}
-
-
-
 
     </>
   );

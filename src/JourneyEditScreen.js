@@ -3,7 +3,10 @@
 import React, { useState } from "react";
 
 export default function JourneyEditScreen({ items = [], onClose, onGoBack }) {
-  const [stops, setStops] = useState(items);
+  const defaultItems = items.length
+    ? items
+    : [{ id: 0, name: "Sightglass Coffee", desc: "SoMa · Coffee" }];
+  const [stops, setStops] = useState(defaultItems);
 
   const removeStop = (id) => setStops((s) => s.filter((x) => x.id !== id));
 

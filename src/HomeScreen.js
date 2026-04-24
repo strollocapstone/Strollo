@@ -16,7 +16,12 @@ const makePinIcon = (name, desc, added, expanded) => L.divIcon({
     <span class="sugg-pin-name">${name}</span>
     <div class="sugg-pin-extra">
       <span class="sugg-pin-desc">${desc}</span>
-      <div class="sugg-pin-btn" data-action="toggle">${added ? "Remove" : "Add"}</div>
+      <button class="sugg-pin-btn sugg-pin-btn--icon" data-action="toggle" aria-label="${added ? "Remove from itinerary" : "Add to itinerary"}">
+        ${added
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+        }
+      </button>
     </div>
   </div>`,
   iconSize: [0, 0],
@@ -168,6 +173,8 @@ function SoundWaveSvg({ active }) {
 export default function HomeScreen({
   onStartWalk,
   onSetConstraints,
+  onOpenTimeline,
+  onOpenQuiz,
   initialLocation,
   initialSheetOpen,
   onSheetOpenConsumed,
@@ -522,7 +529,7 @@ export default function HomeScreen({
     const items = nearbyPlaces
       .filter((s) => addedIds.has(s.id))
       .filter((s) => isWithinWalkingRadius(origin, s));
-    if (items.length) onStartWalk(items, origin);
+    onStartWalk(items, origin);
   };
 
   const toggleVoice = () => {
@@ -583,7 +590,6 @@ export default function HomeScreen({
                     const target = e.originalEvent?.target;
                     if (target && target.closest && target.closest('[data-action="toggle"]')) {
                       handleToggleAdd(s.id);
-                      setSelectedPoi(null);
                     } else if (isExpanded) {
                       setSelectedPoi(null);
                     } else {
@@ -614,29 +620,33 @@ export default function HomeScreen({
 
       {/* ── TOP BAR ── */}
       <div className="top-bar">
-        <span className="app-name">strollo</span>
+        {!voiceActive && !sheetOpen && (
+          <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
+            {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : "Start exploring"}
+          </button>
+        )}
       </div>
 
       {/* ── PROFILE (floats over map, top-right) ── */}
-      <button className="fab-circle profile-btn" aria-label="Profile">
-        <span className="material-symbols-rounded">person</span>
+      <button className="fab-circle profile-btn" onClick={onOpenQuiz} aria-label="Open quiz">
+        <span className="profile-initials">E</span>
       </button>
 
-      {/* ── MAP ACTION BUTTONS ── */}
+      {/* ── BOTTOM-RIGHT STACK: Locate (flag only shown during walk) ── */}
       {!voiceActive && !sheetOpen && (
-        <div className="map-actions">
-          {addedIds.size > 0 && (
-            <button className="map-action-btn map-plan-btn" onClick={handleStartWalk}>
-              Start walk · {addedIds.size}
-            </button>
-          )}
-          <button className={`locate-circle ${locateActive ? "locate-active" : ""}`} aria-label="Locate me" onClick={() => {
-            setLocateError("");
-            setLocateTrigger((t) => t + 1);
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
+        <div className="bottom-right-stack">
+          <button
+            className="fab-circle bottom-right-btn"
+            aria-label="Focus on my location"
+            onClick={() => { setLocateError(""); setLocateTrigger((t) => t + 1); }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+              <circle cx="12" cy="12" r="8"/>
+              <line x1="12" y1="2" x2="12" y2="5"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="2" y1="12" x2="5" y2="12"/>
+              <line x1="19" y1="12" x2="22" y2="12"/>
             </svg>
           </button>
         </div>
