@@ -431,7 +431,7 @@ export default function HomeScreen({
           });
         } catch (err) {
           console.error("Gemini error:", err);
-          const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" };
+          const errMsg = { id: ++chatIdCounter.current, role: "ai", text: `Gemini error: ${err?.message || "unknown"}. Tap the mic to try again!` };
           setChatMessages(prev => [...prev, errMsg]);
         } finally {
           setChatLoading(false);
