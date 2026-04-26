@@ -106,10 +106,19 @@
   -webkit-user-select: none;
   user-select: none;
 }
+.sugg-pin-dot-number {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent);
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
-/* Purple dot when added — stays same color, already purple */
+/* Yellow dot when added — sequence number replaces venue icon */
 .sugg-pin--added .sugg-pin-dot {
-  background: #8851D4;
+  background: var(--color-primary);
 }
 
 /* ── AI-suggested pin variant ── */
@@ -273,23 +282,6 @@
 @keyframes sugg-pin-fade {
   from { opacity: 0.35; transform: translate(-50%, calc(-100% - 5px)) scale(0.94); }
   to   { opacity: 1;    transform: translate(-50%, calc(-100% - 5px)) scale(1); }
-}
-
-/* Sequence number badge on added pills (top-right) */
-.sugg-pin-badge {
-  position: absolute;
-  top: -5px; right: -5px;
-  min-width: 16px; height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: #8851D4;
-  color: #ffffff;
-  font-family: var(--font-ui);
-  font-size: 10px; font-weight: 700;
-  line-height: 1;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.22);
-  z-index: 1;
 }
 
 /* ── Top bar ── */

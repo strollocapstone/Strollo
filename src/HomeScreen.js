@@ -43,7 +43,9 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
     className: "",
     html: `<div class="${classes.join(' ')}">
     <div class="sugg-pin-dot">
-      <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+      ${added && sequence
+        ? `<span class="sugg-pin-dot-number">${sequence}</span>`
+        : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
     </div>
     ${!isMini ? `<span class="${isPill ? 'sugg-pin-name' : 'sugg-pin-label'}">${name}</span>` : ''}
     ${isPill && expanded ? `<div class="sugg-pin-extra">
@@ -53,7 +55,6 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
           : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
       </button>
     </div>` : ''}
-    ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
   </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
