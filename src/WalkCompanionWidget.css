@@ -54,6 +54,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.wcw-destination--empty {
+  color: rgba(247, 243, 245, 0.55);
+  font-weight: 500;
+  font-style: italic;
+}
 .wcw-skip-btn {
   flex-shrink: 0;
   padding: 2px 10px;
@@ -131,6 +136,36 @@
 .wcw-end-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #F7F3F5;
+}
+/* Icon-only siblings to .wcw-end-btn — pause and mute toggles. Same
+   surface treatment, square 44x44, no label. Active state (toggled on)
+   gets a subtle yellow tint to reinforce the crossed-out icon. */
+.wcw-icon-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(247, 243, 245, 0.20);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(247, 243, 245, 0.72);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wcw-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #F7F3F5;
+}
+.wcw-icon-btn--active {
+  color: #FFD501;
+  background: rgba(255, 213, 1, 0.10);
+  border-color: rgba(255, 213, 1, 0.32);
+}
+.wcw-icon-btn--active:hover {
+  background: rgba(255, 213, 1, 0.16);
 }
 .wcw-check-btn {
   flex: 1;

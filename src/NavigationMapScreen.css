@@ -20,6 +20,21 @@
 .map-wrapper.heading-up .sugg-pin {
   transform: translate(-50%, calc(-100% - 5px)) rotate(var(--map-rotation, 0deg));
 }
+
+/* Muted route pins: shown for every confirmed stop on the planned
+   route EXCEPT the active next-target. They're context — the user
+   should still see "where else am I going / where have I been" — so
+   they read as faint dots, not destinations. */
+.sugg-pin--muted {
+  opacity: 0.55;
+}
+.sugg-pin--muted .sugg-pin-dot {
+  background: rgba(136, 81, 212, 0.65);
+  box-shadow: 0 1px 4px rgba(30, 21, 65, 0.18);
+}
+.sugg-pin--muted .sugg-pin-dot-icon {
+  color: white;
+}
 .map-wrapper.heading-up .marauder-marker {
   transform: rotate(var(--map-rotation, 0deg));
   transform-origin: 50% 100%;
@@ -883,9 +898,42 @@
    and make sure it floats over the card + map (z-index 31 > .wcw at z-index 30). */
 .bottom-right-stack--nav {
   right: 16px;
-  bottom: 240px;
+  bottom: 264px;
   z-index: 31;
 }
+
+/* "I am here" affordance above the wcw card. Left-aligned within the
+   phone frame; sits ~12px above the wcw card top (wcw is at bottom: 16px
+   and ~210px tall). */
+.nav-arrived-bar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + 210px + 12px);
+  z-index: 32;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+.nav-arrived-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  background: #16A34A;
+  color: white;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.30);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.nav-arrived-btn:hover { background: #15803D; }
+.nav-arrived-btn:active { transform: scale(0.97); }
 /* Orientation toggle FAB: single-character label, clearly legible */
 .nav-orient-label {
   font-family: var(--font-brand, var(--font-ui));

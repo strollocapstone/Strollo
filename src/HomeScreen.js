@@ -42,6 +42,7 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
   return L.divIcon({
     className: "",
     html: `<div class="${classes.join(' ')}">
+    ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
     <div class="sugg-pin-dot">
       <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
     </div>
@@ -53,7 +54,6 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
           : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
       </button>
     </div>` : ''}
-    ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
   </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -777,7 +777,7 @@ export default function HomeScreen({
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" maxZoom={19} />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isAdded = addedIds.has(s.id);
             const isExpanded = selectedPoi === s.id;

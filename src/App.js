@@ -24,6 +24,10 @@ function App() {
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
   const [favedIds, setFavedIds] = useState(() => new Set());
+  // Locations the user has confirmed reaching ("I am here"). The route always
+  // targets the first non-visited confirmed stop; visited stops can't be
+  // removed from the Timeline.
+  const [visitedIds, setVisitedIds] = useState(() => new Set());
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
 
@@ -52,7 +56,7 @@ function App() {
       <div className="phone-frame">
         {(screen === 'home' || screen === 'constraints') && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setScreen('navigation'); }}
+            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setVisitedIds(new Set()); setScreen('navigation'); }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             onOpenQuiz={() => setScreen('quiz')}
@@ -104,7 +108,7 @@ function App() {
             onSkip={() => { setScreen('home'); setQuizPending(true); }}
           />
         )}
-        {screen === 'navigation' && (
+        {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
             onGoBack={() => setScreen('home')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
@@ -112,7 +116,10 @@ function App() {
             journeyItems={journeyItems}
             startLocation={startLocation}
             onJourneyChange={setJourneyItems}
+            addedIds={addedIds}
             setAddedIds={setAddedIds}
+            visitedIds={visitedIds}
+            setVisitedIds={setVisitedIds}
             vibePreferences={quizPreferences}
             showVoice={screen === 'navigation'}
           />
@@ -138,6 +145,7 @@ function App() {
             nearbyPlaces={nearbyPlaces}
             addedIds={addedIds}
             setAddedIds={setAddedIds}
+            visitedIds={visitedIds}
             userLocation={lastKnownLocation}
             tripStartTime={tripStartTime}
             journeyItems={journeyItems}

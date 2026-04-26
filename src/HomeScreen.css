@@ -276,20 +276,27 @@
 }
 
 /* Sequence number badge on added pills (top-right) */
+/* Sequence badge — sits inline to the LEFT of .sugg-pin-dot inside the
+   pill's flex row, at the same 18x18 size so it reads as a second
+   circular icon rather than a corner overlay. */
 .sugg-pin-badge {
-  position: absolute;
-  top: -5px; right: -5px;
-  min-width: 16px; height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
+  position: static;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  border-radius: 50%;
   background: #8851D4;
   color: #ffffff;
   font-family: var(--font-ui);
-  font-size: 10px; font-weight: 700;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,0.22);
-  z-index: 1;
 }
 
 /* ── Top bar ── */

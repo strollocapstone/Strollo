@@ -54,7 +54,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 40px 56px 14px 20px;
+  padding: 40px 20px 14px 20px;
 }
 
 .tl-suggestions-title {
@@ -168,6 +168,67 @@
   background: rgba(247, 244, 250, 0.95);
   border: 1.5px solid #8851D4;
 }
+/* Stops the user has already confirmed visiting — solid green dot. */
+.tl-rail-node--visited {
+  background: #16A34A;
+  box-shadow: 0 0 0 3px rgba(247, 244, 250, 0.95);
+}
+/* Map-pin marker on the rail at the user's current position. */
+.tl-rail-pin {
+  filter: drop-shadow(0 1px 3px rgba(136, 81, 212, 0.30));
+}
+/* Top-of-rail pin row when nothing is confirmed yet — same height as a
+   walk row so the pin sits cleanly above the first suggestion card. */
+.tl-row--pin-only {
+  min-height: 32px;
+}
+/* Visited cards: muted treatment, no swipe-action stack, no expansion lift. */
+.tl-card--visited {
+  opacity: 0.78;
+  background: rgba(22, 163, 74, 0.06);
+  cursor: default;
+}
+.tl-card--visited:hover {
+  transform: none;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+  border-color: rgba(22, 163, 74, 0.25);
+}
+.tl-card--visited .tl-card-icon {
+  background: rgba(22, 163, 74, 0.18);
+}
+.tl-card--visited .tl-card-icon .material-symbols-rounded {
+  color: #16A34A;
+}
+/* Card being long-press-dragged for reorder: lift visually so the user
+   sees it's "picked up". touch-action prevents page scroll while dragging. */
+.tl-card--reorder-dragging {
+  z-index: 5;
+  box-shadow: 0 12px 28px rgba(30, 21, 65, 0.20);
+  transform-origin: 50% 50%;
+  cursor: grabbing;
+}
+
+/* First-time swipe-to-reveal hint. Bouncy nudge to the left every 5s
+   on the first card, telling new users that cards are swipeable. The
+   keyframes spend most of the cycle at rest and only bounce in the
+   last ~22% of the loop, so it reads as an occasional invitation
+   rather than a constant wiggle. CSS animations override inline
+   transform during playback, so this is removed by class swap as soon
+   as the user starts touching the card. */
+@keyframes tl-card-swipe-hint {
+  0%,
+  78%   { transform: translateX(0); }
+  82%   { transform: translateX(-32px); }
+  86%   { transform: translateX(8px); }
+  90%   { transform: translateX(-14px); }
+  94%   { transform: translateX(3px); }
+  98%,
+  100%  { transform: translateX(0); }
+}
+.tl-card--hint-swipe {
+  animation: tl-card-swipe-hint 5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+  will-change: transform;
+}
 
 /* Dot stays vertically centered with the card via flex align-items: center on the row */
 
@@ -239,13 +300,26 @@
 }
 
 .tl-walk-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-left: 6px;
   font-size: 13px;
   font-weight: 500;
   color: #5A4B64;
+  line-height: 1.4;
+}
+.tl-walk-primary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding-left: 6px;
+}
+.tl-walk-secondary {
+  font-size: 12px;
+  font-weight: 400;
+  color: #7C6D86;
 }
 
 /* ── Card column ── */
@@ -260,23 +334,58 @@
   border-radius: 12px;
   overflow: hidden;
 }
-.tl-card-remove-action {
+
+/* Action stack revealed when a card is swiped left. The container hugs
+   the right edge and is clipped to the swiped-past width (set inline),
+   so buttons stay invisible behind a transparent card until the card
+   has actually slid past them. Each button is absolutely positioned by
+   its right-offset and has full border-radius on all corners.
+   Confirmed cards expose 1 action (Remove); suggestions expose 3
+   (Add / Dismiss / Dislike). */
+.tl-card-actions {
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 72px;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+.tl-card-action {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 64px;
   border: none;
-  background: #DC2626;
+  border-radius: 12px;
   color: white;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   cursor: pointer;
-  padding: 0;
-  z-index: 0;
+  pointer-events: auto;
+  font-family: var(--font-ui);
+  padding: 0 4px;
+  transition: background 0.15s ease, transform 0.12s ease;
 }
-.tl-card-remove-action:active { background: #B91C1C; }
+.tl-card-action:active { transform: scale(0.96); }
+.tl-card-action svg { display: block; }
+.tl-card-action-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+.tl-card-action--remove { background: #DC2626; }
+.tl-card-action--remove:active { background: #B91C1C; }
+.tl-card-action--add { background: #16A34A; }
+.tl-card-action--add:active { background: #15803D; }
+.tl-card-action--dismiss { background: #6B7280; }
+.tl-card-action--dismiss:active { background: #4B5563; }
+.tl-card-action--dislike { background: #B91C1C; }
+.tl-card-action--dislike:active { background: #991B1B; }
 
 /* ── Collapsed card — compact, icon + name + category ── */
 .tl-content-cell .tl-card-swipe { margin: 6px 0; }
@@ -307,7 +416,7 @@
 
 .tl-card--suggestion {
   background: transparent;
-  border: 1px dashed rgba(136, 81, 212, 0.30);
+  border: 2px dotted #8851D4;
   box-shadow: none;
 }
 
@@ -406,10 +515,12 @@
   overflow: hidden;
   cursor: pointer;
   animation: tl-expand 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  padding-bottom: 16px;
 }
 
 .tl-card-detail--suggestion {
-  border: 1px dashed rgba(136, 81, 212, 0.25);
+  background: transparent;
+  border: 2px dotted #8851D4;
   box-shadow: 0 4px 24px rgba(136, 81, 212, 0.10);
 }
 
@@ -585,9 +696,10 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  background: #ffffff;
-  border-top: 1px solid rgba(30, 21, 65, 0.08);
-  box-shadow: 0 -2px 12px rgba(30, 21, 65, 0.04);
+  background: rgba(247, 244, 250, 0.50);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border-top: 1px solid rgba(90, 75, 100, 0.10);
 }
 
 /* Map — primary yellow pill: fills the bar, icon + label */
@@ -642,10 +754,10 @@
 }
 .tl-skip-btn:active { transform: scale(0.985); }
 
-/* End — compact secondary outline */
+/* End — compact secondary outline (height matches .tl-back-btn) */
 .tl-end-btn {
   flex-shrink: 0;
-  height: 40px;
+  height: 44px;
   padding: 0 18px;
   border-radius: var(--radius-pill);
   border: 1px solid rgba(30, 21, 65, 0.18);

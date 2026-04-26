@@ -27,11 +27,28 @@ const stopLabelIcon = (name, desc, sequence) => {
   return L.divIcon({
     className: "",
     html: `<div class="sugg-pin sugg-pin--added">
+      ${sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
       <div class="sugg-pin-dot">
         <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
       </div>
       <span class="sugg-pin-name">${name}</span>
-      ${sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
+
+// Faint companion pin for non-current confirmed stops (visited + future
+// stops on the planned route). Same shape as stopLabelIcon but smaller,
+// label-less, and dimmed — they're context, not the active destination.
+const stopLabelIconMuted = (name, desc) => {
+  const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  return L.divIcon({
+    className: "",
+    html: `<div class="sugg-pin sugg-pin--dot sugg-pin--muted" aria-label="${name}">
+      <div class="sugg-pin-dot">
+        <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+      </div>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -103,7 +120,21 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, setAddedIds, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, vibePreferences, showVoice = true }) {
+  // Confirmed stops match the Timeline's confirmed list: items the user has
+  // explicitly added (in addedIds) AND that have valid coordinates. Falling
+  // back to "all journey items with coords" preserves behavior if addedIds
+  // wasn't passed.
+  const confirmedStops = React.useMemo(() => {
+    const withCoords = journeyItems.filter((s) => s.lat && s.lng);
+    return addedIds ? withCoords.filter((s) => addedIds.has(s.id)) : withCoords;
+  }, [journeyItems, addedIds]);
+  // The actual routing target: first confirmed stop NOT yet visited. As the
+  // user confirms "I am here", we advance to the next non-visited stop.
+  const nextTarget = React.useMemo(
+    () => confirmedStops.find((s) => !visitedIds?.has(s.id)) || null,
+    [confirmedStops, visitedIds]
+  );
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -145,10 +176,29 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
     setUserLocation(pos);
   };
 
-  // Build route from user location through all stops
-  const stopPositions = journeyItems
-    .filter((s) => s.lat && s.lng)
-    .map((s) => [s.lat, s.lng]);
+  // Route follows the Timeline: route to the FIRST non-visited confirmed
+  // stop. If nothing is confirmed (or all visited), stopPositions is empty
+  // and no route is fetched.
+  const stopPositions = nextTarget ? [[nextTarget.lat, nextTarget.lng]] : [];
+
+  // Live straight-line distance to the next target — drives the "I am here"
+  // affordance and the wcw stats. Computed at component scope so the button
+  // (above wcw) can read it too.
+  const liveDistToTargetM = React.useMemo(() => {
+    if (!nextTarget || !userLocation) return null;
+    return haversineKm(userLocation, [nextTarget.lat, nextTarget.lng]) * 1000;
+  }, [nextTarget, userLocation]);
+  // 150 ft ≈ 45.72 m
+  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 45.72;
+
+  const handleArrived = () => {
+    if (!nextTarget || !setVisitedIds) return;
+    setVisitedIds((prev) => {
+      const out = new Set(prev);
+      out.add(nextTarget.id);
+      return out;
+    });
+  };
 
   // Apply voice-extracted edit actions to the journey
   const applyActions = useCallback(async ({ adds, removes, reorder }) => {
@@ -163,17 +213,20 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       });
     }
 
+    const addedFromVoice = [];
     if (adds && adds.length && userLocation) {
       for (const place of adds) {
         const result = await geocodePlace(place.name, userLocation[0], userLocation[1]);
         if (result) {
-          next.push({
+          const newStop = {
             id: Date.now() + next.length,
             name: place.name,
             desc: place.desc,
             lat: result.lat,
             lng: result.lng,
-          });
+          };
+          next.push(newStop);
+          addedFromVoice.push(newStop.id);
         }
       }
     }
@@ -194,7 +247,16 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
     }
 
     onJourneyChange(next);
-  }, [journeyItems, userLocation, onJourneyChange]);
+    // Voice-added places should also count as confirmed in the Timeline,
+    // otherwise the route filter (addedIds) would drop them immediately.
+    if (addedFromVoice.length && setAddedIds) {
+      setAddedIds((prev) => {
+        const out = new Set(prev);
+        addedFromVoice.forEach((id) => out.add(id));
+        return out;
+      });
+    }
+  }, [journeyItems, userLocation, onJourneyChange, setAddedIds]);
 
   const voice = useJourneyVoice({
     userLocation,
@@ -269,12 +331,34 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
             <Marker key={`blob-${i}`} position={b.pos} icon={makeBlob(b.w, b.h, b.rot, b.idx)} />
           ))}
 
-          {/* Walked trail — dashed dots behind the user */}
+          {/* Walked trail — solid yellow line behind the user. Yellow
+              marks past movement; dashed purple is reserved for the
+              planned route ahead. */}
           {pathHistory.length > 1 && (
-            <Polyline positions={pathHistory} pathOptions={{ color: "rgba(136,81,212,0.50)", weight: 4, dashArray: "6 10", lineCap: "round" }} />
+            <Polyline positions={pathHistory} pathOptions={{ color: "#FFD501", weight: 4, opacity: 0.85, lineCap: "round", lineJoin: "round" }} />
           )}
 
-          {/* Walking route along streets (from OSRM) */}
+          {/* Faint hint of the WHOLE confirmed route (visited + future) so
+              the user sees the broader plan even though only the active
+              leg is highlighted. Drawn FIRST so the salient OSRM line and
+              walked trail layer on top of it. Straight-line dashed —
+              context, not navigation. */}
+          {confirmedStops.length > 1 && (
+            <Polyline
+              positions={confirmedStops.map((s) => [s.lat, s.lng])}
+              pathOptions={{
+                color: "#8851D4",
+                weight: 3,
+                opacity: 0.30,
+                dashArray: "4 8",
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          )}
+
+          {/* Walking route along streets (from OSRM) — salient leg from
+              user to next target. */}
           {walkingRoute && (
             <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
           )}
@@ -283,15 +367,28 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
-          {/* Only the NEXT destination is pinned while navigating —
-              other stops are hidden until the user advances. */}
-          {journeyItems.filter((s) => s.lat && s.lng).slice(0, 1).map((s) => (
+          {/* Muted pins for every other confirmed stop (visited + future).
+              Faded and label-less — they hint at the broader plan without
+              competing with the next target. */}
+          {confirmedStops
+            .filter((s) => s.id !== nextTarget?.id)
+            .map((s) => (
+              <Marker
+                key={`stop-muted-${s.id}`}
+                position={[s.lat, s.lng]}
+                icon={stopLabelIconMuted(s.name, s.desc)}
+              />
+            ))}
+
+          {/* Salient pin for the active destination = first non-visited
+              confirmed Timeline item. */}
+          {nextTarget && (
             <Marker
-              key={`stop-${s.id}`}
-              position={[s.lat, s.lng]}
-              icon={stopLabelIcon(s.name, s.desc, 1)}
+              key={`stop-${nextTarget.id}`}
+              position={[nextTarget.lat, nextTarget.lng]}
+              icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1)}
             />
-          ))}
+          )}
 
           {/* User position */}
           <Marker position={userLocation} icon={youIcon} />
@@ -321,24 +418,53 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </div>
       )}
 
-      {/* ── BOTTOM-RIGHT STACK: just Locate (map is always north-up) ── */}
-      <div className="bottom-right-stack bottom-right-stack--nav">
-        <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
-            <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
-            <circle cx="12" cy="12" r="8"/>
-            <line x1="12" y1="2" x2="12" y2="5"/>
-            <line x1="12" y1="19" x2="12" y2="22"/>
-            <line x1="2" y1="12" x2="5" y2="12"/>
-            <line x1="19" y1="12" x2="22" y2="12"/>
-          </svg>
-        </button>
-      </div>
+      {/* ── BOTTOM-RIGHT STACK: just Locate (map is always north-up).
+           Hidden when this screen is rendered as the Timeline backdrop
+           (showVoice=false), so the locate FAB doesn't sit on top of
+           the Timeline overlay. ── */}
+      {showVoice && (
+        <div className="bottom-right-stack bottom-right-stack--nav">
+          <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
+              <circle cx="12" cy="12" r="8"/>
+              <line x1="12" y1="2" x2="12" y2="5"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="2" y1="12" x2="5" y2="12"/>
+              <line x1="19" y1="12" x2="22" y2="12"/>
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* ── "I am here" — appears above the wcw when the user is within
+           150 ft of the next confirmed Timeline target. Tapping it marks
+           the stop as visited; routing automatically advances to the next
+           non-visited stop. ── */}
+      {showVoice && voiceMode !== "full" && nextTarget && isAtTarget && (
+        <div className="nav-arrived-bar">
+          <button
+            type="button"
+            className="nav-arrived-btn"
+            onClick={handleArrived}
+            aria-label={`Confirm you have arrived at ${nextTarget.name}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="4 12 10 18 20 6" />
+            </svg>
+            <span>I am here</span>
+          </button>
+        </div>
+      )}
 
       {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
       {showVoice && voiceMode !== "full" && (() => {
-        const nextStop = journeyItems.find((s) => s.lat && s.lng);
-        const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : "your next stop";
+        // The "next stop" being routed to == first non-visited confirmed
+        // Timeline item. When nothing is confirmed/all visited, the widget
+        // shows an empty state and the CTA flips to "See suggestions".
+        const nextStop = nextTarget;
+        const isEmpty = !nextStop;
+        const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : null;
         // Live route values when available, static placeholders otherwise.
         // DIST stat: TOTAL route distance from user to the next destination (along streets),
         // from OSRM — longer than straight-line because it follows the route geometry.
@@ -369,7 +495,9 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           ? haversineKm(userLocation, [nextTurn.maneuver.location[1], nextTurn.maneuver.location[0]]) * 1000
           : null;
         let instruction;
-        if (!userLocation || liveDistToStopM === null) {
+        if (isEmpty) {
+          instruction = "—";
+        } else if (!userLocation || liveDistToStopM === null) {
           instruction = "HEAD OUT";
         } else if (distToTurnM !== null && distToTurnM <= 15) {
           instruction = `TURN ${String(nextTurn.maneuver.modifier || "right").toUpperCase()}`;
@@ -384,16 +512,17 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           <WalkCompanionWidget
             destination={nextWaypoint}
             instruction={instruction}
-            distance={distance}
-            eta={eta}
-            canSkip={journeyItems.filter(s => s.lat && s.lng).length > 1}
+            distance={isEmpty ? "—" : distance}
+            eta={isEmpty ? "—" : eta}
+            canSkip={confirmedStops.length > 1}
+            checkLabel={isEmpty ? "Explore" : "Journey"}
             onSkip={() => {
-              if (!onJourneyChange) return;
-              // Drop the current (next) stop so the one after it becomes the destination,
-              // AND remove it from addedIds so Timeline no longer shows it as planned.
-              const skippedId = journeyItems[0]?.id;
-              onJourneyChange(journeyItems.slice(1));
-              if (skippedId != null && setAddedIds) {
+              if (!nextStop || !onJourneyChange) return;
+              // Drop the current (next) confirmed stop from both the journey
+              // and addedIds, so Timeline + route stay in sync.
+              const skippedId = nextStop.id;
+              onJourneyChange(journeyItems.filter((j) => j.id !== skippedId));
+              if (setAddedIds) {
                 setAddedIds((prev) => {
                   const next = new Set(prev);
                   next.delete(skippedId);
