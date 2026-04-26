@@ -218,9 +218,11 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
       quizHistory: history,
       completedAt: new Date().toISOString(),
     };
+    // Linger on the "all set" screen long enough for the user to read the
+    // headline + summary chips before the home page takes over.
     const t = setTimeout(() => {
       onCompleteRef.current?.(payload);
-    }, 900);
+    }, 2800);
     return () => clearTimeout(t);
   }, [done, history]);
 
@@ -337,8 +339,16 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
     );
   }
 
+  // Slide-down + fade before letting App.js swap to Home so the user feels
+  // the screen leaving instead of vanishing.
+  const handleSkip = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onSkip?.(), 380);
+  };
+
   return (
-    <div className="quiz-screen">
+    <div className={`quiz-screen${closing ? " quiz-screen--closing" : ""}`}>
       <div className={`quiz-blobs${closing ? " quiz-blobs--genie" : ""}`}>
         <div className="quiz-blob quiz-blob--1" />
         <div className="quiz-blob quiz-blob--2" />
@@ -357,17 +367,9 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         )}
       </div>
 
-      {/* Title + subtitle */}
+      {/* Title */}
       <div className="quiz-header">
         <h1 className="quiz-title">Would you go here?</h1>
-        <p className="quiz-subtitle">
-          <span>Swipe</span>
-          <span className="quiz-subtitle-arrows">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-          </span>
-          <span>to decide</span>
-        </p>
       </div>
 
       {/* Clothesline (only kept/liked polaroids) */}
@@ -496,7 +498,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
           </button>
         )}
         {onSkip && (
-          <button type="button" className="quiz-skip" onClick={onSkip}>
+          <button type="button" className="quiz-skip" onClick={handleSkip}>
             Skip for now
           </button>
         )}

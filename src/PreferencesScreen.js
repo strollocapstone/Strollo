@@ -103,6 +103,14 @@ function CheckCircle({ checked }) {
 
 export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, embedded, initialPreferences }) {
   const seed = initialPreferences;
+  // Closing animation: when the user taps Close, slide the sheet down for
+  // ~380ms before invoking onGoBack so the home page swap feels smooth.
+  const [closing, setClosing] = useState(false);
+  const handleClose = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onGoBack?.(), 380);
+  };
   const [expandedCards, setExpandedCards] = useState(new Set(["destination"]));
   const [destination, setDestination] = useState(seed?.destination ?? null);
   const [destSearch, setDestSearch] = useState(seed?.destChosen ?? "");
@@ -436,10 +444,10 @@ export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, 
 
 
   return (
-    <div className={`pwc-screen${embedded ? " pwc-screen--embedded" : ""}`}>
+    <div className={`pwc-screen${embedded ? " pwc-screen--embedded" : ""}${closing ? " pwc-screen--closing" : ""}`}>
       {!embedded && (
         <>
-          <button className="pwc-close" onClick={onGoBack} aria-label="Close">
+          <button className="pwc-close" onClick={handleClose} aria-label="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
               <line x1="6" y1="6" x2="18" y2="18" />
               <line x1="6" y1="18" x2="18" y2="6" />
@@ -477,16 +485,23 @@ export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, 
           <p className="pwc-hint">You can always adjust during your walk</p>
           <button
             className="pwc-start-btn"
-            onClick={() => onSavePreferences?.({
-              destination,
-              destChosen: destChosen || null,
-              duration: duration || null,
-              customDuration: customDuration || null,
-              distance: distance || null,
-              accessibility: [...accessibility],
-              avoidances: [...avoidances],
-              mapFilters: [...mapFilters],
-            })}
+            onClick={() => {
+              if (closing) return;
+              const payload = {
+                destination,
+                destChosen: destChosen || null,
+                duration: duration || null,
+                customDuration: customDuration || null,
+                distance: distance || null,
+                accessibility: [...accessibility],
+                avoidances: [...avoidances],
+                mapFilters: [...mapFilters],
+              };
+              // Same slide-down as the close (×) button — feels symmetric and
+              // gives the user visual confirmation that the sheet is leaving.
+              setClosing(true);
+              setTimeout(() => onSavePreferences?.(payload), 380);
+            }}
           >
             Save Preferences
           </button>

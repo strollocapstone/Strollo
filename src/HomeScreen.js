@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./HomeScreen.css";
@@ -7,7 +7,7 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius } from "./mapUtils";
+import { youIcon, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm } from "./mapUtils";
 
 const CATEGORY_ICONS = {
   "Coffee":     "local_cafe",
@@ -60,20 +60,31 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
   });
 };
 
-const makeAiPinIcon = (name, desc, expanded) => L.divIcon({
-  className: "",
-  html: `<div class="sugg-pin sugg-pin--ai${expanded ? " sugg-pin--open" : ""}">
-    <div class="sugg-pin-dot sugg-pin-dot--ai">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-    </div>
-    <span class="sugg-pin-name">${name}</span>
-    <div class="sugg-pin-extra">
-      <span class="sugg-pin-desc">${desc}</span>
-    </div>
-  </div>`,
-  iconSize: [0, 0],
-  iconAnchor: [0, 0],
-});
+const makeAiPinIcon = (name, desc, expanded, added = false, sequence = null) => {
+  const classes = ['sugg-pin', 'sugg-pin--ai'];
+  if (expanded) classes.push('sugg-pin--open');
+  if (added) classes.push('sugg-pin--added');
+  return L.divIcon({
+    className: "",
+    html: `<div class="${classes.join(' ')}">
+      ${added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
+      <div class="sugg-pin-dot sugg-pin-dot--ai">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+      </div>
+      <span class="sugg-pin-name">${name}</span>
+      ${expanded ? `<div class="sugg-pin-extra">
+        ${desc ? `<span class="sugg-pin-desc">${desc}</span>` : ''}
+        <button class="sugg-pin-add-btn${added ? ' sugg-pin-add-btn--remove' : ''}" data-action="toggle" aria-label="${added ? 'Remove from itinerary' : 'Add to itinerary'}">
+          ${added
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D44" stroke-width="3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>`
+            : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
+        </button>
+      </div>` : ''}
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
 
 // ── Location card ──────────────────────────────────────────────────────────
 const LocationCard = memo(function LocationCard({ item, added, onToggle }) {
@@ -196,6 +207,51 @@ function SoundWaveSvg({ active }) {
   );
 }
 
+// ── Map helper: fly to a target [lat, lng] when it changes ──────────────
+// `bottomOffset` (px) shifts the centering point DOWN in pixel space so the
+// target lat/lng appears at the visual center of the *visible* map area —
+// used in split-chat mode where the bottom of the map is hidden by the sheet.
+function MapFocusFly({ target, zoom = 17, bottomOffset = 0 }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    try {
+      if (bottomOffset > 0) {
+        const px = map.project(target, zoom).add([0, bottomOffset / 2]);
+        map.flyTo(map.unproject(px, zoom), zoom, { duration: 0.6 });
+      } else {
+        map.flyTo(target, zoom, { duration: 0.6 });
+      }
+    } catch (_) {}
+  }, [target?.[0], target?.[1], zoom, bottomOffset, map]);
+  return null;
+}
+
+// ── Map helper: one-shot fitBounds to enclose user + suggestions ──────────
+// `bottomPadding` (px) reserves space at the bottom for the chat sheet so
+// fitBounds keeps every point inside the *visible* map band.
+function MapFitToSuggestions({ active, points, bottomPadding = 0 }) {
+  const map = useMap();
+  const lastFitCountRef = useRef(0);
+  useEffect(() => {
+    if (!active) { lastFitCountRef.current = 0; return; }
+    if (!points || points.length < 1) return;
+    // Re-fit each time more points arrive (geocoding streams in serially).
+    if (points.length === lastFitCountRef.current) return;
+    try {
+      const bounds = L.latLngBounds(points);
+      map.fitBounds(bounds, {
+        paddingTopLeft: [40, 40],
+        paddingBottomRight: [40, 40 + bottomPadding],
+        maxZoom: 16,
+        animate: true,
+      });
+      lastFitCountRef.current = points.length;
+    } catch (_) {}
+  }, [active, points, bottomPadding, map]);
+  return null;
+}
+
 // ── HomeScreen ─────────────────────────────────────────────────────────────
 export default function HomeScreen({
   onStartWalk,
@@ -206,6 +262,7 @@ export default function HomeScreen({
   initialSheetOpen,
   onSheetOpenConsumed,
   preferences,
+  vibePreferences,
   nearbyPlaces,
   setNearbyPlaces,
   addedIds,
@@ -252,9 +309,31 @@ export default function HomeScreen({
   const [listenTextMode, setListenTextMode]     = useState(false);
   const [suggestedStops, setSuggestedStops]     = useState([]);
   const [geocodedSuggestions, setGeocodedSuggestions] = useState([]);
+  const [currentGeocodeReqId, setCurrentGeocodeReqId] = useState(0);
   const [planLoading, setPlanLoading]           = useState(false);
+  // Cross-query selection state — keyed by place name so selections persist
+  // when the user sends another prompt (suggestedStops gets replaced but
+  // selections stay intact in this Set).
+  const [selectedStopNames, setSelectedStopNames] = useState(() => new Set());
+  // When set, the chat flips into the "plan confirmed" handoff screen.
+  const [planConfirmed, setPlanConfirmed]       = useState(null);
   const [selectedPoi, setSelectedPoi]           = useState(null);
+  const [flyToTarget, setFlyToTarget]           = useState(null);
   const [mapZoom, setMapZoom]                   = useState(15);
+  const [focusedSuggestionId, setFocusedSuggestionId] = useState(null);
+  const suggestRailRef = useRef(null);
+  const cardRefs = useRef({});
+  const chatMsgsDomRef = useRef(null);
+  const railScrollingRef = useRef(false); // true while user is manually scrolling the rail
+  const chatReqIdRef = useRef(0); // incremented when chat closes, used to discard stale Gemini responses
+  // Derived early so child effects below can depend on it without TDZ.
+  const _earlyScreenMode =
+    planConfirmed                                    ? 'confirmed' :
+    chatMessages.length === 0 && !chatLoading        ? 'empty'     :
+    chatLoading || suggestedStops.length === 0       ? 'thinking'  :
+    chatListening                                    ? 'refining'  :
+                                                       'suggestions';
+  const chatSplitActive = chatMode && _earlyScreenMode !== 'confirmed';
   const chatHistoryIdCounter = useRef(0);
   const chatIdCounter = useRef(0);
   const resultTimer = useRef(null);
@@ -269,47 +348,113 @@ export default function HomeScreen({
   useEffect(() => () => { nearbyAbortRef.current?.abort(); }, []);
   useEffect(() => () => clearTimeout(dragDebounceRef.current), []);
 
-  // Track bottom-search height and push button stack above it (per-frame, no re-renders)
+  // Track bottom-search height and push button stack above it (per-frame, no re-renders).
+  // While the chat sheet is open we let CSS pin the float bar above the sheet instead.
   useEffect(() => {
     const el = bottomSearchRef.current;
     if (!el) return;
+    if (chatSplitActive) {
+      if (buttonStackRef.current) buttonStackRef.current.style.bottom = "";
+      return;
+    }
     const ro = new ResizeObserver(entries => {
       const h = entries[0].borderBoxSize?.[0]?.blockSize ?? entries[0].contentRect.height;
       if (buttonStackRef.current) buttonStackRef.current.style.bottom = `${h + 12}px`;
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [voiceExpanded]);
+  }, [voiceExpanded, chatSplitActive]);
 
   const geocodeSuggestions = useCallback((places) => {
     const loc = userLocationRef.current;
     if (!loc || !places || places.length === 0) return;
     const reqId = ++geocodeReqRef.current;
-    setGeocodedSuggestions([]);
-    (async () => {
-      for (let i = 0; i < places.length; i++) {
-        const place = places[i];
-        const result = await geocodePlace(place.name, loc[0], loc[1]);
+    setCurrentGeocodeReqId(reqId);
+    places.forEach((place, i) => {
+      const pinId = `ai-${reqId}-${i}`;
+      (async () => {
+        // Step 1: pin immediately using Gemini's hint coords — zero latency, always visible.
+        if (place.hintLat != null && place.hintLng != null) {
+          if (geocodeReqRef.current !== reqId) return;
+          setGeocodedSuggestions(prev => {
+            if (prev.some(p => p.id === pinId)) return prev;
+            return [...prev, { id: pinId, name: place.name, desc: place.desc, lat: place.hintLat, lng: place.hintLng }];
+          });
+        }
+        // Step 2: refine with Nominatim in the background (replaces hint coords if successful).
+        const result = await geocodePlace(place.name, loc[0], loc[1], place.hintLat, place.hintLng);
         if (geocodeReqRef.current !== reqId) return;
-        if (!result) continue;
-        // Drop if outside ~3km
-        const dlat = Math.abs(result.lat - loc[0]);
-        const dlng = Math.abs(result.lng - loc[1]);
-        if (dlat >= 0.027 || dlng >= 0.027) continue;
+        if (!result) return;
         setGeocodedSuggestions(prev => {
-          // Dedup by rough coords
+          const existing = prev.find(p => p.id === pinId);
+          if (existing) {
+            return prev.map(p => p.id === pinId ? { ...p, lat: result.lat, lng: result.lng } : p);
+          }
           if (prev.some(p => Math.abs(p.lat - result.lat) < 0.0002 && Math.abs(p.lng - result.lng) < 0.0002)) return prev;
-          return [...prev, {
-            id: `ai-${reqId}-${i}`,
-            name: place.name,
-            desc: place.desc,
-            lat: result.lat,
-            lng: result.lng,
-          }];
+          return [...prev, { id: pinId, name: place.name, desc: place.desc, lat: result.lat, lng: result.lng }];
         });
-      }
-    })();
+      })();
+    });
   }, []);
+
+  // Default focus to the first geocoded suggestion when results arrive.
+  useEffect(() => {
+    if (!chatSplitActive) { setFocusedSuggestionId(null); return; }
+    if (geocodedSuggestions.length === 0) { setFocusedSuggestionId(null); return; }
+    setFocusedSuggestionId(prev => {
+      if (prev && geocodedSuggestions.some(g => g.id === prev)) return prev;
+      return geocodedSuggestions[0].id;
+    });
+  }, [chatSplitActive, geocodedSuggestions]);
+
+  // Carousel scroll → focused card: whichever card's left edge is nearest the
+  // rail's left boundary is the "shown left card" the user is looking at.
+  useEffect(() => {
+    if (!chatSplitActive) return;
+    const rail = suggestRailRef.current;
+    if (!rail) return;
+    let scrollEndTimer = null;
+    const update = () => {
+      const cards = Array.from(rail.querySelectorAll('[data-suggestion-id]'));
+      if (!cards.length) return;
+      const scrollLeft = rail.scrollLeft;
+      // Focus the first card whose left edge hasn't yet crossed the left boundary.
+      // The moment the previous card starts sliding off-screen (left < 0), the next
+      // card (left >= 0) becomes focused. 2px tolerance absorbs scroll-snap rounding.
+      let best = null;
+      for (const card of cards) {
+        if (card.offsetLeft - scrollLeft >= -2) { best = card; break; }
+      }
+      if (!best) best = cards[cards.length - 1];
+      const sid = best.getAttribute('data-suggestion-id');
+      if (sid && sid.startsWith('ai-')) setFocusedSuggestionId(sid);
+    };
+    const onScroll = () => {
+      railScrollingRef.current = true;
+      clearTimeout(scrollEndTimer);
+      scrollEndTimer = setTimeout(() => { railScrollingRef.current = false; }, 200);
+      update();
+    };
+    update();
+    rail.addEventListener('scroll', onScroll, { passive: true });
+    return () => { rail.removeEventListener('scroll', onScroll); clearTimeout(scrollEndTimer); };
+  }, [chatSplitActive, geocodedSuggestions, suggestedStops]);
+
+  // Sync map's expanded pin to the focused card.
+  useEffect(() => {
+    if (!chatSplitActive) return;
+    if (focusedSuggestionId) setSelectedPoi(focusedSuggestionId);
+  }, [chatSplitActive, focusedSuggestionId]);
+
+  // Reverse direction: tapping a pin → scroll its card into view.
+  // Suppressed while the user is manually scrolling the rail to avoid fighting them.
+  useEffect(() => {
+    if (!chatSplitActive || !selectedPoi || railScrollingRef.current) return;
+    const el = cardRefs.current[selectedPoi];
+    if (el && el.scrollIntoView) {
+      try { el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
+    }
+  }, [chatSplitActive, selectedPoi]);
 
   const loadNearbyPlaces = useCallback(async (loc, force = false) => {
     const now = Date.now();
@@ -388,8 +533,10 @@ export default function HomeScreen({
     setLocked(false);
     const text = spokenText?.trim() || "";
 
-    // In chat mode, ignore auto-stop — user manually controls stop via button
+    // In chat mode, mirror the homepage flow: silence = auto-send to Gemini.
     if (chatModeRef.current) {
+      setChatListening(false);
+      if (text) sendChatMessageRef.current?.(text);
       return;
     }
     setChatListening(false);
@@ -409,6 +556,7 @@ export default function HomeScreen({
         setChatMode(true);
         setChatLoading(true);
 
+        const chatReqId = chatReqIdRef.current;
         try {
           const systemPrompt = buildSystemPrompt({
             userLocation,
@@ -416,11 +564,14 @@ export default function HomeScreen({
             elapsedMinutes: 0,
             currentStopIndex: 0,
             totalStops: 0,
+            preferences,
+            vibePreferences,
           });
           const response = await sendMessage([userMsg], systemPrompt);
+          if (chatReqIdRef.current !== chatReqId) return;
           const places = extractPlaces(response);
           const displayText = cleanResponseText(response);
-          const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
+          const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText, places: places.length > 0 ? places : undefined };
           setChatMessages(prev => {
             const updated = [...prev, aiMsg];
             if (places.length > 0) {
@@ -430,11 +581,12 @@ export default function HomeScreen({
             return updated;
           });
         } catch (err) {
+          if (chatReqIdRef.current !== chatReqId) return;
           console.error("Gemini error:", err);
           const errMsg = { id: ++chatIdCounter.current, role: "ai", text: `Gemini error: ${err?.message || "unknown"}. Tap the mic to try again!` };
           setChatMessages(prev => [...prev, errMsg]);
         } finally {
-          setChatLoading(false);
+          if (chatReqIdRef.current === chatReqId) setChatLoading(false);
         }
       }, 1000);
     } else {
@@ -442,7 +594,7 @@ export default function HomeScreen({
       setListenTextMode(false);
       setVoiceActive(false);
     }
-  }, [userLocation, geocodeSuggestions]);
+  }, [userLocation, geocodeSuggestions, preferences, vibePreferences]);
 
   const speech = useSpeechRecognition({ onAutoStop: handleAutoStop });
 
@@ -457,6 +609,7 @@ export default function HomeScreen({
     setQuery("");
     setChatLoading(true);
 
+    const chatReqId = chatReqIdRef.current;
     try {
       const systemPrompt = buildSystemPrompt({
         userLocation,
@@ -464,26 +617,30 @@ export default function HomeScreen({
         elapsedMinutes: 0,
         currentStopIndex: 0,
         totalStops: 0,
+        preferences,
+        vibePreferences,
       });
       // Send full conversation history so LLM has session context
       const fullHistory = [...chatMessagesRef.current, userMsg];
       const response = await sendMessage(fullHistory, systemPrompt);
+      if (chatReqIdRef.current !== chatReqId) return;
       const places = extractPlaces(response);
       const displayText = cleanResponseText(response);
-      const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText };
+      const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText, places: places.length > 0 ? places : undefined };
       setChatMessages(prev => [...prev, aiMsg]);
       if (places.length > 0) {
         setSuggestedStops(places);
         geocodeSuggestions(places);
       }
     } catch (err) {
+      if (chatReqIdRef.current !== chatReqId) return;
       console.error("Gemini error:", err);
       const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" };
       setChatMessages(prev => [...prev, errMsg]);
     } finally {
-      setChatLoading(false);
+      if (chatReqIdRef.current === chatReqId) setChatLoading(false);
     }
-  }, [userLocation, geocodeSuggestions]);
+  }, [userLocation, geocodeSuggestions, preferences, vibePreferences]);
   const sendChatMessageRef = useRef(sendChatMessage);
   sendChatMessageRef.current = sendChatMessage;
 
@@ -497,37 +654,45 @@ export default function HomeScreen({
     setListenCardMode(false);
     setListenTextMode(false);
     setVoiceActive(false);
-    const systemPrompt = buildSystemPrompt({ userLocation, journeyItems: [], elapsedMinutes: 0, currentStopIndex: 0, totalStops: 0 });
+    const chatReqId = chatReqIdRef.current;
+    const systemPrompt = buildSystemPrompt({ userLocation, journeyItems: [], elapsedMinutes: 0, currentStopIndex: 0, totalStops: 0, preferences, vibePreferences });
     sendMessage([{ role: "user", text: trimmed }], systemPrompt).then(response => {
+      if (chatReqIdRef.current !== chatReqId) return;
       const places = extractPlaces(response);
       const displayText = cleanResponseText(response);
-      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: displayText }]);
+      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: displayText, places: places.length > 0 ? places : undefined }]);
       if (places.length > 0) {
         setSuggestedStops(places);
         geocodeSuggestions(places);
       }
     }).catch(() => {
+      if (chatReqIdRef.current !== chatReqId) return;
       setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" }]);
-    }).finally(() => setChatLoading(false));
-  }, [userLocation, geocodeSuggestions]);
+    }).finally(() => { if (chatReqIdRef.current === chatReqId) setChatLoading(false); });
+  }, [userLocation, geocodeSuggestions, preferences, vibePreferences]);
 
-  const handlePlanWalk = useCallback(async () => {
-    if (suggestedStops.length === 0) return;
+  const handlePlanWalk = useCallback(async (passedStops) => {
+    const stops = passedStops || suggestedStops;
+    if (stops.length === 0) return;
     setPlanLoading(true);
 
     try {
-      // Geocode all suggested places
+      // Resolve each stop's coordinates. Priority:
+      //   1. Already-geocoded entry (hint coords placed immediately, possibly refined)
+      //   2. Nominatim with hint coords as a sanity check
+      //   3. Gemini's hint coords directly (never leave a stop unresolved if hints exist)
       const geocoded = [];
-      for (const stop of suggestedStops) {
-        const result = await geocodePlace(stop.name, userLocation[0], userLocation[1]);
+      for (const stop of stops) {
+        const existing = geocodedSuggestions.find(g => g.name === stop.name);
+        if (existing) {
+          geocoded.push({ id: Date.now() + geocoded.length, name: stop.name, desc: stop.desc, lat: existing.lat, lng: existing.lng, walk: stop.walk });
+          continue;
+        }
+        const result = await geocodePlace(stop.name, userLocation[0], userLocation[1], stop.hintLat, stop.hintLng);
         if (result) {
-          geocoded.push({
-            id: Date.now() + geocoded.length,
-            name: stop.name,
-            desc: stop.desc,
-            lat: result.lat,
-            lng: result.lng,
-          });
+          geocoded.push({ id: Date.now() + geocoded.length, name: stop.name, desc: stop.desc, lat: result.lat, lng: result.lng, walk: stop.walk });
+        } else if (stop.hintLat != null && stop.hintLng != null) {
+          geocoded.push({ id: Date.now() + geocoded.length, name: stop.name, desc: stop.desc, lat: stop.hintLat, lng: stop.hintLng, walk: stop.walk });
         }
       }
 
@@ -540,13 +705,29 @@ export default function HomeScreen({
         return;
       }
 
-      // Close chat and start walk
-      setChatMode(false);
-      setChatMessages([]);
-      setSuggestedStops([]);
-      geocodeReqRef.current++;
-      setGeocodedSuggestions([]);
-      onStartWalk(nearby, userLocation);
+      // Estimate distance + duration from straight-line stop-to-stop legs (~80 m/min walking)
+      const haversineKmLocal = (a, b) => {
+        const R = 6371, toRad = (d) => (d * Math.PI) / 180;
+        const dLat = toRad(b[0] - a[0]); const dLng = toRad(b[1] - a[1]);
+        const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2;
+        return 2 * R * Math.asin(Math.sqrt(s));
+      };
+      let totalKm = haversineKmLocal(userLocation, [nearby[0].lat, nearby[0].lng]);
+      for (let i = 1; i < nearby.length; i++) {
+        totalKm += haversineKmLocal([nearby[i-1].lat, nearby[i-1].lng], [nearby[i].lat, nearby[i].lng]);
+      }
+      const distanceMi = +(totalKm * 0.621371).toFixed(1);
+      const totalMin = Math.max(1, Math.round((totalKm * 1000) / 80));
+
+      // Flip into screen 5 — plan-confirmed handoff. The Start-walk CTA in JSX
+      // dispatches onStartWalk when pressed.
+      setPlanConfirmed({
+        stops: nearby,
+        distanceMi,
+        totalMin,
+        title: nearby[0]?.name ? `${nearby[0].name.split(",")[0]} loop` : "Your walk",
+        area: `${nearby.length} stops nearby`,
+      });
     } catch (err) {
       console.error("Plan walk error:", err);
       const errMsg = { id: ++chatIdCounter.current, role: "ai", text: "Something went wrong while planning the route. Please try again." };
@@ -554,9 +735,80 @@ export default function HomeScreen({
     } finally {
       setPlanLoading(false);
     }
-  }, [suggestedStops, userLocation, onStartWalk]);
+  }, [suggestedStops, geocodedSuggestions, userLocation]);
+
+  // activeStops gathers every selected place across ALL AI messages (not just
+  // the current rail), so selections persist when the user asks a follow-up.
+  // Order = first-seen across messages, then current suggestedStops.
+  const activeStops = useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const consider = (p) => {
+      if (!p || !p.name || seen.has(p.name)) return;
+      if (!selectedStopNames.has(p.name)) return;
+      out.push(p);
+      seen.add(p.name);
+    };
+    for (const msg of chatMessages) {
+      if (msg.role === 'ai' && Array.isArray(msg.places)) msg.places.forEach(consider);
+    }
+    suggestedStops.forEach(consider);
+    return out;
+  }, [chatMessages, suggestedStops, selectedStopNames]);
+
+  const toggleStopByName = useCallback((name) => {
+    if (!name) return;
+    setSelectedStopNames(prev => {
+      const n = new Set(prev);
+      n.has(name) ? n.delete(name) : n.add(name);
+      return n;
+    });
+  }, []);
+  const toggleStop = useCallback((i) => {
+    const stop = suggestedStops[i];
+    if (stop) toggleStopByName(stop.name);
+  }, [suggestedStops, toggleStopByName]);
+
+  // Scroll messages to bottom whenever content changes. rAF defers the
+  // scroll until after layout so scrollHeight reflects the just-mounted
+  // suggest rail, not the previous (bubble-only) state.
+  useEffect(() => {
+    const el = chatMsgsDomRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [chatMessages, suggestedStops, chatLoading]);
+
+  // Helper handlers (no-ops where the feature isn't yet built; safe to wire later)
+  const startVoice = useCallback(() => {
+    if (!speech.supported) return;
+    setChatListening(true);
+    speech.start();
+  }, [speech]);
+  const repeatWalk = useCallback(() => {}, []);
+  const onReorder = useCallback(() => {}, []);
+  const onVoiceTour = useCallback(() => {}, []);
+  const onStartWalkConfirmed = useCallback(() => {
+    if (!planConfirmed) return;
+    setChatMode(false);
+    setChatMessages([]);
+    setSuggestedStops([]);
+    setSelectedStopNames(new Set());
+    geocodeReqRef.current++;
+    setGeocodedSuggestions([]);
+    const stops = planConfirmed.stops;
+    setPlanConfirmed(null);
+    onStartWalk(stops, userLocation);
+  }, [planConfirmed, onStartWalk, userLocation]);
+  const lastWalk = null; // placeholder until we surface a "last walk" record
+
+  const screenMode = _earlyScreenMode;
+
 
   const closeChat = useCallback(() => {
+    chatReqIdRef.current++;
     setChatClosing(true);
     setTimeout(() => {
       // Save conversation to history if it has messages
@@ -575,6 +827,7 @@ export default function HomeScreen({
       setShowHistory(false);
       setViewingHistory(null);
       setSuggestedStops([]);
+      setSelectedStopNames(new Set());
       geocodeReqRef.current++;
       setGeocodedSuggestions([]);
     }, 350);
@@ -673,7 +926,7 @@ export default function HomeScreen({
       speech.reset();
       setListenCardMode(false);
       setListenTextMode(false);
-      setTimeout(() => { setVoiceActive(false); }, 320);
+      setVoiceActive(false);
     } else {
       if (!speech.supported) {
         setVoiceUnsupported(true);
@@ -778,7 +1031,7 @@ export default function HomeScreen({
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
-          {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
+          {!chatSplitActive && visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isAdded = addedIds.has(s.id);
             const isExpanded = selectedPoi === s.id;
             const sequence = sequenceMap.get(s.id);
@@ -824,24 +1077,52 @@ export default function HomeScreen({
           })}
           {geocodedSuggestions.map((s) => {
             const isExpanded = selectedPoi === s.id;
+            const isCurrent = s.id.startsWith(`ai-${currentGeocodeReqId}-`);
+            const isSelected = selectedStopNames.has(s.name);
+            const sequence = isSelected
+              ? activeStops.findIndex(p => p.name === s.name) + 1
+              : null;
             return (
               <Marker key={s.id} position={[s.lat, s.lng]}
-                icon={makeAiPinIcon(s.name, s.desc, isExpanded)}
-                zIndexOffset={isExpanded ? 1001 : 1}
-                eventHandlers={{
-                  click: () => setSelectedPoi(isExpanded ? null : s.id),
-                }}
+                icon={makeAiPinIcon(s.name, s.desc, isExpanded, isSelected, sequence || null)}
+                zIndexOffset={isExpanded ? 1001 : (isSelected ? 600 : 1)}
+                interactive={isCurrent}
+                eventHandlers={isCurrent ? {
+                  click: () => {
+                    toggleStopByName(s.name);
+                    const next = isExpanded ? null : s.id;
+                    setSelectedPoi(next);
+                    setFocusedSuggestionId(next);
+                  },
+                } : {}}
               />
             );
           })}
           {userLocation && <Marker position={userLocation} icon={youIcon} />}
           {userLocation && <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />}
-          <LocateMe trigger={locateTrigger} zoom={17} onLocate={handleLocate} onError={setLocateError} />
+          <LocateMe trigger={locateTrigger} zoom={17} onLocate={handleLocate} onError={(msg) => { setLocateError(msg); setShowLocatePrompt(true); }} />
           <WatchLocation onUpdate={setUserLocation} />
           <MapDragListener onDrag={handleMapDrag} />
           <MapCenterTracker onCenterChange={handleMapCenterChange} />
           <ZoomTracker onZoom={setMapZoom} />
           <MapClickListener onClick={() => setSelectedPoi(null)} />
+          {/* In split mode the bottom 35vh is covered by the chat sheet. Pass
+              that height so flyTo offsets the target to the visible center. */}
+          {(() => {
+            const sheetPx = chatSplitActive ? Math.max(window.innerHeight * 0.35, 260) : 0;
+            const focused = chatSplitActive ? geocodedSuggestions.find(g => g.id === focusedSuggestionId) : null;
+            return (
+              <>
+                <FlyTo target={flyToTarget} zoom={16} bottomOffset={sheetPx} />
+                {focused && <MapFocusFly target={[focused.lat, focused.lng]} zoom={16} bottomOffset={sheetPx} />}
+                <MapFitToSuggestions
+                  active={chatSplitActive && geocodedSuggestions.length > 0}
+                  points={(userLocation ? [userLocation] : []).concat(geocodedSuggestions.map(g => [g.lat, g.lng]))}
+                  bottomPadding={sheetPx}
+                />
+              </>
+            );
+          })()}
         </MapContainer>
       </div>
 
@@ -859,14 +1140,17 @@ export default function HomeScreen({
 
       {/* ── BOTTOM FLOAT BAR: Start exploring + Preferences + Locate ── */}
       {!voiceActive && !voiceExpanded && (
-        <div className="bottom-float-bar" ref={buttonStackRef}>
-          {addedIds.size > 0 && (
+        <div
+          className={`bottom-float-bar ${chatSplitActive ? "bottom-float-bar--above-chat" : ""}`}
+          ref={buttonStackRef}
+        >
+          {!chatSplitActive && addedIds.size > 0 && (
             <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
               Start exploring · {addedIds.size}
             </button>
           )}
           <div className="bottom-right-stack">
-            {quizPending && (
+            {!chatSplitActive && quizPending && (
               <button
                 className="fab-circle bottom-right-btn quiz-gateway-btn"
                 aria-label="Retake vibe quiz"
@@ -875,8 +1159,10 @@ export default function HomeScreen({
                 <div className="quiz-gateway-blob quiz-gateway-blob--1" />
                 <div className="quiz-gateway-blob quiz-gateway-blob--2" />
                 <div className="quiz-gateway-blob quiz-gateway-blob--3" />
+                <span className="quiz-gateway-icon" aria-hidden="true">📸</span>
               </button>
             )}
+            {!chatSplitActive && (
             <button
               className={`fab-circle bottom-right-btn${settingsHighlight ? " bottom-right-btn--halo" : ""}`}
               aria-label="Preferences"
@@ -891,6 +1177,7 @@ export default function HomeScreen({
                 <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
               </svg>
             </button>
+            )}
             <button
               className="fab-circle bottom-right-btn"
               aria-label="Focus on my location"
@@ -1255,176 +1542,375 @@ export default function HomeScreen({
         </div>
       )}
 
-      {/* ── CHAT MODE ── */}
+      {/* ── CHAT MODE — 5-screen pre-walk planning flow ── */}
       {chatMode && (
-        <div className={`chat-overlay ${chatClosing ? "chat-overlay--closing" : ""}`}>
+        <div className={`chat-overlay ${chatClosing ? "chat-overlay--closing" : ""} ${chatSplitActive ? "chat-overlay--split" : ""}`}>
+
+          {/* Header (shared all 5 screens) */}
           <div className="chat-header">
-            <button className="chat-history-btn" onClick={() => { setShowHistory(h => !h); setViewingHistory(null); }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            <button className="chat-icon-btn" onClick={() => setShowHistory(h => !h)} aria-label="History">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
               </svg>
             </button>
-            <span className="chat-title">{showHistory ? "History" : "strollo"}</span>
-            <button className="chat-x-btn" onClick={closeChat}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            <div className="chat-header-title">
+              <div className="chat-header-eyebrow">plan a walk</div>
+              <div className="chat-header-label">
+                {screenMode === 'confirmed' ? 'walk ready' : 'conversation'}
+              </div>
+            </div>
+            <button className="chat-icon-btn" onClick={closeChat} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeWidth="2" strokeLinecap="round">
+                <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
               </svg>
             </button>
           </div>
 
-          {/* History list */}
-          {showHistory && !viewingHistory && (
-            <div className="chat-history-list">
-              {chatHistory.length === 0 && (
-                <p className="chat-history-empty">No past conversations yet</p>
-              )}
-              {chatHistory.map((conv) => {
-                const firstMsg = conv.messages.find(m => m.role === "user");
-                const ago = Math.round((Date.now() - conv.timestamp) / 60000);
-                const timeLabel = ago < 1 ? "Just now" : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
-                return (
-                  <button key={conv.id} className="chat-history-item" onClick={() => setViewingHistory(conv)}>
-                    <span className="chat-history-text">{firstMsg?.text || "Conversation"}</span>
-                    <span className="chat-history-time">{timeLabel}</span>
+          {/* SCREEN 1 — Empty / first open */}
+          {screenMode === 'empty' && (
+            <div className="chat-empty">
+              <div className="chat-empty-hero">
+                <div className="chat-empty-avatar">S</div>
+                <h2 className="chat-empty-title">where shall we<br/>wander today?</h2>
+                <p className="chat-empty-sub">ask for a vibe, a destination, or just say <em>surprise me</em></p>
+              </div>
+
+              <div className="chat-section-label">try one</div>
+              <div className="chat-seeds">
+                {[
+                  { icon:'☕', label:'cafés around me' },
+                  { icon:'🌳', label:'a green walk' },
+                  { icon:'📚', label:'bookshops nearby' },
+                  { icon:'🌅', label:'sunset spot' },
+                  { icon:'🎨', label:'street art trail' },
+                  { icon:'🥐', label:'bakery hop' },
+                ].map(s => (
+                  <button key={s.label} className="chat-seed" onClick={() => sendChatMessage(s.label)}>
+                    <span className="chat-seed-icon">{s.icon}</span>
+                    <span>{s.label}</span>
                   </button>
+                ))}
+              </div>
+
+              {lastWalk && (
+                <div className="chat-empty-divider">
+                  <div className="chat-section-label">last walk · {lastWalk.timeAgo}</div>
+                  <button className="chat-last-walk" onClick={() => repeatWalk(lastWalk)}>
+                    <div className="chat-last-walk-thumb"/>
+                    <div className="chat-last-walk-meta">
+                      <div className="chat-last-walk-title">{lastWalk.title}</div>
+                      <div className="chat-last-walk-sub">{lastWalk.stops} stops · {lastWalk.miles} mi · {lastWalk.minutes} min</div>
+                    </div>
+                    <span className="chat-last-walk-cta">repeat</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SCREENS 2–4 — Conversation (messages + cards + listening) */}
+          {(screenMode === 'thinking' || screenMode === 'suggestions' || screenMode === 'refining') && (
+            <div className="chat-messages" ref={chatMsgsDomRef}>
+              {chatMessages.map((msg, idx) => {
+                const isLastAi = msg.role === 'ai' && idx === chatMessages.length - 1;
+                return (
+                  <React.Fragment key={msg.id}>
+                    <div className={`chat-msg chat-msg--${msg.role}`}>
+                      {msg.role === 'ai' && <div className="chat-avatar">S</div>}
+                      <div className={`chat-bubble chat-bubble--${msg.role}`}>{msg.text}</div>
+                    </div>
+
+                    {/* Past suggestions shown as compact chips — no cards, no horizontal scroll.
+                        Click toggles selection (state persists across queries) AND flies the
+                        map to the location for orientation. */}
+                    {!isLastAi && msg.places?.length > 0 && (
+                      <div className="chat-archived-pills">
+                        {msg.places.map((stop, i) => {
+                          const isSelected = selectedStopNames.has(stop.name);
+                          return (
+                            <button
+                              key={i}
+                              className={`chat-archived-pill ${isSelected ? 'chat-archived-pill--selected' : ''}`}
+                              onClick={() => {
+                                toggleStopByName(stop.name);
+                                const geo = geocodedSuggestions.find(g => g.name === stop.name);
+                                const lat = geo?.lat ?? stop.hintLat;
+                                const lng = geo?.lng ?? stop.hintLng;
+                                if (lat != null && lng != null) {
+                                  setFlyToTarget({ lat, lng, ts: Date.now() });
+                                }
+                              }}
+                            >
+                              {stop.name.split(',')[0]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {isLastAi && suggestedStops.length > 0 && !chatLoading && (
+                      <div className="chat-suggest-rail" ref={suggestRailRef}>
+                        {suggestedStops.map((stop, i) => {
+                          const on = selectedStopNames.has(stop.name);
+                          const compact = screenMode === 'refining';
+                          const geo = geocodedSuggestions.find(g => g.id === `ai-${currentGeocodeReqId}-${i}`)
+                            || geocodedSuggestions.find(g => g.name === stop.name);
+                          const walkLabel = (userLocation && geo)
+                            ? `${Math.max(1, Math.round((haversineKm(userLocation, [geo.lat, geo.lng]) * 1000) / 80))} min`
+                            : (stop.walk || null);
+                          const sid = geo ? geo.id : `stop-${i}`;
+                          return (
+                            <button
+                              key={`${stop.name}-${i}`}
+                              ref={(el) => { if (el) cardRefs.current[sid] = el; else delete cardRefs.current[sid]; }}
+                              data-suggestion-id={sid}
+                              className={`chat-suggest-card ${on ? 'on' : 'off'} ${compact ? 'compact' : ''} ${focusedSuggestionId === sid ? 'focused' : ''}`}
+                              onClick={() => toggleStop(i)}
+                            >
+                              <div className="chat-card-top">
+                                <div className="chat-card-name">{stop.name}</div>
+                                <div className="chat-card-action">
+                                  {on ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="5 12 10 17 19 7"/>
+                                    </svg>
+                                  ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                  )}
+                                </div>
+                              </div>
+                              {stop.reason && (
+                                <div className="chat-card-reason">{stop.reason}</div>
+                              )}
+                              <div className="chat-card-cat">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="1.7" strokeLinejoin="round">
+                                  <path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V9z"/>
+                                  <path d="M16 11h2a2.5 2.5 0 0 1 0 5h-2"/>
+                                </svg>
+                                <span>{stop.desc || stop.category || 'Cafe'}</span>
+                                {walkLabel && <><span className="dot">·</span><span>{walkLabel}</span></>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </React.Fragment>
                 );
               })}
-            </div>
-          )}
 
-          {/* Viewing a past conversation */}
-          {showHistory && viewingHistory && (
-            <div className="chat-messages">
-              <button className="chat-history-back" onClick={() => setViewingHistory(null)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M19 12H5M12 5l-7 7 7 7"/>
-                </svg>
-                <span>Back to list</span>
-              </button>
-              {viewingHistory.messages.map((msg) => (
-                <div key={msg.id} className={`chat-msg chat-msg--${msg.role}`}>
-                  <div className={`chat-bubble chat-bubble--${msg.role}`}>
-                    {msg.text}
+              {chatLoading && (
+                <>
+                  <div className="chat-msg chat-msg--ai">
+                    <div className="chat-avatar">S</div>
+                    <div className="chat-bubble chat-bubble--ai chat-typing">
+                      <span/><span/><span/>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  <div className="chat-status">
+                    <span className="chat-status-dot"/>
+                    <span>scanning your neighborhood…</span>
+                  </div>
+                  <div className="chat-skeleton-rail">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="chat-skeleton-card" style={{animationDelay: `${i*0.2}s`}}>
+                        <div className="chat-skeleton-top">
+                          <div>
+                            <div className="chat-skeleton-line w70"/>
+                            <div className="chat-skeleton-line w45"/>
+                          </div>
+                          <div className="chat-skeleton-action"/>
+                        </div>
+                        <div className="chat-skeleton-cat">
+                          <div className="chat-skeleton-icon"/>
+                          <div className="chat-skeleton-line w30 short"/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
-          {/* Current conversation */}
-          {!showHistory && (
-            <div className="chat-messages">
-              {chatMessages.map((msg) => (
-                <div key={msg.id} className={`chat-msg chat-msg--${msg.role}`}>
-                  <div className={`chat-bubble chat-bubble--${msg.role}`}>
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
               {chatListening && speech.transcript && (
                 <div className="chat-msg chat-msg--user">
-                  <div className="chat-bubble chat-bubble--user chat-bubble--live">
-                    {speech.transcript}
-                  </div>
-                </div>
-              )}
-              {chatLoading && (
-                <div className="chat-msg chat-msg--ai">
-                  <div className="chat-bubble chat-bubble--ai chat-typing">
-                    <div className="chat-dot" /><div className="chat-dot" /><div className="chat-dot" />
-                  </div>
+                  <div className="chat-bubble chat-bubble--user chat-bubble--live">{speech.transcript}</div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Plan walk button */}
-          {!showHistory && suggestedStops.length > 0 && !chatLoading && (
-            <button className="chat-plan-btn" onClick={handlePlanWalk} disabled={planLoading}>
-              {planLoading ? (
-                <>
-                  <div className="plan-spinner" />
-                  <span>Finding places on map...</span>
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          {/* SCREEN 5 — Plan confirmed */}
+          {screenMode === 'confirmed' && planConfirmed && (
+            <div className="chat-confirmed">
+              <div className="chat-msg chat-msg--ai">
+                <div className="chat-avatar">S</div>
+                <div className="chat-bubble chat-bubble--ai">
+                  your walk is ready — <b>{planConfirmed.stops.length} stops</b>, <b>~{planConfirmed.totalMin} min</b>, looped back home.
+                </div>
+              </div>
+
+              <div className="chat-plan-card">
+                <div className="chat-plan-head">
+                  <div>
+                    <div className="chat-plan-area">{planConfirmed.area}</div>
+                    <div className="chat-plan-title">{planConfirmed.title}</div>
+                  </div>
+                  <div className="chat-plan-stats">
+                    <div className="chat-plan-distance">{planConfirmed.distanceMi}<span>mi</span></div>
+                    <div className="chat-plan-time">~{planConfirmed.totalMin} min</div>
+                  </div>
+                </div>
+                <div className="chat-plan-stops">
+                  {planConfirmed.stops.map((s, i) => (
+                    <div key={s.id || s.name} className="chat-plan-stop">
+                      <div className="chat-plan-num-col">
+                        <div className="chat-plan-num">{i+1}</div>
+                        {i < planConfirmed.stops.length - 1 && <div className="chat-plan-line"/>}
+                      </div>
+                      <div className="chat-plan-stop-meta">
+                        <div className="chat-plan-stop-name">{s.name}</div>
+                        <div className="chat-plan-stop-loc">{s.loc || s.desc || s.category || 'Cafe'}</div>
+                      </div>
+                      {s.walk && <div className="chat-plan-stop-walk">{s.walk}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="chat-plan-actions">
+                <button className="chat-plan-action" onClick={onReorder}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+                    <path d="M3 12 L9 6 L9 9 L21 9 L21 15 L9 15 L9 18 Z"/>
                   </svg>
-                  <span>Plan this walk · {suggestedStops.length} {suggestedStops.length === 1 ? "stop" : "stops"}</span>
-                </>
-              )}
-            </button>
+                  reorder
+                </button>
+              </div>
+            </div>
           )}
-          <div className="chat-input-row">
-            <button
-              className="chat-mic-btn"
-              disabled={chatLoading}
-              onClick={() => {
-                if (chatListening) {
+
+          {/* Voice listening surface (Screen 4) — gradient-blob bottom sheet
+              that REPLACES the input row while listening, mirroring the
+              homepage "What's on your mind?" sheet aesthetic. */}
+          {screenMode === 'refining' && (
+            <div className="chat-listen-sheet">
+              <div className="chat-listen-blobs">
+                <div className="listen-blob listen-blob--1"/>
+                <div className="listen-blob listen-blob--2"/>
+                <div className="listen-blob listen-blob--3"/>
+              </div>
+              <div className="chat-listen-handle"><div className="chat-listen-bar"/></div>
+              <button
+                className="chat-listen-keyboard"
+                aria-label="Switch to typing"
+                onClick={() => {
+                  const partial = speech.transcript.trim();
+                  speech.stop();
+                  if (partial) setQuery(partial);
+                  speech.reset();
+                  setChatListening(false);
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="14" rx="2"/>
+                  <line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/>
+                  <line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/>
+                  <line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/>
+                  <line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/>
+                  <line x1="8" y1="16" x2="16" y2="16"/>
+                </svg>
+              </button>
+              <button
+                className="chat-listen-close"
+                aria-label="Stop listening"
+                onClick={() => {
                   const text = speech.getTranscript().trim();
                   speech.stop();
                   setChatListening(false);
                   if (text) sendChatMessage(text);
-                } else {
-                  if (!speech.supported) return;
-                  setChatListening(true);
-                  speech.start();
-                }
-              }}
-              aria-label="Voice input"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={chatListening ? "#fff" : "#8851D4"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="1" width="6" height="11" rx="3"/>
-                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </button>
-            <input
-              className="chat-input"
-              placeholder={chatListening ? "Listening..." : "Type a message..."}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") sendChatMessage(query); }}
-              disabled={chatListening}
-            />
-            <button className="chat-send-btn" onClick={() => sendChatMessage(query)} disabled={chatLoading || !query.trim() || chatListening}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+              <div className="chat-listen-content">
+                <p className="chat-listen-caption">{speech.transcript || "What's on your mind?"}</p>
+              </div>
+            </div>
+          )}
 
-          {/* Floating speak FAB */}
-          <button
-            className={`chat-mic-fab ${chatListening ? "chat-mic-fab--active" : ""}`}
-            disabled={chatLoading}
-            onClick={() => {
-              if (chatListening) {
-                speech.stop();
-                setChatListening(false);
-                const text = speech.transcript.trim();
-                if (text) sendChatMessage(text);
-              } else {
-                if (!speech.supported) return;
-                setChatListening(true);
-                speech.start();
-              }
-            }}
-            aria-label="Speak"
-          >
-            {chatListening ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
-                <rect x="6" y="6" width="12" height="12" rx="2"/>
-              </svg>
+          {/* Start-walk CTA (Screen 5) */}
+          {screenMode === 'confirmed' && (
+            <div className="chat-cta-strip chat-cta-strip--start">
+              <button className="chat-start-btn" onClick={onStartWalkConfirmed}>
+                <span className="chat-start-play">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#34233E"><path d="M8 5 L19 12 L8 19 Z"/></svg>
+                </span>
+                <span>start walk</span>
+                <span className="chat-start-meta">· {planConfirmed?.distanceMi} mi</span>
+              </button>
+            </div>
+          )}
+
+          {/* Bottom input row — hidden on confirmed AND while listening
+              (the listen-sheet replaces it during voice refinement). */}
+          {screenMode !== 'confirmed' && screenMode !== 'refining' && (
+            <div className="chat-input-row">
+              <div className={`chat-input-field ${query ? 'composing' : ''}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeOpacity="0.55" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="6.5"/><path d="M16 16 L21 21"/>
+                </svg>
+                <input
+                  className="chat-input"
+                  placeholder={
+                    chatListening    ? 'listening…' :
+                    screenMode === 'empty' ? 'ask Strollo anything…' :
+                                       'I’m in the mood for…'
+                  }
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && query.trim()) sendChatMessage(query); }}
+                  disabled={chatListening || chatLoading}
+                />
+              </div>
+              <button
+                className={`chat-voice-btn ${chatListening ? 'active' : ''}`}
+                disabled={chatLoading}
+                onClick={() => {
+                  if (chatListening) {
+                    const text = speech.getTranscript().trim();
+                    speech.stop(); setChatListening(false);
+                    if (text) sendChatMessage(text);
+                  } else {
+                    if (!speech.supported) return;
+                    setChatListening(true); speech.start();
+                  }
+                }}
+                aria-label="Voice"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="6"  y1="9"  x2="6"  y2="15"/>
+                  <line x1="10" y1="6"  x2="10" y2="18"/>
+                  <line x1="14" y1="8"  x2="14" y2="16"/>
+                  <line x1="18" y1="10" x2="18" y2="14"/>
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Plan-walk CTA — floats above the chat sheet (split mode) or above the
+          input row (full-screen mode), so it never covers the conversation. */}
+      {chatMode && screenMode === 'suggestions' && activeStops.length > 0 && (
+        <div className={`chat-cta-strip ${chatSplitActive ? 'chat-cta-strip--above-chat' : ''}`}>
+          <button className="chat-plan-btn" onClick={() => handlePlanWalk(activeStops)} disabled={planLoading}>
+            {planLoading ? (
+              <><div className="plan-spinner"/><span>finding places on map…</span></>
             ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="1" width="6" height="11" rx="3"/>
-                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
+              <span>Plan this walk · {activeStops.length} {activeStops.length === 1 ? "stop" : "stops"}</span>
             )}
           </button>
         </div>

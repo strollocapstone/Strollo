@@ -54,9 +54,24 @@ function App() {
   return (
     <div className="App">
       <div className="phone-frame">
-        {(screen === 'home' || screen === 'constraints') && (
+        {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
+            close animation reveals Home instead of a flash of white phone
+            frame. QuizScreen's z-index keeps it on top while open. */}
+        {(screen === 'home' || screen === 'constraints' || screen === 'quiz') && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setVisitedIds(new Set()); setScreen('navigation'); }}
+            onStartWalk={(items, userLoc) => {
+              // NavigationMapScreen treats `addedIds` as the authoritative
+              // "confirmed stops" list (filters journeyItems by id). Without
+              // this, planned chat stops have fresh IDs that addedIds doesn't
+              // know about → nextTarget is null → "No current destination".
+              setJourneyItems(items);
+              setAddedIds(new Set(items.map((it) => it.id)));
+              setStartLocation(userLoc);
+              setLastKnownLocation(userLoc);
+              setTripStartTime(Date.now());
+              setVisitedIds(new Set());
+              setScreen('navigation');
+            }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             onOpenQuiz={() => setScreen('quiz')}
@@ -64,6 +79,7 @@ function App() {
             initialSheetOpen={openSheetOnHome}
             onSheetOpenConsumed={() => setOpenSheetOnHome(false)}
             preferences={preferences}
+            vibePreferences={quizPreferences}
             nearbyPlaces={nearbyPlaces}
             setNearbyPlaces={setNearbyPlaces}
             addedIds={addedIds}
@@ -110,7 +126,22 @@ function App() {
         )}
         {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
-            onGoBack={() => setScreen('home')}
+            onGoBack={() => {
+              // End from navigation: route to the achievement page if the
+              // user actually completed any stops; otherwise wipe walk state
+              // and return Home (so leftover chat-planned IDs don't break
+              // the next "Start exploring" tap).
+              if (visitedIds.size >= 1) {
+                setScreen('reward');
+              } else {
+                setJourneyItems([]);
+                setAddedIds(new Set());
+                setVisitedIds(new Set());
+                setStartLocation(null);
+                setTripStartTime(null);
+                setScreen('home');
+              }
+            }}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             journeyItems={journeyItems}
@@ -125,7 +156,19 @@ function App() {
           />
         )}
         {screen === 'reward' && (
-          <RewardScreen onComplete={() => setScreen('home')} />
+          <RewardScreen
+            onComplete={() => {
+              // Walk state is preserved through the achievement page so the
+              // reward screen can read it. Wipe on dismissal so Home starts
+              // fresh.
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
+            }}
+          />
         )}
         {screen === 'constraints' && (
           <PreWalkConstraintsScreen
@@ -141,7 +184,20 @@ function App() {
         {screen === 'timeline' && (
           <TimelineScreen
             onGoBack={() => setScreen('navigation')}
-            onEndWalk={() => setScreen('reward')}
+            onEndWalk={() => {
+              // Same gate as navigation's End: reward only if the user
+              // completed something; otherwise wipe + Home.
+              if (visitedIds.size >= 1) {
+                setScreen('reward');
+              } else {
+                setJourneyItems([]);
+                setAddedIds(new Set());
+                setVisitedIds(new Set());
+                setStartLocation(null);
+                setTripStartTime(null);
+                setScreen('home');
+              }
+            }}
             nearbyPlaces={nearbyPlaces}
             addedIds={addedIds}
             setAddedIds={setAddedIds}

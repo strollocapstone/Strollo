@@ -91,13 +91,23 @@
   100% { transform: translate(-18px, 4px) scale(1.05);  opacity: 0.60; }
 }
 
-/* Closing: the whole "All set!" screen simply fades out — a halo pulses on the
-   settings FAB afterward to point the user at where preferences live. */
+/* Entrance: slide up from the bottom when the user opens the quiz from the
+   home gateway. Mirrors PreferencesScreen's `pwc-slide-up` so opening any
+   bottom-anchored sheet feels the same. */
 .quiz-screen {
-  transition: opacity 0.55s ease-out;
+  z-index: 40;
+  animation: quiz-slide-up 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.38s ease-out, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
+@keyframes quiz-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+/* Closing: slide back down + fade when the user taps Skip or the all-set
+   screen auto-advances. */
 .quiz-screen--closing {
   opacity: 0;
+  transform: translateY(100%);
   pointer-events: none;
 }
 .quiz-done-inner {
@@ -191,10 +201,10 @@
 /* ── Clothesline ────────────────────────────────────────────────────────── */
 .quiz-line-wrap {
   position: absolute;
-  top: 168px;
+  top: 140px;
   left: 16px;
   right: 16px;
-  height: 78px;
+  height: 110px;
   z-index: 3;
 }
 .quiz-line {

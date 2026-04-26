@@ -1,8 +1,28 @@
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"];
+const MODELS = ["gemini-2.5-flash-lite"];
 
-export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops, mode = 'pre-walk', vibePreferences = null }) {
+// Map of PreferencesScreen filter ids → human-readable category names that
+// Gemini can lean toward when suggesting places. We deliberately omit the
+// always-on display-only filters ("ai-highlights", "saved-places") since
+// they're not place categories.
+const FILTER_LABEL = {
+  attractions:    "attractions and sights",
+  benches:        "benches and picnic areas",
+  cafes:          "cafés",
+  "dog-friendly": "dog-friendly spots",
+  food:           "food and restaurants",
+  museums:        "museums",
+  sights:         "sights and viewpoints",
+  parks:          "parks and gardens",
+};
+const DESTINATION_LABEL = {
+  loop:     "loop (start and end in the same place)",
+  open:     "open exploration (no fixed end point)",
+  specific: "ends at a specific place or neighborhood",
+};
+
+export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, currentStopIndex, totalStops, mode = 'pre-walk', vibePreferences = null, preferences = null }) {
   const stopsDescription = journeyItems
     .map((item, i) => `${i + 1}. ${item.name}${item.desc ? ` (${item.desc})` : ''}`)
     .join('\n');
@@ -29,6 +49,37 @@ export function buildSystemPrompt({ userLocation, journeyItems, elapsedMinutes, 
     }
   }
 
+  // Saved preferences from PreferencesScreen — only render lines that are set.
+  let constraintsSection = '';
+  if (preferences) {
+    const lines = [];
+    if (preferences.destination && DESTINATION_LABEL[preferences.destination]) {
+      lines.push(`  · Type of walk: ${DESTINATION_LABEL[preferences.destination]}`);
+    }
+    const dur = preferences.customDuration || preferences.duration;
+    if (dur) lines.push(`  · Duration: ≤ ${dur}`);
+    if (preferences.distance != null && preferences.distance !== '') {
+      lines.push(`  · Distance: ≤ ${preferences.distance} km`);
+    }
+    if (Array.isArray(preferences.accessibility) && preferences.accessibility.length) {
+      lines.push(`  · Accessibility: ${preferences.accessibility.join(', ')}`);
+    }
+    if (Array.isArray(preferences.avoidances) && preferences.avoidances.length) {
+      lines.push(`  · Avoid: ${preferences.avoidances.join(', ')}`);
+    }
+    if (Array.isArray(preferences.mapFilters) && preferences.mapFilters.length) {
+      const cats = preferences.mapFilters
+        .map((id) => FILTER_LABEL[id])
+        .filter(Boolean);
+      if (cats.length) lines.push(`  · Categories the user is interested in: ${cats.join(', ')}`);
+    }
+    if (lines.length) {
+      constraintsSection =
+        `\n- Saved preferences:\n${lines.join('\n')}\n` +
+        `Honor these strictly: stay under the duration if set, lean toward the listed categories, and skip places matching any avoidance.`;
+    }
+  }
+
   const duringWalkActionRules = mode === 'during-walk' ? `
 
 You are now in DURING-WALK voice-edit mode. The user is already walking and wants to modify the journey by voice. In addition to the 📍 add-place list described above, you MUST emit edit commands for any removals or reorders, each on its own line, using EXACTLY these formats:
@@ -45,26 +96,31 @@ Rules:
 
   return `You are Strollo, a walking companion AI. You help users discover places to walk to.
 
-User location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}
-${stopsSection}${vibeSection}
+User GPS location (decimal degrees, lat, lng): ${userLocation[0].toFixed(6)}, ${userLocation[1].toFixed(6)}
+The user is ON FOOT planning a short walking tour from this exact GPS position. Treat it as the trip start.
+${stopsSection}${vibeSection}${constraintsSection}
 
 Response rules:
 - Be CONCISE. Max 1-2 short sentences of intro, then jump straight to places.
 - Suggest 5-8 specific, real places per response. More is better.
 - For each place: just the name and one short reason to visit (under 10 words).
-- Only suggest places that actually exist and are within 2km (~25 min walk) of the user's location.
-- The total walk including all stops must be under 2 hours. Do NOT suggest places far away.
+- WALKING TOUR ONLY: every place MUST be within a 15–20 minute walk of the user's GPS location (≈ 1.2–1.6 km). NEVER suggest anything beyond 1.6 km — verify each one before adding.
+- Sort by walking distance from the user, CLOSEST FIRST. The first bullet MUST be one of the nearest places (within a few minutes' walk); subsequent bullets walk progressively outward but never past the 1.6 km cap. The 📍 list at the end must follow the exact same closest-to-farthest order.
 - Format each place as a bullet with the reason inline.
 
 CRITICAL: After your response, you MUST append a place list using EXACTLY this format:
 
-📍 Place Name, City | Category
+📍 Place Name, City | Category | lat, lng
 
 Rules:
 - One 📍 line per place, on its own line
 - Use the simplest searchable name (no special chars, no parentheses)
 - Always include city/neighborhood after comma
 - Use names that appear on Google Maps or OpenStreetMap
+- The trailing "lat, lng" MUST be the EXACT GPS coordinates that Google Maps displays for that specific business/landmark — i.e. the lat/lng you would see if you searched the place on Google Maps and read the URL or "What's here?" pin. NOT the city center, NOT a street-block approximation, NOT a neighborhood centroid. Pin the precise building/storefront/park-entrance the place actually occupies on Google Maps.
+- 6 decimal places of precision (≈ 0.1 m). Example: Ippuku in Berkeley is 37.868194, -122.259497 on Google Maps — that level of precision, not 37.87, -122.26.
+- If you are not confident in the exact Google Maps coordinates for a place, DO NOT suggest that place — pick a different one you know precisely. A wrong-pin suggestion is worse than fewer suggestions.
+- These coords are used DIRECTLY to drop the pin (no geocoding fallback). NEVER omit the coords. NEVER round, NEVER guess, NEVER use the same coords for two places.
 
 Example response:
 "Here are some great spots near you:
@@ -74,35 +130,60 @@ Example response:
 - Jupiter — craft beer and outdoor patio
 - Pegasus Books — charming indie bookstore
 
-📍 Ippuku, Berkeley | Restaurant
-📍 Cheese Board Pizza, Berkeley | Restaurant
-📍 Tilden Regional Park, Berkeley | Park
-📍 Jupiter, Berkeley | Bar
-📍 Pegasus Books, Berkeley | Bookstore"
+📍 Ippuku, Berkeley | Restaurant | 37.868194, -122.259497
+📍 Cheese Board Pizza, Berkeley | Restaurant | 37.880003, -122.269078
+📍 Tilden Regional Park, Berkeley | Park | 37.892312, -122.241546
+📍 Jupiter, Berkeley | Bar | 37.870892, -122.268486
+📍 Pegasus Books, Berkeley | Bookstore | 37.874821, -122.268339"
 
 You MUST include the 📍 list whenever you suggest places. No exceptions.${duringWalkActionRules}`;
 }
 
-// Extract place suggestions from AI response text
+// Extract place suggestions from AI response text. Each place gets:
+//   { name, desc, reason, hintLat, hintLng }
+// `reason` is matched from the inline bullet list ("- Place Name — reason").
+// `hintLat`/`hintLng` come from the optional 4th `📍` field — Gemini's best-guess
+// coordinates that the app uses to bias + validate the geocoder.
 export function extractPlaces(text) {
   const lines = text.split('\n');
+  const bullets = [];
+  for (const line of lines) {
+    const m = line.match(/^\s*[-•*]\s+(.+?)\s+(?:—|–|-{1,2})\s+(.+?)\s*$/);
+    if (m) bullets.push({ name: m[1].trim(), reason: m[2].trim() });
+  }
   const places = [];
   for (const line of lines) {
-    const match = line.match(/📍\s*(.+?)\s*\|\s*(.+)/);
-    if (match) {
-      places.push({ name: match[1].trim(), desc: match[2].trim() });
-    }
+    // 📍 Name, City | Category [| lat, lng]
+    const match = line.match(/📍\s*(.+?)\s*\|\s*([^|]+?)(?:\s*\|\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?))?\s*$/);
+    if (!match) continue;
+    const name = match[1].trim();
+    const desc = match[2].trim();
+    const hintLat = match[3] != null ? parseFloat(match[3]) : null;
+    const hintLng = match[4] != null ? parseFloat(match[4]) : null;
+    const shortName = name.split(',')[0].trim().toLowerCase();
+    const matched = bullets.find((b) => {
+      const bn = b.name.toLowerCase();
+      return bn === shortName || bn.includes(shortName) || shortName.includes(bn);
+    });
+    places.push({ name, desc, reason: matched?.reason || null, hintLat, hintLng });
   }
   return places;
 }
 
-// Strip the 📍 and action lines from the display text
+// Strip the 📍 and action lines from the display text, then keep only the
+// FIRST SENTENCE of the intro. The places themselves are rendered as cards,
+// so the bubble should be a single warm opening line — never the full list.
 export function cleanResponseText(text) {
-  return text
+  let cleaned = text
     .split('\n')
     .filter(line => !line.match(/^📍\s/) && !line.match(/^REMOVE:\s/i) && !line.match(/^REORDER:\s/i))
-    .join('\n')
+    .join(' ')
     .trim();
+  // Trim to the first sentence-ish boundary: ". ", "! ", "? ", or ": "
+  // (the colon catches list-intro phrases like "Here are some cafes:").
+  const match = cleaned.match(/^[\s\S]*?[.!?:](?=\s|$)/);
+  if (match) cleaned = match[0].trim();
+  return cleaned;
 }
 
 // Extract edit actions from during-walk AI responses.
@@ -136,31 +217,72 @@ function cleanPlaceName(name) {
   return clean;
 }
 
-// Geocode a place name using Nominatim (OpenStreetMap)
-export async function geocodePlace(name, nearLat, nearLon) {
+// Geocode a place name using Nominatim (OpenStreetMap).
+// `hintLat`/`hintLng` (when given) are Gemini's best-guess coords. We use them
+// to (a) tighten the Nominatim viewbox around the hint instead of the user, and
+// (b) sanity-check the result — if the geocode lands more than ~1.5 km from the
+// hint, it's almost certainly the wrong "Berkeley Bowl" (Phoenix vs Berkeley),
+// so we reject it and fall through to the next query variant.
+const HINT_REJECT_KM = 3.0;
+function _haversineKm(aLat, aLon, bLat, bLon) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLon - aLon);
+  const s = Math.sin(dLat/2)**2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng/2)**2;
+  return 2 * 6371 * Math.asin(Math.sqrt(s));
+}
+
+export async function geocodePlace(name, nearLat, nearLon, hintLat = null, hintLng = null) {
   const cleanName = cleanPlaceName(name);
-  // Build search queries — try multiple variations
-  const queries = [
-    cleanName,                    // "Sproul Plaza, Berkeley"
-    cleanName.split(',')[0],     // "Sproul Plaza" (without city)
-    name,                         // original with parens etc.
+  // Dedup query variants — short names often collapse cleanName / split(',')[0].
+  const queries = Array.from(new Set([cleanName, cleanName.split(',')[0], name].filter(Boolean)));
+  // Bias search around the hint when present, otherwise the user's own location.
+  const centerLat = hintLat != null ? hintLat : nearLat;
+  const centerLon = hintLng != null ? hintLng : nearLon;
+  // Tighter viewbox when we have a hint (~5 km box) — broader otherwise (~33 km box).
+  const halfDeg = hintLat != null ? 0.05 : 0.15;
+
+  // Pass 1: viewbox-biased near the hint/user. Pass 2 (fallback): no viewbox,
+  // biased only by user lat/lon — catches places where Gemini's hint was off.
+  const passes = [
+    { useBox: true, near: false },
+    { useBox: false, near: true },
   ];
 
-  for (const q of queries) {
-    try {
-      const encoded = encodeURIComponent(q);
-      const url = `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&viewbox=${nearLon - 0.15},${nearLat + 0.15},${nearLon + 0.15},${nearLat - 0.15}&bounded=0`;
-      const res = await fetch(url, { headers: { "User-Agent": "StrolloApp/1.0" } });
-      const data = await res.json();
-      if (data.length > 0) {
-        console.log(`[Strollo] Geocoded "${q}" →`, data[0].display_name);
-        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), displayName: data[0].display_name };
+  for (const pass of passes) {
+    for (const q of queries) {
+      try {
+        const encoded = encodeURIComponent(q);
+        const url = pass.useBox
+          ? `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&viewbox=${centerLon - halfDeg},${centerLat + halfDeg},${centerLon + halfDeg},${centerLat - halfDeg}&bounded=0`
+          : `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1`;
+        const res = await fetch(url, { headers: { "User-Agent": "StrolloApp/1.0" } });
+        const data = await res.json();
+        if (data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          // Hint-based hallucination check: reject results far from Gemini's guess.
+          // Pass 2 (no viewbox) checks against the user's own location instead — keeps
+          // wrong-city results out while still tolerating mildly-off hints.
+          const refLat = pass.near ? nearLat : hintLat;
+          const refLon = pass.near ? nearLon : hintLng;
+          if (refLat != null && refLon != null) {
+            const distKm = _haversineKm(lat, lng, refLat, refLon);
+            const cap = pass.near ? 5.0 : HINT_REJECT_KM;
+            if (distKm > cap) {
+              console.warn(`[Strollo] Geocode for "${q}" landed ${distKm.toFixed(2)} km from ${pass.near ? 'user' : 'hint'} — rejecting.`);
+              await new Promise(r => setTimeout(r, 1100));
+              continue;
+            }
+          }
+          console.log(`[Strollo] Geocoded "${q}" →`, data[0].display_name);
+          return { lat, lng, displayName: data[0].display_name };
+        }
+      } catch (err) {
+        console.warn(`[Strollo] Geocode error for "${q}":`, err);
       }
-    } catch (err) {
-      console.warn(`[Strollo] Geocode error for "${q}":`, err);
+      await new Promise(r => setTimeout(r, 1100));
     }
-    // Rate limit: Nominatim requires 1 req/sec
-    await new Promise(r => setTimeout(r, 1100));
   }
   console.warn(`[Strollo] Could not geocode: "${name}"`);
   return null;
@@ -269,7 +391,7 @@ export async function sendMessage(conversationHistory, systemPrompt) {
     contents,
     generationConfig: {
       temperature: 0.8,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 4096,
     }
   };
 
@@ -297,7 +419,11 @@ export async function sendMessage(conversationHistory, systemPrompt) {
       }
 
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // Thinking models (e.g. 2.5 Flash) emit a thought part before the real
+      // response. Skip parts with thought:true and join the rest.
+      const rawParts = data.candidates?.[0]?.content?.parts || [];
+      const text = rawParts.filter(p => !p.thought).map(p => p.text || '').join('').trim()
+        || rawParts[0]?.text;
       if (text) return text;
       console.warn(`Model ${model} returned empty response, trying next...`);
       break;

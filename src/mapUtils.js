@@ -58,6 +58,26 @@ export function WatchLocation({ onUpdate }) {
   return null;
 }
 
+// ── Fly to an arbitrary map point (used by archived pill clicks) ─────────
+// `bottomOffset` (px) pushes the centering point down by half its value so
+// the target appears at the visible map center when a bottom sheet covers
+// part of the map.
+export function FlyTo({ target, zoom = 16, bottomOffset = 0 }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    try {
+      if (bottomOffset > 0) {
+        const px = map.project([target.lat, target.lng], zoom).add([0, bottomOffset / 2]);
+        map.flyTo(map.unproject(px, zoom), zoom, { duration: 0.9 });
+      } else {
+        map.flyTo([target.lat, target.lng], zoom, { duration: 0.9 });
+      }
+    } catch (_) {}
+  }, [target, map, zoom, bottomOffset]);
+  return null;
+}
+
 // ── Locate user (instant on first call, animated on subsequent) ──────────
 // The caller passes the screen's default zoom so pressing "locate" always returns
 // to that screen's baseline (HomeScreen = 15, NavigationMapScreen used 16 before).
@@ -97,7 +117,7 @@ export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
           }
         }
       },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 5000 }
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
     );
     return () => { cancelled = true; };
   }, [trigger, map]);
