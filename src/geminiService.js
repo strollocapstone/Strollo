@@ -94,14 +94,26 @@ Rules:
 - You may emit any combination (e.g. a REMOVE and several 📍 adds in one response).
 - If the user is just chatting and doesn't want to edit, omit all action tags.` : '';
 
-  return `You are Strollo, a walking companion AI. You help users discover places to walk to.
+  return `ROLE & PERSONALITY
+You are Strollo — a warm, perceptive walk companion guiding someone through the city. You are not a navigation app. You are the knowledgeable local friend who happens to know this neighbourhood deeply: the coffee bar worth ducking into, the building that has an interesting story, the shortcut that smells like jasmine in spring. You speak in a calm, unhurried tone — conversational, never robotic. You trust the walker to find their way; your job is to make the journey richer, not to manage it.
 
+GUIDING PHILOSOPHY
+Encourage the walker to look up, not down at their screen. Surface details worth noticing — architecture, a mural, a smell, a sound — without overwhelming them. Offer gentle nudges, not instructions. When you mention a place, make it feel like a personal recommendation, not a search result. If something is off-route but genuinely worth a small detour, say so naturally — and let the walker decide.
+
+TONE RULES
+- Warm, not chirpy. Curious, not performative.
+- Short bursts, not paragraphs. The walker is moving.
+- Never say "Turn left in 200 metres." Say "When you reach the corner with the tiled florist, hang a left."
+- Don't narrate the obvious. If they can see it, they don't need you to describe it.
+
+CONTEXT
 User GPS location (decimal degrees, lat, lng): ${userLocation[0].toFixed(6)}, ${userLocation[1].toFixed(6)}
 The user is ON FOOT planning a short walking tour from this exact GPS position. Treat it as the trip start.
 ${stopsSection}${vibeSection}${constraintsSection}
 
 Response rules:
-- Be CONCISE. Max 1-2 short sentences of intro, then jump straight to places.
+- OPEN with ONE warm sentence that (a) acknowledges the search, (b) references the user's past searches and saved preferences if any are noted above, and (c) names the FIRST (closest) suggested place by name plus a brief reason. Example shape: "Based on your past searches and your love of cozy cafés, I'd suggest starting with Cheese Board Pizza — legendary slices and a live jazz vibe."
+- That single sentence is the entire prose intro — do NOT add a second intro sentence and do NOT continue with prose. Jump straight to the bullet list of places after it.
 - Suggest 5-8 specific, real places per response. More is better.
 - For each place: just the name and one short reason to visit (under 10 words).
 - WALKING TOUR ONLY: every place MUST be within a 15–20 minute walk of the user's GPS location (≈ 1.2–1.6 km). NEVER suggest anything beyond 1.6 km — verify each one before adding.
@@ -170,19 +182,26 @@ export function extractPlaces(text) {
   return places;
 }
 
-// Strip the 📍 and action lines from the display text, then keep only the
-// FIRST SENTENCE of the intro. The places themselves are rendered as cards,
-// so the bubble should be a single warm opening line — never the full list.
+// Strip the 📍 and action lines from the display text, then keep the warm
+// intro and drop any inline bullet list of places (the cards already show
+// those). Stop at the first bullet marker ("- foo", "* foo", "• foo") OR
+// at a colon that introduces a list. Otherwise keep the full prose intro
+// (one or two sentences) so the suggestion rationale isn't truncated.
 export function cleanResponseText(text) {
   let cleaned = text
     .split('\n')
     .filter(line => !line.match(/^📍\s/) && !line.match(/^REMOVE:\s/i) && !line.match(/^REORDER:\s/i))
     .join(' ')
     .trim();
-  // Trim to the first sentence-ish boundary: ". ", "! ", "? ", or ": "
-  // (the colon catches list-intro phrases like "Here are some cafes:").
-  const match = cleaned.match(/^[\s\S]*?[.!?:](?=\s|$)/);
-  if (match) cleaned = match[0].trim();
+  // Trim at the first colon-then-bullet ("Here are some cafés: -") OR the
+  // first standalone bullet (" - foo") — those mark where the place list
+  // begins inline. Whichever comes first wins.
+  const colonBullet = cleaned.search(/:\s+[-•*]\s/);
+  const bulletStart = cleaned.search(/(?:^|\s)[-•*]\s+\S/);
+  let cut = -1;
+  if (colonBullet >= 0) cut = colonBullet + 1; // include the colon
+  if (bulletStart >= 0 && (cut < 0 || bulletStart < cut)) cut = bulletStart;
+  if (cut > 0) cleaned = cleaned.slice(0, cut).trim();
   return cleaned;
 }
 

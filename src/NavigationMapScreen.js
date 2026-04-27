@@ -168,19 +168,6 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const [routeInfo, setRouteInfo]         = useState(null);
   const [routeSteps, setRouteSteps]       = useState([]);
   const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
-  const [pathHistory, setPathHistory]     = useState([]);
-
-  // Track the walked trail as user location updates.
-  useEffect(() => {
-    if (!userLocation) return;
-    setPathHistory((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && Math.abs(last[0] - userLocation[0]) < 1e-5 && Math.abs(last[1] - userLocation[1]) < 1e-5) {
-        return prev;
-      }
-      return [...prev, userLocation].slice(-200);
-    });
-  }, [userLocation]);
 
   // Atmospheric blob markers pinned around the initial center (once).
   const blobs = useMemo(() => {
@@ -416,13 +403,6 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           {blobs.map((b, i) => (
             <Marker key={`blob-${i}`} position={b.pos} icon={makeBlob(b.w, b.h, b.rot, b.idx)} />
           ))}
-
-          {/* Walked trail — solid yellow line behind the user. Yellow
-              marks past movement; dashed purple is reserved for the
-              planned route ahead. */}
-          {pathHistory.length > 1 && (
-            <Polyline positions={pathHistory} pathOptions={{ color: "#FFD501", weight: 4, opacity: 0.85, lineCap: "round", lineJoin: "round" }} />
-          )}
 
           {/* Faint hint of the WHOLE confirmed route (visited + future) so
               the user sees the broader plan even though only the active
