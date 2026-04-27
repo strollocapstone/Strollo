@@ -23,7 +23,7 @@ function SoundBars({ active, color = "#FFD501" }) {
   );
 }
 
-function ProgressStrip({ progress }) {
+function ProgressStrip({ progress, disabled = false }) {
   const idSuffix = useId().replace(/:/g, "");
   const W = 320;
   const H = 32;
@@ -34,7 +34,7 @@ function ProgressStrip({ progress }) {
   const p = Math.max(0, Math.min(1, progress));
   const splitX = PAD + innerW * p;
   return (
-    <div className="wcw-progress" aria-hidden="true">
+    <div className={`wcw-progress${disabled ? " wcw-progress--disabled" : ""}`} aria-hidden="true">
       <svg
         className="wcw-progress-line"
         viewBox={`0 0 ${W} ${H}`}
@@ -95,22 +95,32 @@ function ProgressStrip({ progress }) {
   );
 }
 
-export default function WalkCompanionWidget({
+function WalkCompanionWidgetInner({
   destination = "your next stop",
   instruction = "—",
   distance = "—",
   eta = "—",
-  canSkip = false,
   progress = 0,
+  // True when the user is within ~300 ft of the next stop. When true, the
+  // skip pill swaps its label/handler to "I am here" so the user can confirm
+  // arrival without leaving the widget.
+  atTarget = false,
+  // Shown in the empty state ("You are at <currentLocationName>") when the
+  // user hasn't planned any stops yet. Reverse-geocoded from the user's
+  // GPS by the parent — null/undefined renders as a "Locating…" fallback
+  // until the geocode resolves.
+  currentLocationName = null,
   transcript = "",
   suggestion = "",
   narration = "",
   onSkip,
+  onArrived,
   onEnd,
   onExpand,
+  onChat,
   onSpeakStart,
   onSpeakEnd,
-}) {
+}, forwardedRef) {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [speakActive, setSpeakActive] = useState(false);
@@ -180,22 +190,19 @@ export default function WalkCompanionWidget({
 
   return (
     <div
+      ref={forwardedRef}
       className={`wcw${listening ? " wcw--listening" : ""}${glowing ? " wcw--glow" : ""}`}
       onPointerDown={onWidgetPointerDown}
       onPointerMove={onWidgetPointerMove}
       onPointerUp={onWidgetPointerEnd}
       onPointerCancel={onWidgetPointerEnd}
     >
-      <div className="wcw-grabber" aria-hidden="true" />
       <div className="wcw-status-row">
         {listening ? (
           <>
             <span className="wcw-listening-label">
               <span className="wcw-listening-dot" />
               You're saying
-            </span>
-            <span className="wcw-listening-bars">
-              <SoundBars active />
             </span>
           </>
         ) : paused ? (
@@ -205,12 +212,29 @@ export default function WalkCompanionWidget({
             {"."}
           </span>
         ) : isEmpty ? (
-          <span className="wcw-destination wcw-destination--empty">No current destination</span>
+          <>
+            <span className="wcw-heading-label">You are at</span>
+            <span className="wcw-destination">{currentLocationName || "Locating…"}</span>
+          </>
         ) : (
           <>
             <span className="wcw-heading-label">Heading to</span>
             <span className="wcw-destination">{destination}</span>
-            {canSkip && (
+            {atTarget ? (
+              <button
+                type="button"
+                className="wcw-skip-btn wcw-skip-btn--arrived"
+                onClick={onArrived}
+                aria-label={`Confirm you have arrived at ${destination}`}
+              >
+                <svg className="wcw-skip-flag" width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+                  <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3 L18 6 L8 10 Z"/>
+                  <circle cx="8" cy="21" r="2"/>
+                </svg>
+                <span>I am here</span>
+              </button>
+            ) : (
               <button
                 type="button"
                 className="wcw-skip-btn"
@@ -243,11 +267,18 @@ export default function WalkCompanionWidget({
         </div>
       ) : narration ? (
         <p className="wcw-narration">{narration}</p>
+      ) : isEmpty ? (
+        <p className="wcw-narration wcw-narration--idle">
+          <span className="wcw-idle-dots" aria-hidden="true">
+            <span /><span /><span />
+          </span>
+          Strollo's looking around to see what's nearby — tap the mic to ask about this spot or where to head next.
+        </p>
       ) : (
         <h2 className="wcw-turn">{instruction}</h2>
       )}
 
-      {!listening && (
+      {!listening && !isEmpty && (
         <div className="wcw-stats">
           <div className="wcw-stat">
             <span className="wcw-stat-label">DIST</span>
@@ -260,42 +291,23 @@ export default function WalkCompanionWidget({
         </div>
       )}
 
-      <ProgressStrip progress={progress} />
+      {!isEmpty && <ProgressStrip progress={progress} />}
 
       <div className="wcw-bottom">
         <div className="wcw-bottom-left">
-          <button
-            type="button"
-            className={`wcw-pill${paused ? " wcw-pill--active" : ""}`}
-            onClick={() => setPaused((v) => !v)}
-            aria-label={paused ? "Resume trip" : "Rest"}
-            aria-pressed={paused}
-          >
-            {paused ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-                <polygon points="6 4 20 12 6 20 6 4" />
+          {onChat && (
+            <button
+              type="button"
+              className="wcw-icon-btn"
+              onClick={onChat}
+              aria-label="Open chat"
+              title="Open chat"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-                <rect x="6" y="5" width="3.4" height="14" rx="0.6" />
-                <rect x="14.6" y="5" width="3.4" height="14" rx="0.6" />
-              </svg>
-            )}
-            <span>{paused ? "Resume" : "Rest"}</span>
-          </button>
-          <button
-            type="button"
-            className="wcw-pill"
-            onClick={onEnd}
-            aria-label="End walk"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="4 12 10 18 20 6" />
-            </svg>
-            <span>End</span>
-          </button>
-        </div>
-        <div className="wcw-bottom-right">
+            </button>
+          )}
           <button
             type="button"
             className={`wcw-icon-btn${muted ? " wcw-icon-btn--active" : ""}`}
@@ -314,6 +326,8 @@ export default function WalkCompanionWidget({
               )}
             </svg>
           </button>
+        </div>
+        <div className="wcw-bottom-right">
           <button
             type="button"
             className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${speakLocked ? " wcw-speak--locked" : ""}`}
@@ -326,6 +340,7 @@ export default function WalkCompanionWidget({
             title={speakLocked ? "Tap to stop" : "Hold to speak — drag up to lock"}
           >
             <SoundBars active={speakActive} color="currentColor" />
+            <span className="wcw-speak-label">Say anything</span>
             {speakLocked && (
               <span className="wcw-speak-lock" aria-hidden="true">
                 <svg width="9" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -340,3 +355,6 @@ export default function WalkCompanionWidget({
     </div>
   );
 }
+
+const WalkCompanionWidget = React.forwardRef(WalkCompanionWidgetInner);
+export default WalkCompanionWidget;
