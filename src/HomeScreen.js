@@ -1142,9 +1142,13 @@ export default function HomeScreen({
           className={`bottom-float-bar ${chatSplitActive ? "bottom-float-bar--above-chat" : ""}`}
           ref={buttonStackRef}
         >
-          {!chatSplitActive && addedIds.size > 0 && (
-            <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
-              Start exploring · {addedIds.size}
+          {!chatSplitActive && (
+            <button
+              className="fab-circle start-walk-pill"
+              onClick={handleStartWalk}
+              disabled={addedIds.size === 0}
+            >
+              {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : 'Start exploring'}
             </button>
           )}
           <div className="bottom-right-stack">
