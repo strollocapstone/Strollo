@@ -30,7 +30,12 @@ const VIBE_BY_CATEGORY = {
   park:       ["park", "garden", "viewpoint"],
   historic:   ["museum", "gallery", "art", "arts", "attraction", "theatre"],
   seafood:    ["seafood", "fish", "oyster", "crab", "lobster", "sushi", "poke", "chalet", "lake", "bay", "ocean", "harbor"],
-  restaurant: ["restaurant", "burger", "pizza", "diner", "bistro"],
+  /* Burger is checked BEFORE the generic restaurant catch so a place
+     actually named "Burger Joint" / "Diner" gets the burger reward.
+     Everything else (Ethiopian, Italian, Thai, …) lands on the universal
+     steaming-dish "restaurant" reward. */
+  burger:     ["burger", "diner", "smashburger", "shake shack", "in-n-out"],
+  restaurant: ["restaurant", "pizza", "bistro", "trattoria", "taqueria", "grill", "kitchen"],
   bar:        ["bar", "pub", "nightclub", "wine"],
   market:     ["florist", "market", "deli", "grocer"],
   waterfront: ["pier", "harbour", "marina", "beach"],
@@ -48,34 +53,42 @@ function vibeFor(category, name) {
 // track per-stop linger/screen-check minutes yet, so distribute the total
 // elapsed time across the visited stops, weighted slightly by category
 // (parks/markets get more dwell, bookshops less).
-const DWELL_WEIGHT = { park: 1.4, market: 1.2, restaurant: 1.3, seafood: 1.3, bar: 1.1, coffee: 1.0, historic: 1.0, bookshop: 0.7, waterfront: 1.1, shop: 0.9 };
-function buildWalkData({ journeyItems, visitedIds, visitedAt, tripStartTime }) {
+const DWELL_WEIGHT = { park: 1.4, market: 1.2, restaurant: 1.3, burger: 1.2, seafood: 1.3, bar: 1.1, coffee: 1.0, historic: 1.0, bookshop: 0.7, waterfront: 1.1, shop: 0.9 };
+function buildWalkData({ journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime }) {
   if (!journeyItems?.length || !tripStartTime) return null;
 
   const visitedSet = visitedIds instanceof Set ? visitedIds : new Set(visitedIds || []);
   const arrivalMap = visitedAt instanceof Map ? visitedAt : new Map(Object.entries(visitedAt || {}));
+  const dwellMap = stopDwellMs instanceof Map ? stopDwellMs : new Map(Object.entries(stopDwellMs || {}));
 
-  // Show only stops the user actually reached (or all if none confirmed).
-  const visited = journeyItems.filter((s) => visitedSet.has(s.id));
-  const source = visited.length ? visited : journeyItems;
+  // Show stops the user reached OR has recorded dwell time at; fall back to
+  // all journey items if neither signal is available.
+  const explored = journeyItems.filter((s) => visitedSet.has(s.id) || dwellMap.has(s.id));
+  const source = explored.length ? explored : journeyItems;
 
   const now = Date.now();
   const totalMins = Math.max(1, Math.round((now - tripStartTime) / 60000));
 
-  // Real per-stop dwell time, computed from arrival timestamps when available:
-  //   lingerMins[i] = (next stop arrival - this stop arrival) / 60s
-  //   last stop:    (now - last arrival) / 60s
-  // Falls back to a weighted distribution of the remaining time when the
-  // user didn't confirm arrivals (e.g. ended the walk early).
+  // Per-stop time-spent, in priority order:
+  //   1) Real-time dwell tracker (geolocation): exact ms accumulated while
+  //      the user was inside the stop's ~50m geofence.
+  //   2) Arrival timestamps (user tapped "I'm here"): time between this
+  //      stop's tap and the next, or "now" for the last stop.
+  //   3) Weighted estimate of total trip time, when neither signal exists.
+  const haveDwell = source.some((s) => dwellMap.get(s.id));
   const arrivals = source.map((s) => arrivalMap.get(s.id) ?? null);
   const haveTimestamps = arrivals.some((a) => a !== null);
 
   let lingerByIndex;
-  if (haveTimestamps) {
+  if (haveDwell) {
+    lingerByIndex = source.map((s) => {
+      const ms = dwellMap.get(s.id) || 0;
+      return Math.max(0, Math.round(ms / 60000));
+    });
+  } else if (haveTimestamps) {
     lingerByIndex = source.map((s, i) => {
       const start = arrivals[i];
       if (start == null) return 0;
-      // Find the next stop with a recorded arrival; if none, use "now".
       let endMs = now;
       for (let j = i + 1; j < arrivals.length; j++) {
         if (arrivals[j] != null) { endMs = arrivals[j]; break; }
@@ -83,8 +96,6 @@ function buildWalkData({ journeyItems, visitedIds, visitedAt, tripStartTime }) {
       return Math.max(0, Math.round((endMs - start) / 60000));
     });
   } else {
-    // No real timestamps recorded — fall back to a weighted estimate so the
-    // screen still renders sensibly when ending without confirming stops.
     const transitMins = Math.min(totalMins - 1, source.length * 4);
     const dwellPool = Math.max(1, totalMins - transitMins);
     const weights = source.map((s) => DWELL_WEIGHT[vibeFor(s.desc, s.name)] ?? 1);
@@ -124,6 +135,7 @@ const HERO_BG_IMAGES = {
   bookshop:   "https://images.unsplash.com/photo-1526243741027-444d633d7365?w=720&h=1280&fit=crop&q=80",
   historic:   "https://images.unsplash.com/photo-1534081333815-ae5019106622?w=720&h=1280&fit=crop&q=80",
   restaurant: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=720&h=1280&fit=crop&q=80",
+  burger:     "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=720&h=1280&fit=crop&q=80",
   seafood:    "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=720&h=1280&fit=crop&q=80",
   bar:        "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=720&h=1280&fit=crop&q=80",
   market:     "https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=720&h=1280&fit=crop&q=80",
@@ -137,6 +149,7 @@ const STOP_TINTS = {
   bookshop:   "radial-gradient(circle at 30% 28%, #FFE76B 0%, #F2B400 70%, #B68300 100%)",
   historic:   "radial-gradient(circle at 30% 28%, #D8C4EE 0%, #A67FD5 70%, #7048B3 100%)",
   restaurant: "radial-gradient(circle at 30% 28%, #FFE5C2 0%, #FFAE5E 70%, #C46A1F 100%)",
+  burger:     "radial-gradient(circle at 30% 28%, #FFE08F 0%, #E69A47 70%, #7A3F0E 100%)",
   seafood:    "radial-gradient(circle at 30% 28%, #CFEFFF 0%, #67B6E5 70%, #1F689F 100%)",
   bar:        "radial-gradient(circle at 30% 28%, #F4D2F2 0%, #C97AC0 70%, #7F3D88 100%)",
   market:     "radial-gradient(circle at 30% 28%, #FFCFB2 0%, #FF9A6B 70%, #C86440 100%)",
@@ -351,6 +364,53 @@ const COLLECTIBLES = {
     </svg>
   ),
   restaurant: (
+    /* Universal "steaming dish" — works for Ethiopian, Italian, Thai, etc.
+       A round plate with a heaped serving and three rising steam wisps,
+       not tied to any single cuisine. */
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-dish-food" cx="40%" cy="38%" r="60%">
+          <stop offset="0%" stopColor="#FFE9C2" />
+          <stop offset="55%" stopColor="#E69A47" />
+          <stop offset="100%" stopColor="#7B3D14" />
+        </radialGradient>
+        <linearGradient id="g-dish-plate" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="60%" stopColor="#E0DCEA" />
+          <stop offset="100%" stopColor="#A89DBE" />
+        </linearGradient>
+        <linearGradient id="g-dish-rim" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#C4B9D6" />
+          <stop offset="100%" stopColor="#7A6F92" />
+        </linearGradient>
+        <linearGradient id="g-dish-steam" x1="50%" y1="0%" x2="50%" y2="100%">
+          <stop offset="0%" stopColor="#D9BEF0" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#8851D4" stopOpacity="0.85" />
+        </linearGradient>
+      </defs>
+      {/* steam wisps */}
+      <path d="M 50 30 C 44 42, 56 50, 50 62" stroke="url(#g-dish-steam)" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M 70 24 C 64 38, 76 48, 70 62" stroke="url(#g-dish-steam)" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M 90 30 C 84 42, 96 50, 90 62" stroke="url(#g-dish-steam)" strokeWidth="4" strokeLinecap="round" fill="none" />
+      {/* plate (top of rim) */}
+      <ellipse cx="70" cy="92" rx="56" ry="14" fill="url(#g-dish-rim)" />
+      {/* plate (concave) */}
+      <ellipse cx="70" cy="88" rx="50" ry="11" fill="url(#g-dish-plate)" />
+      {/* heaped food in the center */}
+      <ellipse cx="70" cy="84" rx="34" ry="9" fill="url(#g-dish-food)" />
+      <ellipse cx="62" cy="80" rx="14" ry="5" fill="#FFF6E2" opacity="0.55" />
+      {/* sprinkle of garnish */}
+      <circle cx="58" cy="82" r="1.6" fill="#7CC36A" />
+      <circle cx="78" cy="84" r="1.4" fill="#7CC36A" />
+      <circle cx="84" cy="80" r="1.6" fill="#C82A1B" />
+      <circle cx="64" cy="86" r="1.2" fill="#C82A1B" />
+      {/* highlight under the plate */}
+      <ellipse cx="70" cy="106" rx="50" ry="4" fill="#1E1541" opacity="0.10" />
+    </svg>
+  ),
+  burger: (
+    /* Specific burger reward — only triggered when the place is actually a
+       burger spot (name contains "burger" or "diner"). */
     <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
       <defs>
         <linearGradient id="g-burger-bun-top" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -371,19 +431,14 @@ const COLLECTIBLES = {
           <stop offset="100%" stopColor="#D8A300" />
         </linearGradient>
       </defs>
-      {/* top bun */}
       <path d="M 22 64 Q 70 16 118 64 L 118 70 Q 70 56 22 70 Z" fill="url(#g-burger-bun-top)" />
       <circle cx="50" cy="48" r="2.4" fill="#FFF7E6" opacity="0.85" />
       <circle cx="70" cy="40" r="2.4" fill="#FFF7E6" opacity="0.85" />
       <circle cx="92" cy="48" r="2.4" fill="#FFF7E6" opacity="0.85" />
-      {/* lettuce */}
       <path d="M 18 72 Q 30 64 42 74 Q 54 64 66 74 Q 78 64 90 74 Q 102 64 114 74 Q 122 70 122 78 L 18 78 Q 16 72 18 72 Z" fill="#7CC36A" />
-      {/* cheese */}
       <path d="M 18 78 L 122 78 L 116 90 L 24 90 Z" fill="url(#g-burger-cheese)" />
       <path d="M 36 90 L 30 96 L 110 96 L 104 90 Z" fill="#D8A300" opacity="0.55" />
-      {/* patty */}
       <rect x="18" y="90" width="104" height="14" rx="3" fill="url(#g-burger-patty)" />
-      {/* bottom bun */}
       <path d="M 18 104 L 122 104 L 118 118 Q 70 132 22 118 Z" fill="url(#g-burger-bun-bot)" />
     </svg>
   ),
@@ -677,7 +732,11 @@ function TrailStop({ stop, index, isHero, isStart }) {
         >
           {COLLECTIBLES[stop.vibe]}
         </div>
-        {isStart && <span className="reward-trail-start-pill">START</span>}
+        {isStart && (
+          <span className="reward-trail-start-pill">
+            {isHero ? "LINGERED" : "START"}
+          </span>
+        )}
       </div>
       <div className="reward-trail-label">{stop.name}</div>
     </div>
@@ -689,6 +748,7 @@ export default function RewardScreen({
   journeyItems,
   visitedIds,
   visitedAt,
+  stopDwellMs,
   tripStartTime,
   nearbyPlaces,
   userLocation,
@@ -702,8 +762,8 @@ export default function RewardScreen({
   // Build real walk data from props if available; fall back to mock for preview.
   const walkData = useMemo(() => {
     if (walkDataOverride) return walkDataOverride;
-    return buildWalkData({ journeyItems, visitedIds, visitedAt, tripStartTime }) || MOCK_WALK;
-  }, [walkDataOverride, journeyItems, visitedIds, visitedAt, tripStartTime]);
+    return buildWalkData({ journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime }) || MOCK_WALK;
+  }, [walkDataOverride, journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime]);
 
   const hero = useMemo(() => pickHero(walkData.stops), [walkData.stops]);
   // Subheader tone is now driven by walk duration so short walks read as

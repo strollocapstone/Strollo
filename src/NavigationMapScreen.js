@@ -120,7 +120,7 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, showVoice = true }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -190,6 +190,58 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   }, [nextTarget, userLocation]);
   // 150 ft ≈ 45.72 m
   const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 45.72;
+
+  // ── Real-time per-stop dwell tracker ────────────────────────────────────
+  // Watches the user's geolocation and accumulates the actual time spent
+  // within ~50m of each confirmed stop. Drives accurate per-stop minutes on
+  // the Reward screen without requiring the user to tap "I'm here" — and
+  // still works correctly if they do.
+  const dwellRef = React.useRef({ stopId: null, enteredAt: 0 });
+  const setStopDwellMsRef = React.useRef(setStopDwellMs);
+  setStopDwellMsRef.current = setStopDwellMs;
+  useEffect(() => {
+    if (!userLocation || !setStopDwellMs || !confirmedStops?.length) return;
+
+    // Closest stop the user is currently inside (within ~50m).
+    let currentStopId = null;
+    for (const stop of confirmedStops) {
+      if (stop.lat == null || stop.lng == null) continue;
+      const distM = haversineKm(userLocation, [stop.lat, stop.lng]) * 1000;
+      if (distM <= 50) { currentStopId = stop.id; break; }
+    }
+
+    const prev = dwellRef.current;
+    if (currentStopId === prev.stopId) return; // still at the same place (or still nowhere)
+
+    const now = Date.now();
+    if (prev.stopId != null && prev.enteredAt) {
+      // Just left a stop — bank the time we spent there.
+      const delta = now - prev.enteredAt;
+      setStopDwellMs((m) => {
+        const next = new Map(m);
+        next.set(prev.stopId, (next.get(prev.stopId) || 0) + delta);
+        return next;
+      });
+    }
+    dwellRef.current = { stopId: currentStopId, enteredAt: currentStopId ? now : 0 };
+  }, [userLocation, confirmedStops, setStopDwellMs]);
+
+  // On unmount (or screen change), bank any in-progress dwell so the user
+  // doesn't lose credit for the stop they were standing in when they ended.
+  useEffect(() => {
+    return () => {
+      const prev = dwellRef.current;
+      const setDwell = setStopDwellMsRef.current;
+      if (prev.stopId != null && prev.enteredAt && setDwell) {
+        const delta = Date.now() - prev.enteredAt;
+        setDwell((m) => {
+          const next = new Map(m);
+          next.set(prev.stopId, (next.get(prev.stopId) || 0) + delta);
+          return next;
+        });
+      }
+    };
+  }, []);
 
   const handleArrived = () => {
     if (!nextTarget || !setVisitedIds) return;

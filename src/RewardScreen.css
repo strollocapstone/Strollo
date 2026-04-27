@@ -475,10 +475,12 @@
 .reward-suggestions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: -2px 0 14px 18px;
+  /* Bumped vertical spacing between suggestion cards. */
+  gap: 14px;
+  /* Indented from the rated card above so it reads as a child of it; the
+     dashed guide line was removed but the indent stays. */
+  margin: 18px 0 22px 18px;
   padding-left: 10px;
-  border-left: 2px dashed rgba(136, 81, 212, 0.35);
   animation: reward-slide-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .reward-suggestions-title {
@@ -487,6 +489,7 @@
   font-size: 13px;
   letter-spacing: 0.2px;
   color: var(--color-body);
+  /* Tight gap between the header and the first suggestion card. */
   margin: 0 0 2px;
 }
 .reward-suggestions-empty {
