@@ -168,6 +168,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
   const [exitDir, setExitDir] = useState(null);
   const [peekDir, setPeekDir] = useState(null);
+  const [incomingDir, setIncomingDir] = useState(null); // direction the prior card exited; drives undo slide-back
   const [closing, setClosing] = useState(false);
   // "drag" uses CSS transition (card has momentum from the finger); "button"
   // uses a keyframes animation with a subtle wind-up so the tap doesn't feel teleport-y.
@@ -238,7 +239,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
       completedAt: new Date().toISOString(),
     };
     // Hold the "All set!" screen long enough to read, THEN fade out, THEN hand off.
-    const READ_MS = 3200;
+    const READ_MS = 5500;
     const FADE_MS = 600;
     const tFade = setTimeout(() => setClosing(true), READ_MS);
     const tDone = setTimeout(() => {
@@ -296,13 +297,24 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
     }
   };
 
+  const undoTimerRef = useRef(null);
   const handleUndo = useCallback(() => {
     if (history.length === 0 || animatingRef.current) return;
+    const last = history[history.length - 1];
     setHistory(h => h.slice(0, -1));
     setIndex(i => Math.max(0, i - 1));
     setExitDir(null);
     setDrag({ x: 0, y: 0, active: false });
-  }, [history.length]);
+    // Restored card slides back from the direction it had exited (up→down, down→up).
+    animatingRef.current = true;
+    setIncomingDir(last.direction);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    const undoMs = prefersReducedMotion() ? 200 : 520;
+    undoTimerRef.current = setTimeout(() => {
+      setIncomingDir(null);
+      animatingRef.current = false;
+    }, undoMs);
+  }, [history]);
 
   // Only up/right swipes are pinned to the clothesline.
   const pinnedItems = history
@@ -337,6 +349,11 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         transition: "none",
       };
     }
+    if (incomingDir) {
+      return {
+        animation: `quiz-undo-${incomingDir} 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards`,
+      };
+    }
     return {
       transform: "translate(0, 0) rotate(0deg)",
       transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
@@ -354,7 +371,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         <div className={`quiz-done-inner${closing ? " quiz-done-inner--fading" : ""}`}>
           <h1>All set!</h1>
           <p>We've got a feel for your vibe.</p>
-          <p className="quiz-done-hint">You can tweak these later in your settings</p>
+          <p className="quiz-done-hint">You can tweak these later in your settings.</p>
         </div>
       </div>
     );

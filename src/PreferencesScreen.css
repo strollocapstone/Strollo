@@ -44,32 +44,6 @@
   flex-shrink: 0;
   z-index: 2;
 }
-.pwc-close {
-  position: absolute;
-  top: 18px;
-  right: 16px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(8px) saturate(1.4);
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
-  color: #8851D4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 40;
-  transition: transform 0.15s ease-out, background 0.2s ease;
-}
-.pwc-close:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-.pwc-close:active {
-  transform: scale(0.92);
-}
 .pwc-title {
   font-family: var(--font-brand);
   font-size: 16px;
@@ -123,14 +97,15 @@
   flex-shrink: 0;
 }
 .pwc-card-label {
-  font-family: "Unbounded", sans-serif;
-  font-size: 14px;
+  font-family: "Satoshi", sans-serif;
+  font-size: 16px;
   font-weight: 700;
   color: #34233E;
 }
 .pwc-card-value {
   margin-left: auto;
   max-width: 55%;
+  font-family: "Satoshi", sans-serif;
   font-size: 13px;
   font-weight: 500;
   color: #5A4B64;
@@ -460,7 +435,7 @@
 .pwc-bottom {
   position: sticky;
   bottom: 0;
-  padding: 8px 16px 16px;
+  padding: 16px 16px 28px;
   background: linear-gradient(180deg, rgba(247, 244, 250, 0) 0%, rgba(247, 244, 250, 0.6) 40%, rgba(247, 244, 250, 0.82) 100%);
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
@@ -472,27 +447,51 @@
   font-size: 12px;
   color: #5A4B64;
   font-weight: 500;
-  margin: 0 0 10px;
+  margin: 0 0 14px;
 }
+/* Bottom action row — secondary "Back to map" + primary "Save preferences",
+   both sized to match the homepage "Start exploring" pill (36px height,
+   pill radius, 14px Satoshi). */
+.pwc-actions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.pwc-back-btn,
 .pwc-start-btn {
-  width: 100%;
-  height: 52px;
-  background: #FFD501;
-  color: #1E1541;
+  flex: 1;
+  height: 36px;
   border: none;
-  border-radius: 999px;
+  border-radius: 18px;
+  padding: 0 16px;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.15s ease-out, filter 0.2s ease, background 0.15s ease;
+}
+.pwc-back-btn svg { display: block; }
+/* Primary — matches Strollo-yellow start-walk pill */
+.pwc-start-btn {
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
   box-shadow: 0 2px 10px rgba(255, 213, 1, 0.35);
-  transition: transform 0.15s ease-out, filter 0.2s ease;
 }
+.pwc-start-btn:hover  { filter: brightness(1.05); }
+.pwc-start-btn:active { transform: scale(0.97); }
 
-.pwc-start-btn:hover {
-  filter: brightness(1.05);
+/* Secondary — frosted glass treatment that mirrors the reward screen's
+   "Oops, I'm not done exploring" pill. */
+.pwc-back-btn {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: 0 2px 10px rgba(62, 42, 18, 0.12);
+  color: #1E1541;
 }
-
-.pwc-start-btn:active {
-  transform: scale(0.97);
-}
+.pwc-back-btn:hover  { background: rgba(255, 255, 255, 0.55); }
+.pwc-back-btn:active { transform: scale(0.97); }

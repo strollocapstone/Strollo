@@ -2,7 +2,7 @@
 .intro-screen {
   position: absolute;
   inset: 0;
-  background: #FFFFFF;
+  background: var(--chat-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -98,7 +98,7 @@
   font-weight: 700;
   font-size: 26px;
   line-height: 1.2;
-  color: #34233E;
+  color: #3B1F6E;
   margin: 0 0 32px; /* extra breathing room before the body copy */
   letter-spacing: -0.3px;
 }
@@ -107,7 +107,7 @@
   font-weight: 500;
   font-size: 15px;
   line-height: 1.5;
-  color: #5A4B64;
+  color: #3B1F6E;
   margin: 0 0 14px;
   max-width: 320px;
 }
@@ -118,6 +118,7 @@
 /* ── CTA — matches the homepage Strollo-yellow start-walk pill ─────────── */
 .intro-cta {
   margin-top: auto;
+  margin-bottom: 36px;
   height: 44px;
   padding: 0 24px;
   border: none;

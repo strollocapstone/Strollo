@@ -4,7 +4,6 @@
 import React, { useState } from "react";
 import "./IntroScreen.css";
 
-const EXIT_MS = 420;
 
 // Walk-themed emojis bubbling up from the bottom of the stage. Each gets its
 // own start position, drift, scale, duration and delay so the loop never
@@ -27,7 +26,10 @@ export default function IntroScreen({ onContinue }) {
   const handleContinue = () => {
     if (leaving) return;
     setLeaving(true);
-    setTimeout(() => onContinue?.(), EXIT_MS);
+    // Trigger the next screen immediately. The IntroScreen plays its fade/lift
+    // out via the `--leaving` class while QuizScreen slides up from below over
+    // it — the two animations overlap so there's no blank gap between them.
+    onContinue?.();
   };
 
   return (

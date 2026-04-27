@@ -2,7 +2,7 @@
 .loading-screen {
   position: absolute;
   inset: 0;
-  background: #FFFFFF;
+  background: var(--chat-bg);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -149,16 +149,11 @@
   letter-spacing: 0.4px;
   color: #3B1F6E;
   opacity: 0;
-  animation: ls-tagline-in 500ms ease-out 1600ms forwards,
-             ls-tagline-pulse 2000ms ease-in-out 2100ms infinite;
+  animation: ls-tagline-in 1200ms cubic-bezier(0.22, 1, 0.36, 1) 1500ms forwards;
 }
 @keyframes ls-tagline-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 0.85; transform: translateY(0); }
-}
-@keyframes ls-tagline-pulse {
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 0.95; }
 }
 
 /* ── Reduced motion: skip the strides, just fade everything in ────────── */
