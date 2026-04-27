@@ -62,15 +62,23 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
 };
 
 const makeAiPinIcon = (name, desc, expanded, added = false, sequence = null) => {
+  // Mirror the homescreen pin treatment: category-driven Material Symbol
+  // glyph in the dot (so a coffee suggestion shows a cup, a bookstore a
+  // book, etc.). Falls back to a sparkle when the AI-suggested place
+  // doesn't map to a known category. When the stop is added, the dot
+  // shows the sequence number (yellow added background) — same swap as
+  // makePinIcon — instead of a separate badge.
+  const icon = CATEGORY_ICONS[desc] || "auto_awesome";
   const classes = ['sugg-pin', 'sugg-pin--ai'];
   if (expanded) classes.push('sugg-pin--open');
   if (added) classes.push('sugg-pin--added');
   return L.divIcon({
     className: "",
     html: `<div class="${classes.join(' ')}">
-      ${added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
       <div class="sugg-pin-dot sugg-pin-dot--ai">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+        ${added && sequence
+          ? `<span class="sugg-pin-dot-number">${sequence}</span>`
+          : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
       </div>
       <span class="sugg-pin-name">${name}</span>
       ${expanded ? `<div class="sugg-pin-extra">
@@ -261,7 +269,16 @@ export default function HomeScreen({
   onOpenQuiz,
   initialLocation,
   initialSheetOpen,
+  initialChatOpen,
   onSheetOpenConsumed,
+  onChatOpenConsumed,
+  // When true, HomeScreen renders ONLY the chat overlay (no map, no
+  // bottom search, no FABs) — used by NavigationMapScreen to show the
+  // homepage chat overlay layered on top of the walk without leaving it.
+  chatOverlayOnly = false,
+  // Fired after the chat overlay's slide-down close animation finishes,
+  // so the parent (App.js) can unmount the chat-overlay-only HomeScreen.
+  onChatClose,
   preferences,
   vibePreferences,
   nearbyPlaces,
@@ -285,6 +302,7 @@ export default function HomeScreen({
 
   useEffect(() => {
     if (initialSheetOpen) onSheetOpenConsumed?.();
+    if (initialChatOpen) onChatOpenConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const mapCenterRef                      = useRef(null);
@@ -299,7 +317,7 @@ export default function HomeScreen({
   const [voiceUnsupported, setVoiceUnsupported] = useState(false);
   const [voiceResult, setVoiceResult]           = useState("");
   const [listenCardMode, setListenCardMode]     = useState(false);
-  const [chatMode, setChatMode]                 = useState(false);
+  const [chatMode, setChatMode]                 = useState(Boolean(initialChatOpen));
   const [chatMessages, setChatMessages]         = useState([]);
   const [chatLoading, setChatLoading]           = useState(false);
   const [chatListening, setChatListening]       = useState(false);
@@ -837,6 +855,9 @@ export default function HomeScreen({
       setSuggestedStops([]);
       setSelectedStopNames(new Set());
       geocodeReqRef.current++;
+      // Tell the parent the chat is fully closed — used by App.js to unmount
+      // the chat-overlay-only HomeScreen when the user is mid-walk.
+      onChatClose?.();
       setGeocodedSuggestions([]);
     }, 350);
   }, []);
@@ -1034,7 +1055,7 @@ export default function HomeScreen({
   }, [visibleNearbyPlaces, userLocation]);
 
   return (
-    <>
+    <ChatOnlyWrapper enabled={chatOverlayOnly}>
 
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
@@ -1373,7 +1394,7 @@ export default function HomeScreen({
             <div className="listen-blob listen-blob--3" />
           </div>
 
-          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)} />
+          <div className="search-handle" />
 
           {/* State: idle — search input */}
           {!listenCardMode && (
@@ -1515,26 +1536,40 @@ export default function HomeScreen({
 
       {/* ── CHAT MODE — 5-screen pre-walk planning flow ── */}
       {chatMode && (
-        <div className={`chat-overlay ${chatClosing ? "chat-overlay--closing" : ""} ${chatSplitActive ? "chat-overlay--split" : ""}`}>
+        <div
+          className={`chat-overlay ${chatClosing ? "chat-overlay--closing" : ""} ${chatSplitActive ? "chat-overlay--split" : ""}`}
+          onPointerDown={(e) => {
+            // Drag-down-to-close gesture: only when the gesture starts on
+            // the grab handle at the top edge of the overlay, never on a
+            // button or interactive child.
+            if (!e.target.closest(".chat-grabber")) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            e.currentTarget.dataset.dragStartY = String(e.clientY);
+          }}
+          onPointerMove={(e) => {
+            const start = Number(e.currentTarget.dataset.dragStartY);
+            if (!start) return;
+            if (e.clientY - start > 60) {
+              delete e.currentTarget.dataset.dragStartY;
+              closeChat();
+            }
+          }}
+          onPointerUp={(e) => { delete e.currentTarget.dataset.dragStartY; }}
+          onPointerCancel={(e) => { delete e.currentTarget.dataset.dragStartY; }}
+        >
+          {/* Drag handle along the top edge — pull down to dismiss the chat. */}
+          <div className="chat-grabber" aria-hidden="true">
+            <div className="chat-grabber-bar" />
+          </div>
 
           {/* Header (shared all 5 screens) */}
           <div className="chat-header">
-            <button className="chat-icon-btn" onClick={() => setShowHistory(h => !h)} aria-label="History">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeWidth="1.6" strokeLinecap="round">
-                <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
-              </svg>
-            </button>
             <div className="chat-header-title">
-              <div className="chat-header-eyebrow">plan a walk</div>
+              <div className="chat-header-eyebrow">Plan your exploration</div>
               <div className="chat-header-label">
                 {screenMode === 'confirmed' ? 'walk ready' : 'conversation'}
               </div>
             </div>
-            <button className="chat-icon-btn" onClick={closeChat} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeWidth="2" strokeLinecap="round">
-                <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
-              </svg>
-            </button>
           </div>
 
           {/* SCREEN 1 — Empty / first open */}
@@ -1828,46 +1863,48 @@ export default function HomeScreen({
           {/* Bottom input row — hidden on confirmed AND while listening
               (the listen-sheet replaces it during voice refinement). */}
           {screenMode !== 'confirmed' && screenMode !== 'refining' && (
-            <div className="chat-input-row">
-              <div className={`chat-input-field ${query ? 'composing' : ''}`}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34233E" strokeOpacity="0.55" strokeWidth="1.8" strokeLinecap="round">
-                  <circle cx="11" cy="11" r="6.5"/><path d="M16 16 L21 21"/>
-                </svg>
-                <input
-                  className="chat-input"
-                  placeholder={
-                    chatListening    ? 'listening…' :
-                    screenMode === 'empty' ? 'ask Strollo anything…' :
-                                       'I’m in the mood for…'
-                  }
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && query.trim()) sendChatMessage(query); }}
-                  disabled={chatListening || chatLoading}
-                />
-              </div>
-              <button
-                className={`chat-voice-btn ${chatListening ? 'active' : ''}`}
-                disabled={chatLoading}
-                onClick={() => {
-                  if (chatListening) {
-                    const text = speech.getTranscript().trim();
-                    speech.stop(); setChatListening(false);
-                    if (text) sendChatMessage(text);
-                  } else {
-                    if (!speech.supported) return;
-                    setChatListening(true); speech.start();
-                  }
-                }}
-                aria-label="Voice"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="6"  y1="9"  x2="6"  y2="15"/>
-                  <line x1="10" y1="6"  x2="10" y2="18"/>
-                  <line x1="14" y1="8"  x2="14" y2="16"/>
-                  <line x1="18" y1="10" x2="18" y2="14"/>
-                </svg>
-              </button>
+            <div className="chat-input-row chat-input-row--home-style">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                className="search-input"
+                placeholder={chatListening ? 'listening…' : "I'm in the mood for..."}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && query.trim()) sendChatMessage(query); }}
+                disabled={chatListening || chatLoading}
+              />
+              {query.trim() ? (
+                <button className="mic-btn" aria-label="Send" onClick={() => sendChatMessage(query)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  className="mic-btn"
+                  disabled={chatLoading}
+                  onClick={() => {
+                    if (chatListening) {
+                      const text = speech.getTranscript().trim();
+                      speech.stop(); setChatListening(false);
+                      if (text) sendChatMessage(text);
+                    } else {
+                      if (!speech.supported) return;
+                      setChatListening(true); speech.start();
+                    }
+                  }}
+                  aria-label="Voice input"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+                    <line x1="6"  y1="9"  x2="6"  y2="15"/>
+                    <line x1="10" y1="6"  x2="10" y2="18"/>
+                    <line x1="14" y1="8"  x2="14" y2="16"/>
+                    <line x1="18" y1="10" x2="18" y2="14"/>
+                  </svg>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1891,6 +1928,15 @@ export default function HomeScreen({
       {voiceUnsupported && (
         <div className="voice-toast">Voice input is not supported in this browser</div>
       )}
-    </>
+    </ChatOnlyWrapper>
   );
+}
+
+// Module-scope wrapper so React doesn't see a "new" component type on every
+// HomeScreen render (which would unmount + remount the entire chat overlay
+// and cause the visible glitch when used as a chat-only portal).
+function ChatOnlyWrapper({ enabled, children }) {
+  return enabled
+    ? <div className="home-chat-only-portal">{children}</div>
+    : <>{children}</>;
 }

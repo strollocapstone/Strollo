@@ -43,6 +43,17 @@
   color: #61dafb;
 }
 
+/* Floating journey-flag FAB rendered above the chat overlay while the user
+   is mid-walk (App.js renders this directly so it survives the brief
+   home-screen detour the chat overlay takes). Sits above the chat-overlay's
+   z-index of 50. */
+.app-floating-flag-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  z-index: 60;
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);

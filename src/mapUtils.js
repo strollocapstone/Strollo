@@ -186,6 +186,44 @@ export function MapCenterTracker({ onCenterChange }) {
   return null;
 }
 
+// ── Reverse geocode (free OpenStreetMap Nominatim — no API key) ──────────
+// Resolves a lat/lng to a short, human-readable place name (e.g. "Sproul
+// Plaza", "Telegraph Avenue", "Berkeley"). Returns null on any failure.
+// Note: Nominatim's usage policy asks callers to send max 1 req/sec — the
+// caller should debounce and cache by rounded coords.
+export async function reverseGeocode(lat, lng) {
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`;
+    const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data.address || {};
+    // Prefer specific landmarks/businesses, then fall back to roads,
+    // neighborhoods, then administrative areas.
+    const candidate =
+      data.name ||
+      a.attraction ||
+      a.tourism ||
+      a.shop ||
+      a.amenity ||
+      a.leisure ||
+      a.building ||
+      a.road ||
+      a.neighbourhood ||
+      a.suburb ||
+      a.city_district ||
+      a.city ||
+      a.town ||
+      a.village ||
+      (data.display_name ? data.display_name.split(",")[0] : null);
+    return candidate ? candidate.toString().trim() : null;
+  } catch (e) {
+    console.warn("reverseGeocode failed:", e);
+    return null;
+  }
+}
+
 // ── Distance helpers ─────────────────────────────────────────────────────
 const EARTH_RADIUS_KM = 6371;
 

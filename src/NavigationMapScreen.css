@@ -905,7 +905,7 @@
    card (matches HomeScreen's locate-above-search-bar treatment). The
    companion card is ~240px tall in its default state + 16px bottom margin
    = top edge at ~256px; bottom: 280px puts the FAB ~24px above it. */
-.bottom-right-stack--nav {
+.bottom-right-stack.bottom-right-stack--nav {
   right: 16px;
   bottom: 280px;
   z-index: 31;
@@ -929,6 +929,11 @@
   -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
   backdrop-filter: blur(18px) saturate(1.1) !important;
 }
+/* Disabled-looking state for the journey FAB when there's no destination
+   on the timeline yet — keep the same dark widget background (no opacity
+   dimming on the button itself); only the inner icon fades a touch so the
+   FAB still reads as inactive without becoming translucent. */
+.bottom-right-btn--disabled svg { opacity: 0.55; }
 
 /* "I am here" affordance — floats at the SAME VERTICAL LEVEL as the locate
    FAB (.bottom-right-stack--nav at bottom: 280px), pinned to the LEFT side

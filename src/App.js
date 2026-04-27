@@ -20,6 +20,11 @@ function App() {
   const [preferences, setPreferences] = useState(null);
   const [quizPreferences, setQuizPreferences] = useState(initialQuizPrefs);
   const [openSheetOnHome, setOpenSheetOnHome] = useState(false);
+  const [openChatOnHome, setOpenChatOnHome] = useState(false);
+  // When the user opens the chat from inside the walk, we briefly switch
+  // to home with the chat already open, then bounce back to navigation
+  // once the chat closes. The walk state stays in App and is preserved.
+  const [chatReturnScreen, setChatReturnScreen] = useState(null);
   const [constraintsReturnScreen, setConstraintsReturnScreen] = useState('home');
   const [settingsHighlight, setSettingsHighlight] = useState(false);
   const [quizPending, setQuizPending] = useState(false);
@@ -94,7 +99,18 @@ function App() {
             onOpenQuiz={() => setScreen('quiz')}
             initialLocation={lastKnownLocation}
             initialSheetOpen={openSheetOnHome}
+            initialChatOpen={openChatOnHome}
             onSheetOpenConsumed={() => setOpenSheetOnHome(false)}
+            onChatOpenConsumed={() => setOpenChatOnHome(false)}
+            onChatClose={() => {
+              // If the chat was opened from inside the walk, hop back to
+              // the navigation screen now that it's closed.
+              if (chatReturnScreen) {
+                const target = chatReturnScreen;
+                setChatReturnScreen(null);
+                setScreen(target);
+              }
+            }}
             preferences={preferences}
             vibePreferences={quizPreferences}
             nearbyPlaces={nearbyPlaces}
@@ -159,6 +175,13 @@ function App() {
             onEndWalk={() => setScreen('reward')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
+            onOpenChat={() => {
+              // Pop into home with the chat overlay open; remember to
+              // return to the walk when the user closes the chat.
+              setChatReturnScreen('navigation');
+              setOpenChatOnHome(true);
+              setScreen('home');
+            }}
             journeyItems={journeyItems}
             startLocation={startLocation}
             onJourneyChange={setJourneyItems}
@@ -169,6 +192,7 @@ function App() {
             setVisitedAt={setVisitedAt}
             setStopDwellMs={setStopDwellMs}
             vibePreferences={quizPreferences}
+            nearbyPlaces={nearbyPlaces}
             showVoice={screen === 'navigation'}
           />
         )}
@@ -234,6 +258,27 @@ function App() {
             onJourneyChange={setJourneyItems}
             preferences={preferences}
           />
+        )}
+        {/* Floating journey-flag FAB while the chat overlay is open during a
+            walk — keeps the timeline shortcut visible even though we briefly
+            switched to the home screen to reuse the chat overlay UI. Tap
+            closes the chat and routes the user to the timeline. */}
+        {openChatOnHome && chatReturnScreen === 'navigation' && (
+          <button
+            className="fab-circle bottom-right-btn bottom-right-btn--journey app-floating-flag-fab"
+            onClick={() => {
+              setOpenChatOnHome(false);
+              setChatReturnScreen(null);
+              setScreen('timeline');
+            }}
+            aria-label="Check journey"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+              <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M8 3 L18 6 L8 10 Z"/>
+              <circle cx="8" cy="21" r="2"/>
+            </svg>
+          </button>
         )}
       </div>
     </div>
