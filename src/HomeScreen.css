@@ -106,10 +106,19 @@
   -webkit-user-select: none;
   user-select: none;
 }
+.sugg-pin-dot-number {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent);
+  line-height: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
-/* Purple dot when added — stays same color, already purple */
+/* Yellow dot when added — sequence number replaces venue icon */
 .sugg-pin--added .sugg-pin-dot {
-  background: #8851D4;
+  background: var(--color-primary);
 }
 
 /* ── AI-suggested pin variant ── */
@@ -275,30 +284,6 @@
   to   { opacity: 1;    transform: translate(-50%, calc(-100% - 5px)) scale(1); }
 }
 
-/* Sequence number badge on added pills (top-right) */
-/* Sequence badge — sits inline to the LEFT of .sugg-pin-dot inside the
-   pill's flex row, at the same 18x18 size so it reads as a second
-   circular icon rather than a corner overlay. */
-.sugg-pin-badge {
-  position: static;
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  padding: 0;
-  border-radius: 50%;
-  background: #8851D4;
-  color: #ffffff;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.22);
-}
-
 /* ── Top bar ── */
 .top-bar {
   position: absolute;
@@ -384,12 +369,10 @@
 .bottom-right-btn {
   width: 40px !important;
   height: 40px !important;
-  /* Match the frosted-glass treatment used on the search bar so the icon
-     buttons feel like they're cut from the same material. */
-  background: rgba(255, 255, 255, 0.58) !important;
-  backdrop-filter: blur(14px) saturate(1.25) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(1.25) !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.10) !important;
+  background: rgba(247, 244, 250, 0.22) !important;
+  backdrop-filter: blur(20px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.25) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.14) !important;
 }
 
 /* Halo pulse cueing the settings button right after the quiz ends */
