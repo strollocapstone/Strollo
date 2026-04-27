@@ -778,7 +778,7 @@ export default function HomeScreen({
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
         <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" maxZoom={19} />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           {visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isAdded = addedIds.has(s.id);
             const isExpanded = selectedPoi === s.id;
