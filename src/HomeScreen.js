@@ -78,7 +78,7 @@ const makeAiPinIcon = (name, desc, expanded) => L.divIcon({
 // ── Location card ──────────────────────────────────────────────────────────
 const LocationCard = memo(function LocationCard({ item, added, onToggle }) {
   return (
-    <div className="location-card">
+    <div className={`location-card${added ? " location-card--added" : ""}`}>
       <div className="location-card-info">
         <div className="location-card-name-row">
           <span className="location-card-name">{item.name}</span>
@@ -855,16 +855,22 @@ export default function HomeScreen({
       }} />
 
       {/* ── TOP BAR ── */}
-      <div className="top-bar" />
+      <div className="top-bar">
+        <button
+          type="button"
+          className="fab-circle top-right-btn"
+          aria-label="Profile"
+        >
+          <span className="top-right-initials">ST</span>
+        </button>
+      </div>
 
       {/* ── BOTTOM FLOAT BAR: Start exploring + Preferences + Locate ── */}
       {!voiceActive && !voiceExpanded && (
         <div className="bottom-float-bar" ref={buttonStackRef}>
-          {addedIds.size > 0 && (
-            <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
-              Start exploring · {addedIds.size}
-            </button>
-          )}
+          <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
+            {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : "Start exploring"}
+          </button>
           <div className="bottom-right-stack">
             {quizPending && (
               <button
@@ -1226,6 +1232,14 @@ export default function HomeScreen({
           )}
 
           <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
+            <div className="suggested-spots-row">
+              <h3 className="suggested-spots-title">Suggested spots</h3>
+              <span className="suggested-spots-count">
+                {addedIds.size > 0
+                  ? `${addedIds.size} of ${allItems.length} spots selected`
+                  : `${allItems.length} spots`}
+              </span>
+            </div>
             <div
               className="location-card-carousel"
               ref={carouselRef}
@@ -1255,11 +1269,6 @@ export default function HomeScreen({
               ))}
             </div>
 
-            {addedIds.size > 0 && (
-              <button className="cta-btn" onClick={handleStartWalk}>
-                Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
-              </button>
-            )}
           </div>
         </div>
       )}
