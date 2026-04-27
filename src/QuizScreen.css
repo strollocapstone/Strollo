@@ -5,7 +5,7 @@
   background-color: #F4E2C4;
   /* Warm gradient base + denser cork speckles overlaid */
   background-image:
-    radial-gradient(circle at 15% 10%, rgba(255, 213, 1, 0.22), transparent 45%),
+    radial-gradient(circle at 15% 10%, rgba(255, 213, 1, 0.04), transparent 45%),
     radial-gradient(circle at 85% 95%, rgba(231, 138, 104, 0.18), transparent 50%),
     /* dark speckle layer 1 — 40px tile */
     radial-gradient(1.4px 1.4px at 8px 6px,    rgba(94, 52, 18, 0.32) 50%, transparent 52%),
@@ -636,9 +636,9 @@
 .quiz-info-tooltip {
   position: absolute;
   top: calc(100% + 10px);
-  /* Anchor right edge to icon, then nudge tooltip leftward so the arrow
-     sits centered under the icon rather than at the tooltip's right edge. */
-  right: -13px;
+  /* Push the tooltip rightward so its left edge stops overflowing the screen
+     edge. The arrow notch below is offset to stay centered under the icon. */
+  right: -42px;
   width: 215px;
   padding: 10px 12px;
   background: rgba(30, 21, 65, 0.92);
@@ -657,9 +657,10 @@
   content: "";
   position: absolute;
   top: -5px;
-  /* Centered under the help icon: tooltip is offset right:-13px from the
-     icon's right edge, and the icon is 26px wide → arrow centers at right:26px. */
-  right: 26px;
+  /* Centered under the help icon: tooltip's right edge is 42px past the
+     icon's right edge, and the icon is 26px wide → arrow center sits at
+     42 + (26 / 2) = 55px from the tooltip's right edge. */
+  right: 55px;
   width: 10px;
   height: 10px;
   background: rgba(30, 21, 65, 0.92);

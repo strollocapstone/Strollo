@@ -91,7 +91,7 @@ const makeAiPinIcon = (name, desc, expanded, added = false, sequence = null) => 
 // ── Location card ──────────────────────────────────────────────────────────
 const LocationCard = memo(function LocationCard({ item, added, onToggle }) {
   return (
-    <div className="location-card">
+    <div className={`location-card${added ? " location-card--added" : ""}`}>
       <div className="location-card-info">
         <div className="location-card-name-row">
           <span className="location-card-name">{item.name}</span>
@@ -1137,9 +1137,6 @@ export default function HomeScreen({
           transparent 68%)`,
       }} />
 
-      {/* ── TOP BAR ── */}
-      <div className="top-bar" />
-
       {/* ── BOTTOM FLOAT BAR: Start exploring + Preferences + Locate ── */}
       {!voiceActive && !voiceExpanded && (
         <div
@@ -1506,6 +1503,14 @@ export default function HomeScreen({
           )}
 
           <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
+            <div className="suggested-spots-row">
+              <h3 className="suggested-spots-title">Suggested spots</h3>
+              <span className="suggested-spots-count">
+                {addedIds.size > 0
+                  ? `${addedIds.size} of ${allItems.length} spots selected`
+                  : `${allItems.length} spots`}
+              </span>
+            </div>
             <div
               className="location-card-carousel"
               ref={carouselRef}
@@ -1535,11 +1540,6 @@ export default function HomeScreen({
               ))}
             </div>
 
-            {addedIds.size > 0 && (
-              <button className="cta-btn" onClick={handleStartWalk}>
-                Start walk · {addedIds.size} {addedIds.size === 1 ? "stop" : "stops"}
-              </button>
-            )}
           </div>
         </div>
       )}

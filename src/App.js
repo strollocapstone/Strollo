@@ -12,7 +12,7 @@ import './App.css';
 function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
-  const [screen, setScreen] = useState('loading');
+  const [screen, setScreen] = useState('quiz');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
