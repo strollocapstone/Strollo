@@ -60,8 +60,8 @@
 .tl-suggestions-title {
   flex: 1;
   font-family: var(--font-brand);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   letter-spacing: 0.01em;
   color: #34233E;
 }
@@ -158,29 +158,50 @@
 }
 /* Small node on the rail — filled purple dot for planned, outlined for suggestions */
 .tl-rail-node {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: #8851D4;
-  box-shadow: 0 0 0 3px rgba(247, 244, 250, 0.95);
+  box-sizing: border-box;
 }
 .tl-rail-node--suggest {
-  background: rgba(247, 244, 250, 0.95);
-  border: 1.5px solid #8851D4;
+  background: #F7F4FA;
+  border: 2px solid #8851D4;
 }
 /* Stops the user has already confirmed visiting — solid green dot. */
 .tl-rail-node--visited {
   background: #16A34A;
-  box-shadow: 0 0 0 3px rgba(247, 244, 250, 0.95);
 }
-/* Map-pin marker on the rail at the user's current position. */
-.tl-rail-pin {
+/* Destination pin for the final confirmed stop. */
+.tl-rail-final-pin {
   filter: drop-shadow(0 1px 3px rgba(136, 81, 212, 0.30));
 }
+
+/* Boots marker on the rail at the user's current position. */
+.tl-rail-boots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  filter: drop-shadow(0 1px 3px rgba(30, 21, 65, 0.25));
+}
+.tl-rail-foot { display: block; }
+.tl-rail-foot--left { transform: rotate(-8deg); }
+.tl-rail-foot--right { transform: rotate(8deg); }
 /* Top-of-rail pin row when nothing is confirmed yet — same height as a
    walk row so the pin sits cleanly above the first suggestion card. */
 .tl-row--pin-only {
   min-height: 32px;
+  padding: 4px 0 18px;
+}
+.tl-you-are-here {
+  display: inline-block;
+  padding-left: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: #8851D4;
+  letter-spacing: 0.01em;
 }
 /* Visited cards: muted treatment, no swipe-action stack, no expansion lift. */
 .tl-card--visited {
@@ -235,6 +256,9 @@
 .tl-row--add,
 .tl-row--walk {
   min-height: 32px;
+}
+.tl-row--walk {
+  padding: 10px 0;
 }
 
 /* Right column — cards and walk labels */
@@ -318,8 +342,8 @@
 }
 .tl-walk-secondary {
   font-size: 12px;
-  font-weight: 400;
-  color: #7C6D86;
+  font-weight: 500;
+  color: #5A4B64;
 }
 
 /* ── Card column ── */
@@ -358,7 +382,11 @@
   width: 64px;
   border: none;
   border-radius: 12px;
-  color: white;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+  color: var(--color-body);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -370,7 +398,7 @@
   padding: 0 4px;
   transition: background 0.15s ease, transform 0.12s ease;
 }
-.tl-card-action:active { transform: scale(0.96); }
+.tl-card-action:active { transform: scale(0.96); background: rgba(255, 255, 255, 0.78); }
 .tl-card-action svg { display: block; }
 .tl-card-action-label {
   font-size: 10.5px;
@@ -378,14 +406,10 @@
   line-height: 1;
   letter-spacing: 0.01em;
 }
-.tl-card-action--remove { background: #DC2626; }
-.tl-card-action--remove:active { background: #B91C1C; }
-.tl-card-action--add { background: #16A34A; }
-.tl-card-action--add:active { background: #15803D; }
-.tl-card-action--dismiss { background: #6B7280; }
-.tl-card-action--dismiss:active { background: #4B5563; }
-.tl-card-action--dislike { background: #B91C1C; }
-.tl-card-action--dislike:active { background: #991B1B; }
+.tl-card-action--remove { color: #DC2626; }
+.tl-card-action--add { color: #16A34A; }
+.tl-card-action--dismiss { color: #5A4B64; }
+.tl-card-action--dislike { color: #B91C1C; }
 
 /* ── Collapsed card — compact, icon + name + category ── */
 .tl-content-cell .tl-card-swipe { margin: 6px 0; }
@@ -395,34 +419,34 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: white;
-  border: 1px solid rgba(30, 21, 65, 0.06);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border: 1.5px solid #8851D4;
+  border-radius: var(--radius-card);
   padding: 10px 12px;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 8px rgba(136, 81, 212, 0.18);
   cursor: pointer;
   min-height: 52px;
   touch-action: pan-y;
   -webkit-user-select: none;
   user-select: none;
-  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease, border-style 0.15s ease;
 }
 
 .tl-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
-  border-color: rgba(136, 81, 212, 0.20);
+  box-shadow: 0 4px 18px rgba(136, 81, 212, 0.22);
 }
 
 .tl-card--suggestion {
-  background: transparent;
-  border: 2px dotted #8851D4;
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1.5px dashed rgba(136, 81, 212, 0.55);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
 
 .tl-card--suggestion:hover {
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 2px 10px rgba(136, 81, 212, 0.08);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
 }
 
 .tl-card--removing {
@@ -519,9 +543,9 @@
 }
 
 .tl-card-detail--suggestion {
-  background: transparent;
-  border: 2px dotted #8851D4;
-  box-shadow: 0 4px 24px rgba(136, 81, 212, 0.10);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1.5px dashed rgba(136, 81, 212, 0.55);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
 
 @keyframes tl-expand {
@@ -554,8 +578,8 @@
 }
 
 .tl-detail-maps {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: rgba(136, 81, 212, 0.10);
   display: flex;
@@ -566,8 +590,15 @@
   text-decoration: none;
   transition: transform 0.15s ease, background 0.2s ease;
 }
+.tl-detail-maps svg { width: 16px; height: 16px; }
 .tl-detail-maps:hover { background: rgba(136, 81, 212, 0.18); }
 .tl-detail-maps:active { transform: scale(0.92); }
+.tl-card-detail--suggestion .tl-detail-maps {
+  background: transparent;
+}
+.tl-card-detail--suggestion .tl-detail-maps:hover {
+  background: rgba(136, 81, 212, 0.10);
+}
 
 .tl-detail-image {
   width: 100%;
@@ -630,6 +661,19 @@
   gap: 12px;
   padding: 18px 14px;
 }
+.tl-detail-actions--suggestion {
+  gap: 10px;
+  padding: 14px 14px 4px;
+}
+.tl-card-detail--suggestion { padding-bottom: 8px; }
+/* When the swipe-action buttons are reused inline inside the expanded
+   suggestion card, drop the absolute-positioning rules from .tl-card-action
+   so they flow as a normal flex row. */
+.tl-detail-action {
+  position: static;
+  height: 56px;
+  flex: 1;
+}
 
 .tl-btn {
   font-family: var(--font-ui);
@@ -671,20 +715,20 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(220, 38, 38, 0.08);
-  color: #DC2626;
+  background: rgba(185, 28, 28, 0.08);
+  color: #B91C1C;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   padding: 3px 8px;
   border-radius: var(--radius-pill);
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .tl-card-tag svg {
   flex-shrink: 0;
 }
 
-/* ── Bottom bar — Back (icon) · Skip (primary) · End (secondary) ── */
+/* ── Bottom bar — Back (icon) · Skip (primary) ── */
 .tl-bottom-bar {
   position: -webkit-sticky;
   position: sticky;
@@ -699,7 +743,10 @@
   background: rgba(247, 244, 250, 0.50);
   backdrop-filter: blur(14px) saturate(1.25);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
-  border-top: 1px solid rgba(90, 75, 100, 0.10);
+  transition: box-shadow 0.2s ease;
+}
+.tl-bottom-bar--scrollable {
+  box-shadow: 0 -4px 16px rgba(30, 21, 65, 0.10);
 }
 
 /* Map — primary yellow pill: fills the bar, icon + label */
