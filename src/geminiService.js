@@ -101,7 +101,8 @@ The user is ON FOOT planning a short walking tour from this exact GPS position. 
 ${stopsSection}${vibeSection}${constraintsSection}
 
 Response rules:
-- Be CONCISE. Max 1-2 short sentences of intro, then jump straight to places.
+- OPEN with ONE warm sentence that (a) acknowledges the search, (b) references the user's past searches and saved preferences if any are noted above, and (c) names the FIRST (closest) suggested place by name plus a brief reason. Example shape: "Based on your past searches and your love of cozy cafés, I'd suggest starting with Cheese Board Pizza — legendary slices and a live jazz vibe."
+- That single sentence is the entire prose intro — do NOT add a second intro sentence and do NOT continue with prose. Jump straight to the bullet list of places after it.
 - Suggest 5-8 specific, real places per response. More is better.
 - For each place: just the name and one short reason to visit (under 10 words).
 - WALKING TOUR ONLY: every place MUST be within a 15–20 minute walk of the user's GPS location (≈ 1.2–1.6 km). NEVER suggest anything beyond 1.6 km — verify each one before adding.
@@ -170,19 +171,26 @@ export function extractPlaces(text) {
   return places;
 }
 
-// Strip the 📍 and action lines from the display text, then keep only the
-// FIRST SENTENCE of the intro. The places themselves are rendered as cards,
-// so the bubble should be a single warm opening line — never the full list.
+// Strip the 📍 and action lines from the display text, then keep the warm
+// intro and drop any inline bullet list of places (the cards already show
+// those). Stop at the first bullet marker ("- foo", "* foo", "• foo") OR
+// at a colon that introduces a list. Otherwise keep the full prose intro
+// (one or two sentences) so the suggestion rationale isn't truncated.
 export function cleanResponseText(text) {
   let cleaned = text
     .split('\n')
     .filter(line => !line.match(/^📍\s/) && !line.match(/^REMOVE:\s/i) && !line.match(/^REORDER:\s/i))
     .join(' ')
     .trim();
-  // Trim to the first sentence-ish boundary: ". ", "! ", "? ", or ": "
-  // (the colon catches list-intro phrases like "Here are some cafes:").
-  const match = cleaned.match(/^[\s\S]*?[.!?:](?=\s|$)/);
-  if (match) cleaned = match[0].trim();
+  // Trim at the first colon-then-bullet ("Here are some cafés: -") OR the
+  // first standalone bullet (" - foo") — those mark where the place list
+  // begins inline. Whichever comes first wins.
+  const colonBullet = cleaned.search(/:\s+[-•*]\s/);
+  const bulletStart = cleaned.search(/(?:^|\s)[-•*]\s+\S/);
+  let cut = -1;
+  if (colonBullet >= 0) cut = colonBullet + 1; // include the colon
+  if (bulletStart >= 0 && (cut < 0 || bulletStart < cut)) cut = bulletStart;
+  if (cut > 0) cleaned = cleaned.slice(0, cut).trim();
   return cleaned;
 }
 
