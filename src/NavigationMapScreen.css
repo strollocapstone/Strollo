@@ -901,11 +901,13 @@
   filter: drop-shadow(0 0 6px rgba(136, 81, 212, 0.40));
 }
 
-/* Lift the locate FAB above the bottom-pinned companion card (~ card height + gap),
-   and make sure it floats over the card + map (z-index 31 > .wcw at z-index 30). */
+/* Lift the locate FAB so it sits just above the bottom-pinned companion
+   card (matches HomeScreen's locate-above-search-bar treatment). The
+   companion card is ~240px tall in its default state + 16px bottom margin
+   = top edge at ~256px; bottom: 280px puts the FAB ~24px above it. */
 .bottom-right-stack--nav {
   right: 16px;
-  bottom: 320px;
+  bottom: 280px;
   z-index: 31;
 }
 
@@ -929,14 +931,13 @@
 }
 
 /* "I am here" affordance — floats at the SAME VERTICAL LEVEL as the locate
-   FAB (.bottom-right-stack--nav now at bottom: 320px because the redesigned
-   walk-companion widget is taller). Left-aligned so the two FABs don't
-   overlap. */
+   FAB (.bottom-right-stack--nav at bottom: 280px), pinned to the LEFT side
+   so the two don't overlap. */
 .nav-arrived-bar {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: 320px;
+  bottom: 280px;
   z-index: 32;
   display: flex;
   align-items: center;
