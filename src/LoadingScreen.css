@@ -1,0 +1,175 @@
+/* ── Loading Screen ─────────────────────────────────────────────────────── */
+.loading-screen {
+  position: absolute;
+  inset: 0;
+  background: #FFFFFF;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-brand);
+  transition: opacity 600ms ease-out;
+}
+.loading-screen--fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Plain white loading background — blobs hidden. */
+.ls-blobs,
+.ls-blob {
+  display: none;
+}
+
+/* ── Wordmark ──────────────────────────────────────────────────────────── */
+.ls-wordmark {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  z-index: 2;
+  /* Lift slightly above center to make room for the tagline. */
+  transform: translateY(-12px);
+}
+.ls-text {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 64px;
+  line-height: 1;
+  color: #34233E;
+  letter-spacing: -1px;
+  opacity: 0;
+  animation: ls-text-in 600ms cubic-bezier(0.22, 1, 0.36, 1) 80ms forwards;
+}
+.ls-text--right {
+  animation-delay: 160ms;
+}
+@keyframes ls-text-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Boots stage ───────────────────────────────────────────────────────── */
+.ls-boots {
+  position: relative;
+  /* Wide enough to hold the M silhouette: upright boot on the left, kicking
+     boot overlapping on the right with its leg extending up. */
+  width: 80px;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* Allow trail footprints to render outside the box */
+  overflow: visible;
+}
+
+/* Final pose: upright boot anchored at the left, kicking boot anchored at the
+   right; the kick crosses up over the upright boot to form the logo's M. */
+.ls-boot {
+  position: absolute;
+  filter: drop-shadow(0 4px 6px rgba(52, 35, 62, 0.22));
+  transform-origin: 50% 80%;
+  will-change: transform;
+}
+.ls-boot--left {
+  left: 6px;
+  bottom: 2px;
+  z-index: 1;
+  animation: ls-walk-left 3200ms cubic-bezier(0.55, 0, 0.35, 1) 350ms both;
+}
+.ls-boot--right {
+  /* Sit the kicking boot to the right of (and overlapping) the upright one,
+     with the kick rising up to cross over it — matches the logo silhouette. */
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  animation: ls-walk-right 3200ms cubic-bezier(0.55, 0, 0.35, 1) 550ms both;
+}
+
+/* Walking trajectories — translate along an S-curve with a bobbing rotation
+   so each boot reads as taking deliberate steps before settling into place.
+   The mirrored left boot composes its base scaleX(-1) into every keyframe so
+   it stays visually flipped while moving. */
+@keyframes ls-walk-right {
+  /* Strides in from bottom-left of the stage */
+  0%   { opacity: 0; transform: translate(-230px,  250px) rotate(-22deg); }
+  8%   { opacity: 1; transform: translate(-200px,  210px) rotate(  6deg); }
+  18%  {             transform: translate(-160px,  165px) rotate( -8deg); }
+  28%  {             transform: translate(-125px,  130px) rotate(  9deg); }
+  40%  {             transform: translate( -90px,   95px) rotate( -7deg); }
+  52%  {             transform: translate( -60px,   65px) rotate(  7deg); }
+  64%  {             transform: translate( -34px,   42px) rotate( -5deg); }
+  76%  {             transform: translate( -16px,   22px) rotate(  4deg); }
+  86%  {             transform: translate(  -5px,    8px) rotate( -2deg); }
+  94%  {             transform: translate(   0,     -3px) rotate(  1deg); }
+  100% {             transform: translate(   0,      0)   rotate(  0deg); }
+}
+@keyframes ls-walk-left {
+  /* Strides in from top-right of the stage — same orientation as right boot. */
+  0%   { opacity: 0; transform: translate( 250px, -230px) rotate( 22deg); }
+  8%   { opacity: 1; transform: translate( 210px, -190px) rotate( -8deg); }
+  18%  {             transform: translate( 170px, -150px) rotate( 10deg); }
+  28%  {             transform: translate( 132px, -115px) rotate( -8deg); }
+  40%  {             transform: translate(  98px,  -82px) rotate(  9deg); }
+  52%  {             transform: translate(  68px,  -55px) rotate( -6deg); }
+  64%  {             transform: translate(  42px,  -32px) rotate(  6deg); }
+  76%  {             transform: translate(  20px,  -14px) rotate( -4deg); }
+  86%  {             transform: translate(   6px,   -4px) rotate(  2deg); }
+  94%  {             transform: translate(   0,     -2px) rotate( -1deg); }
+  100% {             transform: translate(   0,      0)   rotate(  0deg); }
+}
+
+/* ── Marauder footprints along the trail ──────────────────────────────── */
+.ls-footprint {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: center;
+  animation: ls-print 2400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  filter: drop-shadow(0 1px 1px rgba(52, 35, 62, 0.18));
+}
+@keyframes ls-print {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.85; }
+  75%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* ── Tagline ───────────────────────────────────────────────────────────── */
+.ls-tagline {
+  position: absolute;
+  bottom: 18%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: 0.4px;
+  color: #5A4B3C;
+  opacity: 0;
+  animation: ls-tagline-in 500ms ease-out 1600ms forwards,
+             ls-tagline-pulse 2000ms ease-in-out 2100ms infinite;
+}
+@keyframes ls-tagline-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 0.85; transform: translateY(0); }
+}
+@keyframes ls-tagline-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+
+/* ── Reduced motion: skip the strides, just fade everything in ────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ls-boot--right,
+  .ls-boot--left {
+    animation: ls-fade-in 500ms ease-out forwards;
+  }
+  .ls-footprint { display: none; }
+  @keyframes ls-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  }
+}

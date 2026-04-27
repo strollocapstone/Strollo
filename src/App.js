@@ -5,12 +5,14 @@ import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
 import QuizScreen from './QuizScreen';
 import RewardScreen from './RewardScreen';
+import LoadingScreen from './LoadingScreen';
+import IntroScreen from './IntroScreen';
 import './App.css';
 
 function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
-  const [screen, setScreen] = useState('quiz');
+  const [screen, setScreen] = useState('loading');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
@@ -54,6 +56,12 @@ function App() {
   return (
     <div className="App">
       <div className="phone-frame">
+        {screen === 'loading' && (
+          <LoadingScreen onComplete={() => setScreen('intro')} />
+        )}
+        {screen === 'intro' && (
+          <IntroScreen onContinue={() => setScreen('quiz')} />
+        )}
         {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
             close animation reveals Home instead of a flash of white phone
             frame. QuizScreen's z-index keeps it on top while open. */}

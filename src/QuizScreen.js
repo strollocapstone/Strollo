@@ -9,45 +9,63 @@ import "./QuizScreen.css";
 // antiAvoidances apply when the card is hard-passed.
 // Six cards cover every preference dimension at least once between them.
 const QUIZ_DECK = [
-  { id: "p1",  image: "https://mycahvauae.com/cdn/shop/articles/aromatic-coffee-cup-rustic-table-refreshing-caffeine-boost-generated-by-artificial-intelligence.webp?v=1737708271&width=2200",
-    caption: "slow latte, short loop, back before noon",
-    vibes: ["cozy", "quiet", "foodie"],
-    preset: { destination: "loop", duration: "30 min", distance: 1.0,
-              avoidances: ["Hilly terrain", "Busy roads"],
-              mapFilters: ["cafes", "ai-highlights", "saved-places"] } },
-  { id: "p2",  image: "https://fastly.picsum.photos/id/190/2048/1365.jpg?hmac=NWS1_X_JJ-Edi-9SZRhNwHyjKt1nECckxrGLS8_idjY",
-    caption: "leafy paths, benches, no time limit",
-    vibes: ["leafy", "quiet", "cozy", "bright"],
-    preset: { destination: "open", duration: "120 min", distance: 3.0,
-              accessibility: ["Wheelchair"],
-              avoidances: ["Big crowds", "Construction"],
-              mapFilters: ["parks", "benches", "ai-highlights", "saved-places"] } },
-  { id: "p3",  image: "https://ca-times.brightspotcdn.com/dims4/default/3effaf1/2147483647/strip/true/crop/4999x2624+1+535/resize/1200x630!/quality/75/?url=https%3A%2F%2Fcalifornia-times-brightspot.s3.amazonaws.com%2Fd7%2Fac%2F36d9ec5b4d559a8fbc7e710a9cab%2F1-exclusive.jpg",
-    caption: "museums, landmarks, postcard stops",
-    vibes: ["artsy", "bookish", "bright", "social"],
-    preset: { destination: "specific", duration: "120 min", distance: 2.5,
-              mapFilters: ["museums", "attractions", "ai-highlights", "saved-places"],
-              antiAvoidances: ["Touristy spots"] } },
-  { id: "p4",  image: "https://media.istockphoto.com/id/1399630042/photo/personal-perspective-shot-of-a-womans-hand-holding-a-bao-bun-with-tofu-at-a-street-market.jpg?s=612x612&w=0&k=20&c=Gf6nwc3z-Sxthx5tlnJqDNeXhSi7J4rghMtcM49UsvQ=",
-    caption: "street food, neon, one more block",
-    vibes: ["foodie", "social", "moody", "retro"],
+  { id: "p1",  image: "https://media.istockphoto.com/id/1399630042/photo/personal-perspective-shot-of-a-womans-hand-holding-a-bao-bun-with-tofu-at-a-street-market.jpg?s=612x612&w=0&k=20&c=Gf6nwc3z-Sxthx5tlnJqDNeXhSi7J4rghMtcM49UsvQ=",
+    caption: "Late night food spots open past midnight",
+    vibes: ["foodie", "moody", "social", "retro"],
     preset: { destination: "specific", duration: "60 min", distance: 1.5,
-              avoidances: ["Busy roads"],
-              mapFilters: ["food", "attractions", "ai-highlights", "saved-places"],
+              mapFilters: ["food", "attractions", "ai-highlights", "saved-places"] } },
+  { id: "p2",  image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200",
+    caption: "Packed bars with live music",
+    vibes: ["social", "moody", "playful"],
+    preset: { destination: "specific", duration: "120 min", distance: 1.5,
+              mapFilters: ["attractions", "ai-highlights", "saved-places"],
               antiAvoidances: ["Bars & nightlife"] } },
+  { id: "p3",  image: "https://mycahvauae.com/cdn/shop/articles/aromatic-coffee-cup-rustic-table-refreshing-caffeine-boost-generated-by-artificial-intelligence.webp?v=1737708271&width=2200",
+    caption: "Cozy coffee shops where you can work with a laptop",
+    vibes: ["cozy", "quiet", "bookish", "foodie"],
+    preset: { destination: "loop", duration: "60 min", distance: 1.0,
+              avoidances: ["Big crowds", "Busy roads"],
+              mapFilters: ["cafes", "ai-highlights", "saved-places"] } },
+  { id: "p4",  image: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1200",
+    caption: "Bookstores and record shops you could browse for hours",
+    vibes: ["bookish", "cozy", "retro", "quiet"],
+    preset: { destination: "open", duration: "60 min", distance: 1.2,
+              avoidances: ["Big crowds"],
+              mapFilters: ["sights", "attractions", "ai-highlights", "saved-places"] } },
   { id: "p5",  image: "https://thumbs.dreamstime.com/b/picnic-blanket-grass-park-picnic-blanket-basket-grass-park-158134356.jpg",
-    caption: "picnics, playgrounds, naptime at noon",
-    vibes: ["playful", "leafy", "bright"],
-    preset: { destination: "loop", duration: "60 min", distance: 0.8,
-              accessibility: ["Stroller"],
-              avoidances: ["Hilly terrain", "Construction"],
-              mapFilters: ["parks", "dog-friendly", "ai-highlights", "saved-places"] } },
-  { id: "p6",  image: "https://malt.org/wp-content/uploads/2024/03/wildflower_hikes_san_francisco_MALT.jpg",
-    caption: "wildflower trails, long views, no crowds",
-    vibes: ["leafy", "moody", "boho", "bright"],
-    preset: { destination: "open", duration: "No time limit", distance: 4.0,
-              avoidances: ["Touristy spots", "Big crowds", "Places I've already explored"],
-              mapFilters: ["parks", "sights", "attractions", "ai-highlights", "saved-places"] } },
+    caption: "Shady parks good for a picnic",
+    vibes: ["leafy", "quiet", "cozy", "bright"],
+    preset: { destination: "loop", duration: "120 min", distance: 1.5,
+              avoidances: ["Busy roads", "Construction"],
+              mapFilters: ["parks", "benches", "ai-highlights", "saved-places"] } },
+  { id: "p6",  image: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=1200",
+    caption: "Popup events and street fairs on weekends",
+    vibes: ["social", "playful", "bright", "boho"],
+    preset: { destination: "open", duration: "120 min", distance: 2.0,
+              mapFilters: ["attractions", "food", "ai-highlights", "saved-places"],
+              antiAvoidances: ["Big crowds"] } },
+  { id: "p7",  image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=1200",
+    caption: "Karaoke bars where you perform in front of everyone",
+    vibes: ["social", "playful", "moody"],
+    preset: { destination: "specific", duration: "120 min", distance: 1.0,
+              mapFilters: ["attractions", "ai-highlights", "saved-places"],
+              antiAvoidances: ["Bars & nightlife"] } },
+  { id: "p8",  image: "https://ca-times.brightspotcdn.com/dims4/default/3effaf1/2147483647/strip/true/crop/4999x2624+1+535/resize/1200x630!/quality/75/?url=https%3A%2F%2Fcalifornia-times-brightspot.s3.amazonaws.com%2Fd7%2Fac%2F36d9ec5b4d559a8fbc7e710a9cab%2F1-exclusive.jpg",
+    caption: "Art museums with rotating local exhibits",
+    vibes: ["artsy", "bookish", "bright", "quiet"],
+    preset: { destination: "specific", duration: "120 min", distance: 2.0,
+              mapFilters: ["museums", "attractions", "ai-highlights", "saved-places"] } },
+  { id: "p9",  image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200",
+    caption: "Fancy sit-down restaurants that need reservations",
+    vibes: ["foodie", "social", "bright"],
+    preset: { destination: "specific", duration: "120 min", distance: 1.5,
+              avoidances: ["Construction"],
+              mapFilters: ["food", "ai-highlights", "saved-places"] } },
+  { id: "p10", image: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200",
+    caption: "Outdoor movie nights where you bring a blanket and snacks",
+    vibes: ["cozy", "social", "moody", "leafy"],
+    preset: { destination: "specific", duration: "120 min", distance: 1.2,
+              mapFilters: ["parks", "attractions", "ai-highlights", "saved-places"] } },
 ];
 
 // ── Preset aggregation ────────────────────────────────────────────────────
@@ -165,10 +183,12 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   const handleLineDown = (e) => {
     const el = lineItemsRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
     lineDragRef.current = {
       active: true,
       startX: e.pageX - el.offsetLeft,
       scrollLeft: el.scrollLeft,
+      pointerId: e.pointerId,
     };
     el.classList.add("quiz-line-items--dragging");
   };
@@ -176,12 +196,12 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
     if (!lineDragRef.current.active) return;
     const el = lineItemsRef.current;
     if (!el) return;
-    e.preventDefault();
     const walk = (e.pageX - el.offsetLeft) - lineDragRef.current.startX;
     el.scrollLeft = lineDragRef.current.scrollLeft - walk;
   };
-  const handleLineUp = () => {
+  const handleLineUp = (e) => {
     if (!lineDragRef.current.active) return;
+    try { e?.currentTarget?.releasePointerCapture?.(lineDragRef.current.pointerId); } catch (_) {}
     lineDragRef.current.active = false;
     lineItemsRef.current?.classList.remove("quiz-line-items--dragging");
   };
@@ -204,7 +224,6 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   useEffect(() => {
     if (!done || completionScheduledRef.current) return;
     completionScheduledRef.current = true;
-    setClosing(true);
     const vibeScores = {};
     for (const h of history) {
       const card = QUIZ_DECK.find(d => d.id === h.polaroidId);
@@ -218,12 +237,14 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
       quizHistory: history,
       completedAt: new Date().toISOString(),
     };
-    // Linger on the "all set" screen long enough for the user to read the
-    // headline + summary chips before the home page takes over.
-    const t = setTimeout(() => {
+    // Hold the "All set!" screen long enough to read, THEN fade out, THEN hand off.
+    const READ_MS = 3200;
+    const FADE_MS = 600;
+    const tFade = setTimeout(() => setClosing(true), READ_MS);
+    const tDone = setTimeout(() => {
       onCompleteRef.current?.(payload);
-    }, 2800);
-    return () => clearTimeout(t);
+    }, READ_MS + FADE_MS);
+    return () => { clearTimeout(tFade); clearTimeout(tDone); };
   }, [done, history]);
 
   const commitSwipe = useCallback((direction, source = "drag") => {
@@ -333,7 +354,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         <div className={`quiz-done-inner${closing ? " quiz-done-inner--fading" : ""}`}>
           <h1>All set!</h1>
           <p>We've got a feel for your vibe.</p>
-          <p className="quiz-done-hint">You can always tweak these later in the settings button.</p>
+          <p className="quiz-done-hint">You can tweak these later in your settings</p>
         </div>
       </div>
     );
@@ -398,10 +419,11 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         <div
           className="quiz-line-items"
           ref={lineItemsRef}
-          onMouseDown={handleLineDown}
-          onMouseMove={handleLineMove}
-          onMouseUp={handleLineUp}
-          onMouseLeave={handleLineUp}
+          onPointerDown={handleLineDown}
+          onPointerMove={handleLineMove}
+          onPointerUp={handleLineUp}
+          onPointerCancel={handleLineUp}
+          onPointerLeave={handleLineUp}
         >
           {pinnedItems.map((it, i) => (
             <MiniPolaroid key={`${it.id}-${i}`} item={it} angle={it.angle} delay={it.delay} />
@@ -454,32 +476,20 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
                   <span className="quiz-card-index">{label}/{total}</span> {card.caption}
                 </div>
                 {isActive && scribbleDir === "down" && (
-                  <svg className={`quiz-scribble quiz-scribble--${scribbleDir}`} viewBox="0 0 220 320" preserveAspectRatio="none">
-                    <path
-                      className="quiz-scribble-line quiz-scribble-line--1"
-                      pathLength="1"
-                      d="M 22 28 Q 72 8, 118 42 T 200 30 L 210 72 Q 150 96, 88 72 T 18 104 Q 82 126, 160 108 L 212 148 Q 152 176, 74 152 T 20 192 Q 92 216, 178 196 L 210 236 Q 136 268, 64 246 T 16 292 Q 86 312, 172 290"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      className="quiz-scribble-line quiz-scribble-line--2"
-                      pathLength="1"
-                      d="M 206 22 Q 138 56, 70 24 T 14 58 Q 70 88, 150 66 L 210 100 Q 152 138, 82 112 T 22 148 L 18 182 Q 104 168, 186 184 T 208 218 Q 136 246, 60 230 L 20 268 Q 94 282, 180 268"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      className="quiz-scribble-line quiz-scribble-line--3"
-                      pathLength="1"
-                      d="M 40 60 Q 110 34, 180 80 Q 120 110, 54 92 L 90 140 Q 160 128, 200 166 Q 130 196, 60 178 L 100 220 Q 170 208, 196 244 Q 130 276, 56 258"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <div className="quiz-tear" aria-hidden="true">
+                    <div className="quiz-tear-half quiz-tear-half--top">
+                      <div className="quiz-tear-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
+                      <div className="quiz-tear-caption">
+                        <span className="quiz-card-index">{label}/{total}</span> {card.caption}
+                      </div>
+                    </div>
+                    <div className="quiz-tear-half quiz-tear-half--bottom">
+                      <div className="quiz-tear-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
+                      <div className="quiz-tear-caption">
+                        <span className="quiz-card-index">{label}/{total}</span> {card.caption}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             );

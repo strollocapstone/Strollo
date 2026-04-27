@@ -123,6 +123,7 @@
   flex-shrink: 0;
 }
 .pwc-card-label {
+  font-family: "Unbounded", sans-serif;
   font-size: 14px;
   font-weight: 700;
   color: #34233E;
