@@ -20,19 +20,32 @@ const NAV_CATEGORY_ICONS = {
   "Park": "park", "Garden": "yard",
 };
 
+// Shared "remove" pip — same X icon and button treatment as the HomeScreen
+// pin pill so adding/removing stops looks identical across screens.
+const REMOVE_BTN_HTML = `<div class="sugg-pin-extra">
+  <button class="sugg-pin-add-btn sugg-pin-add-btn--remove" data-action="remove" aria-label="Remove from itinerary">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" stroke-width="3.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+  </button>
+</div>`;
+
 // Added-pill stop pin — identical look to the HomeScreen "added" pill so navigation
 // and home share one visual vocabulary (purple icon circle + name + sequence badge).
-const stopLabelIcon = (name, desc, sequence) => {
+// When `expanded` is true and `removable` is true, the pill reveals an X button
+// the user can tap to drop that stop from the route.
+const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  const classes = ["sugg-pin", "sugg-pin--added"];
+  if (expanded) classes.push("sugg-pin--open");
   return L.divIcon({
     className: "",
-    html: `<div class="sugg-pin sugg-pin--added">
+    html: `<div class="${classes.join(' ')}">
       <div class="sugg-pin-dot">
         ${sequence
           ? `<span class="sugg-pin-dot-number">${sequence}</span>`
           : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
       </div>
       <span class="sugg-pin-name">${name}</span>
+      ${expanded && removable ? REMOVE_BTN_HTML : ""}
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -42,8 +55,24 @@ const stopLabelIcon = (name, desc, sequence) => {
 // Faint companion pin for non-current confirmed stops (visited + future
 // stops on the planned route). Same shape as stopLabelIcon but smaller,
 // label-less, and dimmed — they're context, not the active destination.
-const stopLabelIconMuted = (name, desc) => {
+// When tapped/expanded, becomes a full pill with the same X remove control.
+const stopLabelIconMuted = (name, desc, expanded = false, removable = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  if (expanded) {
+    const classes = ["sugg-pin", "sugg-pin--added", "sugg-pin--open"];
+    return L.divIcon({
+      className: "",
+      html: `<div class="${classes.join(' ')}">
+        <div class="sugg-pin-dot">
+          <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+        </div>
+        <span class="sugg-pin-name">${name}</span>
+        ${removable ? REMOVE_BTN_HTML : ""}
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
   return L.divIcon({
     className: "",
     html: `<div class="sugg-pin sugg-pin--dot sugg-pin--muted" aria-label="${name}">
@@ -169,6 +198,25 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const [routeInfo, setRouteInfo]         = useState(null);
   const [routeSteps, setRouteSteps]       = useState([]);
   const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
+  // Which stop pin is currently expanded (showing its X remove button).
+  // Only one can be open at a time; tapping another pin or the same pin
+  // again closes it.
+  const [expandedStopId, setExpandedStopId] = useState(null);
+
+  // Drop a stop from the route + addedIds. Mirrors the WCW skip logic so
+  // map removal and "skip next stop" stay in sync.
+  const removeStop = useCallback((id) => {
+    if (!onJourneyChange) return;
+    onJourneyChange(journeyItems.filter((j) => j.id !== id));
+    if (setAddedIds) {
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+    setExpandedStopId(null);
+  }, [journeyItems, onJourneyChange, setAddedIds]);
 
   // Atmospheric blob markers pinned around the initial center (once).
   const blobs = useMemo(() => {
@@ -436,26 +484,55 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
 
           {/* Muted pins for every other confirmed stop (visited + future).
               Faded and label-less — they hint at the broader plan without
-              competing with the next target. */}
+              competing with the next target. Tapping one expands it into a
+              named pill with an X to drop the stop from the route. */}
           {confirmedStops
             .filter((s) => s.id !== nextTarget?.id)
-            .map((s) => (
-              <Marker
-                key={`stop-muted-${s.id}`}
-                position={[s.lat, s.lng]}
-                icon={stopLabelIconMuted(s.name, s.desc)}
-              />
-            ))}
+            .map((s) => {
+              const expanded = expandedStopId === s.id;
+              const isVisited = visitedIds?.has(s.id);
+              return (
+                <Marker
+                  key={`stop-muted-${s.id}`}
+                  position={[s.lat, s.lng]}
+                  icon={stopLabelIconMuted(s.name, s.desc, expanded, !isVisited)}
+                  eventHandlers={{
+                    click: (e) => {
+                      const target = e.originalEvent?.target;
+                      if (target?.closest?.('[data-action="remove"]')) {
+                        if (!isVisited) removeStop(s.id);
+                        return;
+                      }
+                      setExpandedStopId(expanded ? null : s.id);
+                    },
+                  }}
+                />
+              );
+            })}
 
           {/* Salient pin for the active destination = first non-visited
-              confirmed Timeline item. */}
-          {nextTarget && (
-            <Marker
-              key={`stop-${nextTarget.id}`}
-              position={[nextTarget.lat, nextTarget.lng]}
-              icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1)}
-            />
-          )}
+              confirmed Timeline item. Tap to reveal X; tap X to drop it. */}
+          {nextTarget && (() => {
+            const expanded = expandedStopId === nextTarget.id;
+            const isVisited = visitedIds?.has(nextTarget.id);
+            return (
+              <Marker
+                key={`stop-${nextTarget.id}`}
+                position={[nextTarget.lat, nextTarget.lng]}
+                icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1, expanded, !isVisited)}
+                eventHandlers={{
+                  click: (e) => {
+                    const target = e.originalEvent?.target;
+                    if (target?.closest?.('[data-action="remove"]')) {
+                      if (!isVisited) removeStop(nextTarget.id);
+                      return;
+                    }
+                    setExpandedStopId(expanded ? null : nextTarget.id);
+                  },
+                }}
+              />
+            );
+          })()}
 
           {/* User position */}
           <Marker position={userLocation} icon={youIcon} />
