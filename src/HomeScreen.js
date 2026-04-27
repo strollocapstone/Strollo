@@ -1143,11 +1143,7 @@ export default function HomeScreen({
           ref={buttonStackRef}
         >
           {!chatSplitActive && (
-            <button
-              className="fab-circle start-walk-pill"
-              onClick={handleStartWalk}
-              disabled={addedIds.size === 0}
-            >
+            <button className="fab-circle start-walk-pill" onClick={handleStartWalk}>
               {addedIds.size > 0 ? `Start exploring · ${addedIds.size}` : 'Start exploring'}
             </button>
           )}
