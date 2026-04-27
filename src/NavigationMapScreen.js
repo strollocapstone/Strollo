@@ -7,7 +7,7 @@ import WalkCompanionWidget from "./WalkCompanionWidget";
 import VoiceFullScreen from "./VoiceFullScreen";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
-import { youIcon, WatchLocation, haversineKm } from "./mapUtils";
+import { youIcon, WatchLocation, haversineKm, reverseGeocode } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
 // Category → Material Symbol glyph (mirrors the one used on HomeScreen for added pins).
@@ -28,17 +28,29 @@ const REMOVE_BTN_HTML = `<div class="sugg-pin-extra">
   </button>
 </div>`;
 
+// Final-stop flag pin — same shape as the timeline's FinalStopPin. Positions
+// itself above the labeled pill via .sugg-pin-final-pin (absolute, bottom:100%).
+const FINAL_PIN_HTML = `<span class="sugg-pin-final-pin" aria-hidden="true">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="#8851D4" stroke="none">
+    <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z"/>
+    <circle cx="12" cy="10" r="2.6" fill="white"/>
+  </svg>
+</span>`;
+
 // Added-pill stop pin — identical look to the HomeScreen "added" pill so navigation
 // and home share one visual vocabulary (purple icon circle + name + sequence badge).
 // When `expanded` is true and `removable` is true, the pill reveals an X button
-// the user can tap to drop that stop from the route.
-const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false) => {
+// the user can tap to drop that stop from the route. When `isFinal` is true, a
+// purple flag pin floats above the pill (matches TimelineScreen's FinalStopPin).
+const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false, isFinal = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
   const classes = ["sugg-pin", "sugg-pin--added"];
   if (expanded) classes.push("sugg-pin--open");
+  if (isFinal) classes.push("sugg-pin--final");
   return L.divIcon({
     className: "",
     html: `<div class="${classes.join(' ')}">
+      ${isFinal ? FINAL_PIN_HTML : ""}
       <div class="sugg-pin-dot">
         ${sequence
           ? `<span class="sugg-pin-dot-number">${sequence}</span>`
@@ -46,6 +58,45 @@ const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false
       </div>
       <span class="sugg-pin-name">${name}</span>
       ${expanded && removable ? REMOVE_BTN_HTML : ""}
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
+
+// Compact label pin for nearby suggestions on the map (places that aren't
+// in the user's plan but might catch their eye mid-walk). Mirrors the
+// HomeScreen dot-mode look so the navigation map reads the same as Home.
+// When `expanded` is true it grows into the labeled pill with a "+" add
+// button so the user can pull the place into their walk on the fly.
+const nearbyPinIcon = (name, desc, expanded = false) => {
+  const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  if (expanded) {
+    const classes = ["sugg-pin", "sugg-pin--open"];
+    return L.divIcon({
+      className: "",
+      html: `<div class="${classes.join(' ')}">
+        <div class="sugg-pin-dot">
+          <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+        </div>
+        <span class="sugg-pin-name">${name}</span>
+        <div class="sugg-pin-extra">
+          <button class="sugg-pin-add-btn" data-action="add" aria-label="Add to itinerary">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
+  return L.divIcon({
+    className: "",
+    html: `<div class="sugg-pin sugg-pin--dot" aria-label="${name}">
+      <div class="sugg-pin-dot">
+        <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+      </div>
+      <span class="sugg-pin-label">${name}</span>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -150,7 +201,7 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, onOpenChat, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, nearbyPlaces = [], showVoice = true }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -165,6 +216,15 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     () => confirmedStops.find((s) => !visitedIds?.has(s.id)) || null,
     [confirmedStops, visitedIds]
   );
+  // Nearby places that aren't already on the user's plan — shown on the map
+  // as small label pins so the navigation view has the same surrounding
+  // context the homepage map does (not just the route + stops in isolation).
+  const nearbyOnMap = React.useMemo(() => {
+    if (!Array.isArray(nearbyPlaces) || nearbyPlaces.length === 0) return [];
+    return nearbyPlaces.filter(
+      (p) => p && p.lat && p.lng && !addedIds?.has(p.id)
+    );
+  }, [nearbyPlaces, addedIds]);
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -203,6 +263,64 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // again closes it.
   const [expandedStopId, setExpandedStopId] = useState(null);
 
+  // Reverse-geocoded place name for the user's current location, used by
+  // the WCW empty-state header ("You are at <currentLocationName>"). Only
+  // fetched when there's no planned next stop and the user has been still
+  // for ~1.5s; cached per ~110m grid so GPS jitter doesn't re-ping the
+  // (free, unauthenticated) Nominatim endpoint above its 1 req/sec limit.
+  const [currentLocationName, setCurrentLocationName] = useState(null);
+  const fetchedNameKeyRef = React.useRef(null);
+  const isJourneyEmpty = !nextTarget;
+  useEffect(() => {
+    if (!isJourneyEmpty) {
+      setCurrentLocationName(null);
+      fetchedNameKeyRef.current = null;
+      return;
+    }
+    if (!userLocation) return;
+    const t = setTimeout(() => {
+      const [lat, lng] = userLocation;
+      const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+      if (fetchedNameKeyRef.current === key) return;
+      fetchedNameKeyRef.current = key;
+      reverseGeocode(lat, lng).then((name) => {
+        if (name) setCurrentLocationName(name);
+      });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [isJourneyEmpty, userLocation]);
+
+  // Measured height of the WCW so the locate / journey FABs can hover just
+  // above it instead of at a hard-coded offset (the widget grows when the
+  // user is listening / when narration appears, so a fixed offset overlaps).
+  const [wcwHeight, setWcwHeight] = useState(0);
+  const wcwResizeObserverRef = React.useRef(null);
+  const wcwRef = useCallback((node) => {
+    if (wcwResizeObserverRef.current) {
+      wcwResizeObserverRef.current.disconnect();
+      wcwResizeObserverRef.current = null;
+    }
+    if (node && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => {
+        const e = entries[0];
+        if (!e) return;
+        // Defer the state update one frame so a sync setState inside the
+        // observer callback can't trigger React's "ResizeObserver loop
+        // completed with undelivered notifications" surfaced-as-error in
+        // Chrome/Safari devtools. getBoundingClientRect includes padding +
+        // border (the visible box) — contentRect would underestimate.
+        const target = e.target;
+        requestAnimationFrame(() => {
+          setWcwHeight(target.getBoundingClientRect().height);
+        });
+      });
+      ro.observe(node);
+      wcwResizeObserverRef.current = ro;
+    } else if (!node) {
+      setWcwHeight(0);
+    }
+  }, []);
+
   // Drop a stop from the route + addedIds. Mirrors the WCW skip logic so
   // map removal and "skip next stop" stay in sync.
   const removeStop = useCallback((id) => {
@@ -212,6 +330,26 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       setAddedIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
+        return next;
+      });
+    }
+    setExpandedStopId(null);
+  }, [journeyItems, onJourneyChange, setAddedIds]);
+
+  // Add a nearby suggestion to the active walk. The user taps a nearby
+  // pin → it expands into a pill → tapping "+" runs this. We append to
+  // journeyItems and addedIds so the new stop joins the route + timeline.
+  const addNearbyStop = useCallback((place) => {
+    if (!onJourneyChange || !place) return;
+    if (journeyItems.some((j) => j.id === place.id)) {
+      setExpandedStopId(null);
+      return;
+    }
+    onJourneyChange([...journeyItems, place]);
+    if (setAddedIds) {
+      setAddedIds((prev) => {
+        const next = new Set(prev);
+        next.add(place.id);
         return next;
       });
     }
@@ -247,10 +385,10 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     if (!nextTarget || !userLocation) return null;
     return haversineKm(userLocation, [nextTarget.lat, nextTarget.lng]) * 1000;
   }, [nextTarget, userLocation]);
-  // Show the "I am here" button once the user is within 500 m of the next
-  // confirmed stop — gives them latitude to confirm arrival from across a
-  // block or two without needing pixel-perfect positioning.
-  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 500;
+  // The WCW's skip pill swaps into "I am here" once the user is within
+  // ~300 ft (≈91.5 m) of the next confirmed stop. The map no longer shows
+  // a separate "I am here" bar — the affordance lives inside the widget.
+  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 91.5;
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent
@@ -319,6 +457,15 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         out.set(nextTarget.id, Date.now());
         return out;
       });
+    }
+    // If this was the LAST non-visited stop, the journey is complete →
+    // hand off to the Reward screen instead of leaving the user staring at
+    // an empty map ("No current destination").
+    const remaining = confirmedStops.filter(
+      (s) => s.id !== nextTarget.id && !visitedIds?.has(s.id)
+    );
+    if (remaining.length === 0 && onEndWalk) {
+      onEndWalk();
     }
   };
 
@@ -473,66 +620,69 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           )}
 
           {/* Walking route along streets (from OSRM) — salient leg from
-              user to next target. */}
-          {walkingRoute && (
+              user to next target. Only renders while there's a destination;
+              when the journey is empty, no purple line clutters the map. */}
+          {nextTarget && walkingRoute && (
             <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
           )}
-          {/* Fallback dashed line while route loads */}
-          {!walkingRoute && stopPositions.length > 0 && (
+          {/* Fallback dashed line while route loads (also gated on nextTarget). */}
+          {nextTarget && !walkingRoute && stopPositions.length > 0 && (
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
-          {/* Muted pins for every other confirmed stop (visited + future).
-              Faded and label-less — they hint at the broader plan without
-              competing with the next target. Tapping one expands it into a
-              named pill with an X to drop the stop from the route. */}
-          {confirmedStops
-            .filter((s) => s.id !== nextTarget?.id)
-            .map((s) => {
-              const expanded = expandedStopId === s.id;
-              const isVisited = visitedIds?.has(s.id);
-              return (
-                <Marker
-                  key={`stop-muted-${s.id}`}
-                  position={[s.lat, s.lng]}
-                  icon={stopLabelIconMuted(s.name, s.desc, expanded, !isVisited)}
-                  eventHandlers={{
-                    click: (e) => {
-                      const target = e.originalEvent?.target;
-                      if (target?.closest?.('[data-action="remove"]')) {
-                        if (!isVisited) removeStop(s.id);
-                        return;
-                      }
-                      setExpandedStopId(expanded ? null : s.id);
-                    },
-                  }}
-                />
-              );
-            })}
-
-          {/* Salient pin for the active destination = first non-visited
-              confirmed Timeline item. Tap to reveal X; tap X to drop it. */}
-          {nextTarget && (() => {
-            const expanded = expandedStopId === nextTarget.id;
-            const isVisited = visitedIds?.has(nextTarget.id);
+          {/* Nearby places that aren't on the plan — same look as HomeScreen
+              dot pins so the navigation map carries the same surrounding
+              context. Tap to expand into a pill; tap "+" to pull the place
+              into the active walk. Drawn first so confirmed/active stops
+              stack above. */}
+          {nearbyOnMap.map((p) => {
+            const expanded = expandedStopId === p.id;
             return (
               <Marker
-                key={`stop-${nextTarget.id}`}
-                position={[nextTarget.lat, nextTarget.lng]}
-                icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1, expanded, !isVisited)}
+                key={`nearby-${p.id}`}
+                position={[p.lat, p.lng]}
+                icon={nearbyPinIcon(p.name, p.desc, expanded)}
                 eventHandlers={{
                   click: (e) => {
                     const target = e.originalEvent?.target;
-                    if (target?.closest?.('[data-action="remove"]')) {
-                      if (!isVisited) removeStop(nextTarget.id);
+                    if (target?.closest?.('[data-action="add"]')) {
+                      addNearbyStop(p);
                       return;
                     }
-                    setExpandedStopId(expanded ? null : nextTarget.id);
+                    setExpandedStopId(expanded ? null : p.id);
                   },
                 }}
               />
             );
-          })()}
+          })}
+
+          {/* All confirmed stops render as labeled location pills with their
+              journey-order sequence number. The final stop in the journey
+              gets a purple flag pin floating above it (mirrors TimelineScreen's
+              FinalStopPin). Tap any pill to reveal an X for removal. */}
+          {confirmedStops.map((s, idx) => {
+            const expanded = expandedStopId === s.id;
+            const isVisited = visitedIds?.has(s.id);
+            const isFinal = idx === confirmedStops.length - 1;
+            const sequence = idx + 1;
+            return (
+              <Marker
+                key={`stop-${s.id}`}
+                position={[s.lat, s.lng]}
+                icon={stopLabelIcon(s.name, s.desc, sequence, expanded, !isVisited, isFinal)}
+                eventHandlers={{
+                  click: (e) => {
+                    const target = e.originalEvent?.target;
+                    if (target?.closest?.('[data-action="remove"]')) {
+                      if (!isVisited) removeStop(s.id);
+                      return;
+                    }
+                    setExpandedStopId(expanded ? null : s.id);
+                  },
+                }}
+              />
+            );
+          })}
 
           {/* User position */}
           <Marker position={userLocation} icon={youIcon} />
@@ -550,13 +700,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
 
       {/* Profile FAB — top-right of the map. Doubles as a dev cycler that
           steps through AI presentation modes (none → narration → suggestion
-          → narration+suggestion). */}
+          → narration+suggestion → at-target "I am here" preview). */}
       <button
         type="button"
         className="fab-circle top-right-btn"
         aria-label={`Profile (AI test mode ${aiTestMode})`}
         onClick={() => {
-          setAiTestMode((m) => (m + 1) % 4);
+          setAiTestMode((m) => (m + 1) % 5);
           setAiSampleIdx((i) => i + 1);
         }}
       >
@@ -582,8 +732,18 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
            (showVoice=false), so the locate FAB doesn't sit on top of
            the Timeline overlay. ── */}
       {showVoice && (
-        <div className="bottom-right-stack bottom-right-stack--nav">
-          <button className="fab-circle bottom-right-btn bottom-right-btn--journey" onClick={onOpenTimeline} aria-label="Check journey">
+        <div
+          className="bottom-right-stack bottom-right-stack--nav"
+          style={wcwHeight > 0
+            ? { bottom: `${16 + wcwHeight + 16}px` }
+            : undefined
+          }
+        >
+          <button
+            className={`fab-circle bottom-right-btn bottom-right-btn--journey${confirmedStops.length === 0 ? " bottom-right-btn--disabled" : ""}`}
+            onClick={onOpenTimeline}
+            aria-label="Check journey"
+          >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
               <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
               <path d="M8 3 L18 6 L8 10 Z"/>
@@ -603,27 +763,9 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         </div>
       )}
 
-      {/* ── "I am here" — appears above the wcw when the user is within
-           150 ft of the next confirmed Timeline target. Tapping it marks
-           the stop as visited; routing automatically advances to the next
-           non-visited stop. ── */}
-      {showVoice && voiceMode !== "full" && nextTarget && isAtTarget && (
-        <div className="nav-arrived-bar">
-          <button
-            type="button"
-            className="nav-arrived-btn"
-            onClick={handleArrived}
-            aria-label={`Confirm you have arrived at ${nextTarget.name}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="4 12 10 18 20 6" />
-            </svg>
-            <span>I am here</span>
-          </button>
-        </div>
-      )}
-
-      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
+      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context).
+           The widget owns the "I am here" affordance now: when the user is
+           within 300 ft of the next stop, its skip pill swaps to "I am here". ── */}
       {showVoice && voiceMode !== "full" && (() => {
         // The "next stop" being routed to == first non-visited confirmed
         // Timeline item. When nothing is confirmed/all visited, the widget
@@ -687,14 +829,19 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         }
         return (
           <WalkCompanionWidget
+            ref={wcwRef}
             destination={nextWaypoint}
+            currentLocationName={currentLocationName}
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
             eta={isEmpty ? "—" : eta}
-            canSkip={confirmedStops.length > 1}
+            atTarget={(isAtTarget || aiTestMode === 4) && !!nextStop}
             progress={progress}
             narration={aiNarration}
             suggestion={aiSuggestion}
+            transcript={voice.speech.transcript}
+            onSpeakStart={voice.onListenStart}
+            onSpeakEnd={voice.onListenEnd}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;
               // Drop the current (next) confirmed stop from both the journey
@@ -709,6 +856,8 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 });
               }
             }}
+            onArrived={handleArrived}
+            onChat={onOpenChat}
             onEnd={onEndWalk || onGoBack}
             onExpand={() => setVoiceMode("full")}
           />

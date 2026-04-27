@@ -450,6 +450,11 @@
   border: 1.5px dashed rgba(136, 81, 212, 0.55);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
+/* Indent suggestion rows so they read as a child of the confirmed stop above
+   — same visual idea as the reward screen's suggestion list. */
+.tl-row--suggestion .tl-content-cell {
+  padding-left: 18px;
+}
 
 .tl-card--suggestion:hover {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);

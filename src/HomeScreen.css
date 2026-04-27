@@ -80,6 +80,23 @@
   border: 1.5px solid transparent;
 }
 
+/* Final-stop flag — sits inline on the LEFT of the number badge inside the
+   pill when this is the user's last stop on the navigation map. Mirrors
+   TimelineScreen's FinalStopPin glyph so the two screens share one
+   "this is your end" cue. */
+.sugg-pin-final-pin {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  pointer-events: none;
+  line-height: 0;
+}
+.sugg-pin-final-pin svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 /* Triangular pointer at bottom of pill */
 .sugg-pin::after {
   content: '';
@@ -1166,6 +1183,25 @@
   white-space: nowrap;
 }
 
+/* When HomeScreen is rendered as a chat-only portal layer above another
+   screen (used by NavigationMapScreen so the chat overlay can appear
+   without leaving the walk), hide every direct child except the chat
+   overlay and its companion plan-walk CTA strip. */
+.home-chat-only-portal {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+.home-chat-only-portal > * {
+  display: none !important;
+}
+.home-chat-only-portal > .chat-overlay,
+.home-chat-only-portal > .chat-cta-strip {
+  display: flex !important;
+  pointer-events: auto;
+}
+
 /* ── Chat overlay — 5-screen pre-walk planning flow ── */
 :root {
   --chat-bg: #FBF8F3;
@@ -1178,10 +1214,14 @@
   --chat-yellow: #FFD501;
 }
 
-/* Overlay shell */
+/* Overlay shell — same translucent treatment as the homescreen bottom-search
+   bar (white wash + heavy backdrop blur) so the underlying screen reads
+   through softly instead of being hidden behind a solid panel. */
 .chat-overlay {
   position: absolute; inset: 0; z-index: 50;
-  background: var(--chat-bg);
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
   display: flex; flex-direction: column;
   animation: chat-slide-up 0.4s cubic-bezier(0.22,1,0.36,1);
 }
@@ -1303,13 +1343,22 @@
   color: var(--chat-ink-mute); margin-bottom: 10px;
 }
 .chat-seeds { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Frosted-glass pills — same translucent treatment as the location pills
+   on the map and the bottom-search bar (rgba white + backdrop blur). */
 .chat-seed {
   padding: 10px 14px; border-radius: 18px;
-  background: #fff; border: 1px solid rgba(52,35,62,0.1);
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border: 1px solid rgba(52, 35, 62, 0.08);
+  box-shadow: 0 1px 4px rgba(52, 35, 62, 0.06);
   font-family: var(--font-ui); font-weight: 600; font-size: 13px;
   color: var(--chat-ink);
   display: flex; align-items: center; gap: 8px; cursor: pointer;
+  transition: background 0.15s, transform 0.12s;
 }
+.chat-seed:hover { background: rgba(255, 255, 255, 0.78); }
+.chat-seed:active { transform: scale(0.98); }
 .chat-seed-icon { font-size: 14px; }
 
 .chat-empty-divider {
@@ -1778,6 +1827,25 @@
 }
 .chat-start-meta { font-weight: 500; opacity: 0.7; font-size: 13px; }
 
+/* Drag-down handle at the top edge of the chat overlay — replaces the
+   X close button. Tap area extends across the full width so the user
+   can grab anywhere along the top. */
+.chat-grabber {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 6px;
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.chat-grabber:active { cursor: grabbing; }
+.chat-grabber-bar {
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(52, 35, 62, 0.18);
+}
+
 /* Bottom input row */
 .chat-input-row {
   display: flex; align-items: center; gap: 10px;
@@ -1785,6 +1853,17 @@
   border-top: 1px solid rgba(52,35,62,0.06);
   background: var(--chat-bg);
   position: relative; z-index: 4;
+}
+/* Match the homescreen's bottom search bar: frosted-glass pill with the
+   same icon, font, and mic-btn treatment. */
+.chat-input-row--home-style {
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border-top: none;
+  border-radius: var(--radius-pill);
+  margin: 0 16px 16px;
+  padding: 12px 14px;
 }
 .chat-input-field {
   flex: 1; height: 42px; border-radius: 21px;

@@ -134,6 +134,15 @@
   letter-spacing: 0.01em;
   color: rgba(247, 243, 245, 0.55);
 }
+/* Empty state: "YOU ARE AT" reads as a small all-caps caption. The
+   adjacent location name keeps its original treatment via .wcw-destination. */
+.wcw-heading-label--idle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(247, 243, 245, 0.65);
+}
 .wcw-destination {
   flex: 1;
   min-width: 0;
@@ -185,6 +194,18 @@
   background: rgba(0, 0, 0, 0.45);
   color: #F7F3F5;
 }
+/* "I am here" mode — same shell, dot icon instead of skip arrows. The dot
+   matches the timeline's added-stop rail node so it reads as "this is your
+   confirmed stop". */
+.wcw-skip-btn--arrived { color: #F7F3F5; }
+.wcw-skip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8851D4;
+  box-shadow: 0 0 0 2px rgba(136, 81, 212, 0.25);
+  flex-shrink: 0;
+}
 
 /* ── Dominant TURN line ──────────────────────────────────────────────── */
 .wcw-turn {
@@ -213,6 +234,37 @@
   font-weight: 600;
   line-height: 1.4;
   color: #F7F3F5;
+}
+/* Empty/idle state — Strollo is "looking around" while no destination is
+   set and there's nothing to narrate. The text gently breathes in opacity
+   and three staggered dots bounce next to it as a soft activity cue. */
+.wcw-narration--idle {
+  animation: wcw-idle-breathe 2.4s ease-in-out infinite;
+}
+.wcw-idle-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.wcw-idle-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: wcw-idle-pulse 1.2s ease-in-out infinite;
+}
+.wcw-idle-dots span:nth-child(2) { animation-delay: 0.18s; }
+.wcw-idle-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes wcw-idle-pulse {
+  0%, 100% { opacity: 0.30; transform: translateY(0) scale(1); }
+  50%      { opacity: 1;    transform: translateY(-2px) scale(1.15); }
+}
+@keyframes wcw-idle-breathe {
+  0%, 100% { opacity: 0.78; }
+  50%      { opacity: 1; }
 }
 
 /* AI detour suggestion: dotted-bordered pill with a yellow lightbulb. */
@@ -308,24 +360,31 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 0.2s ease;
 }
+/* Disabled state — no destination has been selected yet, so the flag
+   reads as inactive and the rest of the strip dims with it. */
+.wcw-progress--disabled .wcw-progress-flag { opacity: 0.35; }
+.wcw-progress--disabled .wcw-progress-line  { opacity: 0.45; }
+.wcw-progress--disabled .wcw-progress-boots { opacity: 0.55; }
 
 /* ── Bottom buttons section ──────────────────────────────────────────── */
 .wcw-bottom {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: 18px;
 }
 .wcw-bottom-left {
   display: flex;
   gap: 8px;
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
 }
 .wcw-bottom-right {
   display: flex;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 /* Rest / End text+icon pills */
@@ -357,14 +416,14 @@
   background: rgba(255, 213, 1, 0.26);
 }
 
-/* Mute and Speak — square icon buttons. Match the pill height (36px) so
-   the row reads as one consistent control bar. */
+/* Mute and Speak — square icon buttons. Match the pill height so the row
+   reads as one consistent control bar. */
 .wcw-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(0, 0, 0, 0.32);
   color: rgba(247, 243, 245, 0.85);
   cursor: pointer;
@@ -386,17 +445,33 @@
   background: rgba(255, 213, 1, 0.18);
 }
 .wcw-icon-btn--active:hover {
+  color: #FFD501;
   background: rgba(255, 213, 1, 0.26);
 }
 
-/* Speak: pulses while held; locked state shows a steady accent ring. */
+/* Speak: pulses while held; locked state shows a steady accent ring. The
+   button stretches to fill the right slot of the bottom row, overriding the
+   square footprint of the base .wcw-icon-btn. */
 .wcw-speak {
   position: relative;
+  width: 100%;
+  flex: 1;
+  gap: 16px;
+}
+.wcw-speak-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 .wcw-speak--active {
   color: #FFD501;
-  background: rgba(255, 213, 1, 0.24);
-  transform: scale(1.04);
+  background: rgba(255, 213, 1, 0.18);
+}
+.wcw-speak--active:hover {
+  color: #FFD501;
+  background: rgba(255, 213, 1, 0.26);
 }
 .wcw-speak--locked {
   box-shadow: 0 0 0 2px rgba(255, 213, 1, 0.55);
