@@ -198,6 +198,12 @@ export default function WalkCompanionWidget({
               <SoundBars active />
             </span>
           </>
+        ) : paused ? (
+          <span className="wcw-paused-msg">
+            {"You're resting at "}
+            <span className="wcw-paused-name">{destination || "your stop"}</span>
+            {"."}
+          </span>
         ) : isEmpty ? (
           <span className="wcw-destination wcw-destination--empty">No current destination</span>
         ) : (
@@ -224,7 +230,7 @@ export default function WalkCompanionWidget({
 
       {listening ? (
         <h2 className="wcw-turn">{`“${transcript || "…"}”`}</h2>
-      ) : suggestion ? (
+      ) : paused ? null : suggestion ? (
         <div className="wcw-suggestion" role="status">
           <span className="wcw-suggestion-icon" aria-hidden="true">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -245,11 +251,11 @@ export default function WalkCompanionWidget({
         <div className="wcw-stats">
           <div className="wcw-stat">
             <span className="wcw-stat-label">DIST</span>
-            <span className="wcw-stat-value">{distance}</span>
+            <span className="wcw-stat-value">{paused ? "—" : distance}</span>
           </div>
           <div className="wcw-stat">
             <span className="wcw-stat-label">ETA</span>
-            <span className="wcw-stat-value">{eta}</span>
+            <span className="wcw-stat-value">{paused ? "—" : eta}</span>
           </div>
         </div>
       )}

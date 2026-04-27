@@ -150,6 +150,21 @@
   font-weight: 500;
   font-style: italic;
 }
+.wcw-paused-msg {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.35;
+  color: rgba(247, 243, 245, 0.65);
+  white-space: normal;
+}
+.wcw-paused-name {
+  color: #FFD501;
+  font-weight: 700;
+  font-style: italic;
+}
 .wcw-skip-btn {
   flex-shrink: 0;
   display: inline-flex;
