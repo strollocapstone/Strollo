@@ -338,9 +338,13 @@
   -webkit-backdrop-filter: none !important;
   box-shadow: 0 2px 10px rgba(255,213,1,0.35) !important;
 }
-.start-walk-pill:hover {
+.start-walk-pill:hover:not(:disabled) {
   background: var(--color-primary) !important;
   filter: brightness(1.05);
+}
+.start-walk-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* Full-width bar floating above the bottom sheet — JS sets bottom via ResizeObserver */
