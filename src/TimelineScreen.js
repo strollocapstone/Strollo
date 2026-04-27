@@ -260,15 +260,15 @@ function CardDetail({ item, onCollapse, onAdd, onDismiss, onDislike }) {
       {item.type === "suggestion" && (
         <div className="tl-detail-actions tl-detail-actions--suggestion">
           <button
-            className="tl-card-action tl-card-action--add tl-detail-action"
-            onClick={(e) => { e.stopPropagation(); onAdd(); }}
-            aria-label={`Add ${item.name} to your plan`}
+            className="tl-card-action tl-card-action--dislike tl-detail-action"
+            onClick={(e) => { e.stopPropagation(); onDislike?.(); }}
+            aria-label={`Dislike ${item.name}`}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 14V2" />
+              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
             </svg>
-            <span className="tl-card-action-label">Add</span>
+            <span className="tl-card-action-label">Dislike</span>
           </button>
           <button
             className="tl-card-action tl-card-action--dismiss tl-detail-action"
@@ -282,15 +282,15 @@ function CardDetail({ item, onCollapse, onAdd, onDismiss, onDislike }) {
             <span className="tl-card-action-label">Dismiss</span>
           </button>
           <button
-            className="tl-card-action tl-card-action--dislike tl-detail-action"
-            onClick={(e) => { e.stopPropagation(); onDislike?.(); }}
-            aria-label={`Dislike ${item.name}`}
+            className="tl-card-action tl-card-action--add tl-detail-action"
+            onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            aria-label={`Add ${item.name} to your plan`}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 14V2" />
-              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span className="tl-card-action-label">Dislike</span>
+            <span className="tl-card-action-label">Add</span>
           </button>
         </div>
       )}
@@ -934,17 +934,17 @@ export default function TimelineScreen({
                       {isSuggestion ? (
                         <>
                           <button
-                            className="tl-card-action tl-card-action--add"
+                            className="tl-card-action tl-card-action--dislike"
                             style={{ right: 136 }}
-                            onClick={() => handleAdd(item.id)}
-                            aria-label={`Add ${item.name} to your plan`}
+                            onClick={() => handleDislike(item.id)}
+                            aria-label={`Dislike ${item.name}`}
                             tabIndex={isRevealed ? 0 : -1}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-                              <line x1="12" y1="5" x2="12" y2="19" />
-                              <line x1="5" y1="12" x2="19" y2="12" />
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M17 14V2" />
+                              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
                             </svg>
-                            <span className="tl-card-action-label">Add</span>
+                            <span className="tl-card-action-label">Dislike</span>
                           </button>
                           <button
                             className="tl-card-action tl-card-action--dismiss"
@@ -960,17 +960,17 @@ export default function TimelineScreen({
                             <span className="tl-card-action-label">Dismiss</span>
                           </button>
                           <button
-                            className="tl-card-action tl-card-action--dislike"
+                            className="tl-card-action tl-card-action--add"
                             style={{ right: 0 }}
-                            onClick={() => handleDislike(item.id)}
-                            aria-label={`Dislike ${item.name}`}
+                            onClick={() => handleAdd(item.id)}
+                            aria-label={`Add ${item.name} to your plan`}
                             tabIndex={isRevealed ? 0 : -1}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M17 14V2" />
-                              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
                             </svg>
-                            <span className="tl-card-action-label">Dislike</span>
+                            <span className="tl-card-action-label">Add</span>
                           </button>
                         </>
                       ) : (
@@ -985,7 +985,7 @@ export default function TimelineScreen({
                             <polygon points="4 5 13 12 4 19 4 5" />
                             <polygon points="13 5 22 12 13 19 13 5" />
                           </svg>
-                          <span className="tl-card-action-label">Skip</span>
+                          <span className="tl-card-action-label">Skip stop</span>
                         </button>
                       )}
                     </div>

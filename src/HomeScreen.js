@@ -1373,7 +1373,7 @@ export default function HomeScreen({
             <div className="listen-blob listen-blob--3" />
           </div>
 
-          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)} />
+          <div className="search-handle" />
 
           {/* State: idle — search input */}
           {!listenCardMode && (
@@ -1386,7 +1386,6 @@ export default function HomeScreen({
                 placeholder="I'm in the mood for..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setSheetOpen(true)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && query.trim()) {
                     e.target.blur();
