@@ -916,10 +916,6 @@
   z-index: 21;
 }
 
-
-/* Journey FAB on the nav screen — purple gradient matching the companion
-   widget surface, yellow flag icon. Backdrop-filter is disabled so the
-   gradient fully replaces the frosted-white look from .bottom-right-btn. */
 /* Dark-purple FAB matching the companion widget surface. */
 .bottom-right-btn--journey {
   background: linear-gradient(
@@ -928,21 +924,22 @@
     rgba(52, 35, 62, 0.92) 55%,
     rgba(84, 58, 100, 0.90) 100%
   ) !important;
-  backdrop-filter: blur(18px) saturate(1.1) !important;
   -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
 }
 
-
-/* "I am here" affordance above the wcw card. Left-aligned within the
-   phone frame; sits ~12px above the wcw card top (wcw is at bottom: 16px
-   and ~210px tall). */
+/* "I am here" affordance — floats at the SAME VERTICAL LEVEL as the locate
+   FAB (.bottom-right-stack--nav now at bottom: 320px because the redesigned
+   walk-companion widget is taller). Left-aligned so the two FABs don't
+   overlap. */
 .nav-arrived-bar {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: calc(16px + 210px + 12px);
+  bottom: 320px;
   z-index: 32;
   display: flex;
+  align-items: center;
   justify-content: flex-start;
   pointer-events: none;
 }

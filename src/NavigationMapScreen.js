@@ -211,8 +211,10 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     if (!nextTarget || !userLocation) return null;
     return haversineKm(userLocation, [nextTarget.lat, nextTarget.lng]) * 1000;
   }, [nextTarget, userLocation]);
-  // 150 ft ≈ 45.72 m
-  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 45.72;
+  // Show the "I am here" button once the user is within 500 m of the next
+  // confirmed stop — gives them latitude to confirm arrival from across a
+  // block or two without needing pixel-perfect positioning.
+  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 500;
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent

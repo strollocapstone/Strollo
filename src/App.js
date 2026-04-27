@@ -12,7 +12,7 @@ import './App.css';
 function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
-  const [screen, setScreen] = useState('loading');
+  const [screen, setScreen] = useState('quiz');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
@@ -69,9 +69,26 @@ function App() {
         {screen === 'intro' && (
           <IntroScreen onContinue={() => setScreen('quiz')} />
         )}
-        {(screen === 'home' || screen === 'constraints') && (
+        {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
+            close animation reveals Home instead of a flash of white phone
+            frame. QuizScreen's z-index keeps it on top while open. */}
+        {(screen === 'home' || screen === 'constraints' || screen === 'quiz') && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setVisitedIds(new Set()); setVisitedAt(new Map()); setStopDwellMs(new Map()); setScreen('navigation'); }}
+            onStartWalk={(items, userLoc) => {
+              // NavigationMapScreen treats `addedIds` as the authoritative
+              // "confirmed stops" list (filters journeyItems by id). Without
+              // this, planned chat stops have fresh IDs that addedIds doesn't
+              // know about → nextTarget is null → "No current destination".
+              setJourneyItems(items);
+              setAddedIds(new Set(items.map((it) => it.id)));
+              setStartLocation(userLoc);
+              setLastKnownLocation(userLoc);
+              setTripStartTime(Date.now());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setScreen('navigation');
+            }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             onOpenQuiz={() => setScreen('quiz')}
@@ -79,6 +96,7 @@ function App() {
             initialSheetOpen={openSheetOnHome}
             onSheetOpenConsumed={() => setOpenSheetOnHome(false)}
             preferences={preferences}
+            vibePreferences={quizPreferences}
             nearbyPlaces={nearbyPlaces}
             setNearbyPlaces={setNearbyPlaces}
             addedIds={addedIds}
@@ -125,7 +143,19 @@ function App() {
         )}
         {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
-            onGoBack={() => setScreen('home')}
+            onGoBack={() => {
+              // Back arrow = abandon the walk → wipe all walk state so the
+              // next Home session doesn't inherit chat-planned stop IDs that
+              // would break "Start exploring".
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
+            }}
             onEndWalk={() => setScreen('reward')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
@@ -152,7 +182,17 @@ function App() {
             nearbyPlaces={nearbyPlaces}
             userLocation={lastKnownLocation}
             vibePreferences={quizPreferences}
-            onComplete={() => setScreen('home')}
+            onComplete={() => {
+              // Reward dismissed → fresh slate for the next session.
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
+            }}
             onResume={() => setScreen('navigation')}
           />
         )}
@@ -170,7 +210,20 @@ function App() {
         {screen === 'timeline' && (
           <TimelineScreen
             onGoBack={() => setScreen('navigation')}
-            onEndWalk={() => setScreen('reward')}
+            onEndWalk={() => {
+              // Same gate as navigation's End: reward only if the user
+              // completed something; otherwise wipe + Home.
+              if (visitedIds.size >= 1) {
+                setScreen('reward');
+              } else {
+                setJourneyItems([]);
+                setAddedIds(new Set());
+                setVisitedIds(new Set());
+                setStartLocation(null);
+                setTripStartTime(null);
+                setScreen('home');
+              }
+            }}
             nearbyPlaces={nearbyPlaces}
             addedIds={addedIds}
             setAddedIds={setAddedIds}

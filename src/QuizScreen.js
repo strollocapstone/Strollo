@@ -169,7 +169,6 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   const [exitDir, setExitDir] = useState(null);
   const [peekDir, setPeekDir] = useState(null);
   const [closing, setClosing] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
   // "drag" uses CSS transition (card has momentum from the finger); "button"
   // uses a keyframes animation with a subtle wind-up so the tap doesn't feel teleport-y.
   const exitSourceRef = useRef("drag");
@@ -361,8 +360,16 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
     );
   }
 
+  // Slide-down + fade before letting App.js swap to Home so the user feels
+  // the screen leaving instead of vanishing.
+  const handleSkip = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => onSkip?.(), 380);
+  };
+
   return (
-    <div className="quiz-screen">
+    <div className={`quiz-screen${closing ? " quiz-screen--closing" : ""}`}>
       <div className={`quiz-blobs${closing ? " quiz-blobs--genie" : ""}`}>
         <div className="quiz-blob quiz-blob--1" />
         <div className="quiz-blob quiz-blob--2" />
@@ -381,36 +388,9 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         )}
       </div>
 
-      {/* Title + subtitle */}
+      {/* Title */}
       <div className="quiz-header">
         <h1 className="quiz-title">Would you go here?</h1>
-        <p className="quiz-subtitle">
-          <span>Swipe</span>
-          <span className="quiz-subtitle-arrows">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-          </span>
-          <span>to decide</span>
-          <span className="quiz-help">
-            <button
-              type="button"
-              className="fab-circle quiz-info-btn"
-              onClick={() => setInfoOpen(v => !v)}
-              aria-label="Why answer the quiz?"
-              aria-expanded={infoOpen}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M9.1 9a3 3 0 1 1 4.9 2.3c-.9.7-1.5 1.2-1.5 2.2" />
-                <circle cx="12" cy="17.2" r="0.7" fill="#1E1541" />
-              </svg>
-            </button>
-            {infoOpen && (
-              <span className="quiz-info-tooltip" role="tooltip">
-                Sharing your preferences helps Strollo give you more accurate suggestions for your explorations.
-              </span>
-            )}
-          </span>
-        </p>
       </div>
 
       {/* Clothesline (only kept/liked polaroids) */}
@@ -528,7 +508,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
           </button>
         )}
         {onSkip && (
-          <button type="button" className="quiz-skip" onClick={onSkip}>
+          <button type="button" className="quiz-skip" onClick={handleSkip}>
             Skip for now
           </button>
         )}
