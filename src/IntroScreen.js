@@ -19,26 +19,21 @@ export default function IntroScreen({ onContinue }) {
   return (
     <div className={`intro-screen${leaving ? " intro-screen--leaving" : ""}`}>
       <div className="intro-stage" aria-hidden="true">
-        {/* Top haptic rings — mirrors the glow under the pocket so the phone
-            looks like it's sending a quiet pulse upward, replacing the
-            previous straight sound-wave lines. */}
-        <span className="intro-ring intro-ring--top intro-ring--top-1" />
-        <span className="intro-ring intro-ring--top intro-ring--top-2" />
-
         {/* Bottom haptic rings — rise from the pocket once the phone is in. */}
         <span className="intro-ring intro-ring--1" />
         <span className="intro-ring intro-ring--2" />
 
-        {/* Pocket silhouette (denim-style) — gradient fills for softness. */}
+        {/* Pocket silhouette — back panel + front lip (the phone slides
+            BEHIND the front lip when tucked in). Muted purple gradients. */}
         <svg className="intro-pocket" viewBox="0 0 200 180" fill="none">
           <defs>
             <linearGradient id="pocketBackGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"  stopColor="#A88AE0" />
-              <stop offset="100%" stopColor="#6B57B8" />
+              <stop offset="0%"  stopColor="#8E84A6" />
+              <stop offset="100%" stopColor="#6B6286" />
             </linearGradient>
             <linearGradient id="pocketFrontGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"  stopColor="#C5AEED" />
-              <stop offset="100%" stopColor="#8B73CF" />
+              <stop offset="0%"  stopColor="#A097B5" />
+              <stop offset="100%" stopColor="#7E7493" />
             </linearGradient>
           </defs>
           {/* back of pocket */}
@@ -67,26 +62,27 @@ export default function IntroScreen({ onContinue }) {
           <svg viewBox="0 0 64 116" fill="none">
             <defs>
               <linearGradient id="phoneBodyGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%"  stopColor="#7A63C8" />
-                <stop offset="100%" stopColor="#4A3B92" />
+                <stop offset="0%"  stopColor="#928AA4" />
+                <stop offset="100%" stopColor="#5E586E" />
               </linearGradient>
+              {/* Bright yellow screen — Strollo brand wash */}
               <linearGradient id="phoneScreenGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"  stopColor="#9282D8" />
-                <stop offset="100%" stopColor="#5C4AAE" />
+                <stop offset="0%"  stopColor="#FFE76B" />
+                <stop offset="100%" stopColor="#F0B900" />
               </linearGradient>
             </defs>
             <rect x="2" y="2" width="60" height="112" rx="12" ry="12"
-              fill="url(#phoneBodyGrad)" stroke="#A969C8" strokeWidth="2" />
+              fill="url(#phoneBodyGrad)" />
             {/* screen */}
             <rect x="7" y="9" width="50" height="98" rx="6" ry="6" fill="url(#phoneScreenGrad)" />
             {/* notch */}
             <rect x="26" y="6" width="12" height="3" rx="1.5" ry="1.5" fill="#0E0828" />
-            {/* tiny map-pin glyph on screen */}
+            {/* Tiny map-pin glyph on screen — purple pin on the yellow wash */}
             <path
               d="M 32 38 C 27 38 24 41 24 46 C 24 53 32 64 32 64 C 32 64 40 53 40 46 C 40 41 37 38 32 38 Z"
-              fill="#FFD501"
+              fill="#3B1F6E"
             />
-            <circle cx="32" cy="46" r="3" fill="#1E1541" />
+            <circle cx="32" cy="46" r="3" fill="#FFE76B" />
           </svg>
         </div>
       </div>
@@ -99,7 +95,7 @@ export default function IntroScreen({ onContinue }) {
         Welcome to Strollo! Tell us what you're into and we'll do the rest.
       </p>
       <p className="intro-body">
-        Explore the city without having to follow along your screen.
+        You can now explore the city without having to follow along your screen.
       </p>
 
       <button type="button" className="intro-cta" onClick={handleContinue}>
