@@ -120,7 +120,7 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, showVoice = true }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -140,6 +140,29 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
+  // Dev/test cycler so designers can preview the AI presentation modes
+  // (none → narration → suggestion → narration+suggestion → none).
+  const [aiTestMode, setAiTestMode] = useState(0);
+  const [aiSampleIdx, setAiSampleIdx] = useState(0);
+  const AI_NARRATIONS = [
+    "On your left — the historic Claremont Hotel, built in 1915 and once nicknamed the \"Million Dollar Hotel\".",
+    "You're walking along Telegraph Ave, the spine of UC Berkeley's counterculture in the 1960s.",
+    "That mural across the street is by local artist Edythe Boone — finished in 2019.",
+  ];
+  const AI_SUGGESTIONS = [
+    "There's a bookstore one block ahead with a great rare-books section. Worth a detour?",
+    "A nearby café opens in 5 minutes — want to add it as a stop?",
+    "Did you know? This corner appeared in the film The Graduate.",
+  ];
+  const aiNarration = aiTestMode === 1 || aiTestMode === 3
+    ? AI_NARRATIONS[aiSampleIdx % AI_NARRATIONS.length]
+    : "";
+  const aiSuggestion = aiTestMode === 2 || aiTestMode === 3
+    ? AI_SUGGESTIONS[aiSampleIdx % AI_SUGGESTIONS.length]
+    : "";
+  // Snapshot of the route distance (m) when each next-stop was first targeted,
+  // so the companion widget's progress strip can render walked vs remaining.
+  const initialDistRef = React.useRef({ id: null, dist: 0 });
   const [headingUp, setHeadingUp] = useState(false);     // false = north-up, true = next-maneuver-up
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
@@ -193,6 +216,58 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
   // block or two without needing pixel-perfect positioning.
   const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 500;
 
+  // ── Real-time per-stop dwell tracker ────────────────────────────────────
+  // Watches the user's geolocation and accumulates the actual time spent
+  // within ~50m of each confirmed stop. Drives accurate per-stop minutes on
+  // the Reward screen without requiring the user to tap "I'm here" — and
+  // still works correctly if they do.
+  const dwellRef = React.useRef({ stopId: null, enteredAt: 0 });
+  const setStopDwellMsRef = React.useRef(setStopDwellMs);
+  setStopDwellMsRef.current = setStopDwellMs;
+  useEffect(() => {
+    if (!userLocation || !setStopDwellMs || !confirmedStops?.length) return;
+
+    // Closest stop the user is currently inside (within ~50m).
+    let currentStopId = null;
+    for (const stop of confirmedStops) {
+      if (stop.lat == null || stop.lng == null) continue;
+      const distM = haversineKm(userLocation, [stop.lat, stop.lng]) * 1000;
+      if (distM <= 50) { currentStopId = stop.id; break; }
+    }
+
+    const prev = dwellRef.current;
+    if (currentStopId === prev.stopId) return; // still at the same place (or still nowhere)
+
+    const now = Date.now();
+    if (prev.stopId != null && prev.enteredAt) {
+      // Just left a stop — bank the time we spent there.
+      const delta = now - prev.enteredAt;
+      setStopDwellMs((m) => {
+        const next = new Map(m);
+        next.set(prev.stopId, (next.get(prev.stopId) || 0) + delta);
+        return next;
+      });
+    }
+    dwellRef.current = { stopId: currentStopId, enteredAt: currentStopId ? now : 0 };
+  }, [userLocation, confirmedStops, setStopDwellMs]);
+
+  // On unmount (or screen change), bank any in-progress dwell so the user
+  // doesn't lose credit for the stop they were standing in when they ended.
+  useEffect(() => {
+    return () => {
+      const prev = dwellRef.current;
+      const setDwell = setStopDwellMsRef.current;
+      if (prev.stopId != null && prev.enteredAt && setDwell) {
+        const delta = Date.now() - prev.enteredAt;
+        setDwell((m) => {
+          const next = new Map(m);
+          next.set(prev.stopId, (next.get(prev.stopId) || 0) + delta);
+          return next;
+        });
+      }
+    };
+  }, []);
+
   const handleArrived = () => {
     if (!nextTarget || !setVisitedIds) return;
     setVisitedIds((prev) => {
@@ -200,6 +275,15 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       out.add(nextTarget.id);
       return out;
     });
+    // Stamp the arrival time so the Reward screen can compute real per-stop
+    // dwell minutes (next stop's arrival - this stop's arrival).
+    if (setVisitedAt) {
+      setVisitedAt((prev) => {
+        const out = new Map(prev);
+        out.set(nextTarget.id, Date.now());
+        return out;
+      });
+    }
   };
 
   // Apply voice-extracted edit actions to the journey
@@ -406,6 +490,21 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         </MapContainer>
       </div>
 
+      {/* Profile FAB — top-right of the map. Doubles as a dev cycler that
+          steps through AI presentation modes (none → narration → suggestion
+          → narration+suggestion). */}
+      <button
+        type="button"
+        className="fab-circle top-right-btn"
+        aria-label={`Profile (AI test mode ${aiTestMode})`}
+        onClick={() => {
+          setAiTestMode((m) => (m + 1) % 4);
+          setAiSampleIdx((i) => i + 1);
+        }}
+      >
+        <span className="top-right-initials">ST</span>
+      </button>
+
       {/* ── TOP BAR (hidden while companion widget owns the top; back is
            reachable via the journey flag in the bottom-right stack) ── */}
       {!showVoice && (
@@ -426,6 +525,13 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
            the Timeline overlay. ── */}
       {showVoice && (
         <div className="bottom-right-stack bottom-right-stack--nav">
+          <button className="fab-circle bottom-right-btn bottom-right-btn--journey" onClick={onOpenTimeline} aria-label="Check journey">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+              <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M8 3 L18 6 L8 10 Z"/>
+              <circle cx="8" cy="21" r="2"/>
+            </svg>
+          </button>
           <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
@@ -488,6 +594,17 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
           ? Math.max(1, Math.round(liveDistToStopM / WALK_M_PER_MIN))
           : null;
         const eta = etaMin !== null ? `${etaMin} min` : "—";
+        // Track the initial distance for this stop so progress can be derived.
+        if (nextStop?.id && liveDistToStopM != null) {
+          if (initialDistRef.current.id !== nextStop.id) {
+            initialDistRef.current = { id: nextStop.id, dist: Math.max(liveDistToStopM, 1) };
+          } else if (liveDistToStopM > initialDistRef.current.dist) {
+            initialDistRef.current.dist = liveDistToStopM;
+          }
+        }
+        const progress = liveDistToStopM != null && initialDistRef.current.dist > 0
+          ? Math.max(0, Math.min(1, 1 - liveDistToStopM / initialDistRef.current.dist))
+          : 0;
         // Instruction: live distance to the NEXT maneuver (turn), from OSRM step data.
         // Switch to "TURN {direction}" once we're within ~15m of that maneuver point.
         const nextTurn = routeSteps.find((s) =>
@@ -500,15 +617,15 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
         if (isEmpty) {
           instruction = "—";
         } else if (!userLocation || liveDistToStopM === null) {
-          instruction = "HEAD OUT";
+          instruction = "head out";
         } else if (distToTurnM !== null && distToTurnM <= 15) {
-          instruction = `TURN ${String(nextTurn.maneuver.modifier || "right").toUpperCase()}`;
+          instruction = `turn ${String(nextTurn.maneuver.modifier || "right").toLowerCase()}`;
         } else if (distToTurnM !== null) {
-          instruction = `WALK FORWARD ${fmtDist(distToTurnM)}`;
+          instruction = `walk forward ${fmtDist(distToTurnM)}`;
         } else if (liveDistToStopM <= 15) {
-          instruction = "ARRIVING";
+          instruction = "arriving";
         } else {
-          instruction = `WALK FORWARD ${fmtDist(liveDistToStopM)}`;
+          instruction = `walk forward ${fmtDist(liveDistToStopM)}`;
         }
         return (
           <WalkCompanionWidget
@@ -517,7 +634,9 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
             distance={isEmpty ? "—" : distance}
             eta={isEmpty ? "—" : eta}
             canSkip={confirmedStops.length > 1}
-            checkLabel={isEmpty ? "Explore" : "Journey"}
+            progress={progress}
+            narration={aiNarration}
+            suggestion={aiSuggestion}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;
               // Drop the current (next) confirmed stop from both the journey
@@ -532,12 +651,26 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
                 });
               }
             }}
-            onCheckJourney={onOpenTimeline}
-            onEnd={onGoBack}
+            onEnd={onEndWalk || onGoBack}
+            onExpand={() => setVoiceMode("full")}
           />
         );
       })()}
 
+      {voiceMode === "full" && (
+        <VoiceFullScreen
+          listening={false}
+          locked={false}
+          muted={false}
+          messages={[]}
+          onMuteToggle={() => {}}
+          onListenStart={() => {}}
+          onListenEnd={() => {}}
+          onDragLock={() => {}}
+          onUnlock={() => {}}
+          onMinimize={() => setVoiceMode(null)}
+        />
+      )}
     </>
   );
 }

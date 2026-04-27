@@ -30,12 +30,103 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Animated yellow border for AI-suggestion mode. A conic gradient with a
+   bright yellow arc is rotated behind a CSS mask that keeps only the
+   border ring visible — so the glow travels around the inside edge of
+   the widget rather than filling its center. */
+@property --wcw-glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.wcw--glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 5px; /* ring width */
+  background: conic-gradient(
+    from var(--wcw-glow-angle),
+    rgba(255, 213, 1, 0) 0deg,
+    rgba(255, 213, 1, 1) 70deg,
+    rgba(255, 213, 1, 0) 160deg,
+    rgba(255, 213, 1, 0) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: wcw-glow-rotate 3.2s linear infinite;
+  pointer-events: none;
+}
+@keyframes wcw-glow-rotate {
+  to { --wcw-glow-angle: 360deg; }
+}
+/* Fallback for browsers without @property — pulses the ring opacity so
+   the glow still reads even if the conic angle can't be animated. */
+@supports not (background: conic-gradient(from 0deg, red, red)) {
+  .wcw--glow::before {
+    background: rgba(255, 213, 1, 0.85);
+    animation: wcw-glow-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes wcw-glow-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* Grabber pill at the top of the widget — visual affordance that the
+   widget can be dragged up to expand into the full-screen chat. */
+.wcw-grabber {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(247, 243, 245, 0.30);
+  margin: -4px auto 8px;
+}
+
 /* ── Status row: "Heading to {destination}" ──────────────────────────── */
 .wcw-status-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   min-height: 16px;
+  flex-wrap: nowrap;
+  padding-bottom: 10px;
+}
+.wcw-status-row > .wcw-heading-label,
+.wcw-status-row > .wcw-destination,
+.wcw-status-row > .wcw-destination--empty {
+  align-self: baseline;
+}
+
+/* "You're saying" listening header — yellow caps with a dot, soundwave on right */
+.wcw-listening-label {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #FFD501;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.wcw-listening-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFD501;
+  box-shadow: 0 0 8px rgba(255, 213, 1, 0.6);
+}
+.wcw-listening-bars {
+  display: inline-flex;
+  flex-shrink: 0;
 }
 .wcw-heading-label {
   font-size: 12px;
@@ -61,33 +152,90 @@
 }
 .wcw-skip-btn {
   flex-shrink: 0;
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(247, 243, 245, 0.22);
-  background: transparent;
-  color: rgba(247, 243, 245, 0.65);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(247, 243, 245, 0.85);
   font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 .wcw-skip-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
   color: #F7F3F5;
-  border-color: rgba(247, 243, 245, 0.32);
 }
 
 /* ── Dominant TURN line ──────────────────────────────────────────────── */
 .wcw-turn {
   margin: 12px 0 12px;
   font-family: var(--font-brand, var(--font-ui));
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  text-transform: lowercase;
   color: #F7F3F5;
-  text-transform: uppercase;
+}
+/* While listening, the turn line shows the live transcription quoted. */
+.wcw--listening .wcw-turn {
+  font-size: 22px;
+  line-height: 1.2;
+  text-transform: none;
+  color: #F7F3F5;
+}
+
+/* AI ambient narration: chatty info about what the user is passing. */
+.wcw-narration {
+  margin: 12px 0 12px;
+  font-family: var(--font-brand, var(--font-ui));
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #F7F3F5;
+}
+
+/* AI detour suggestion: dotted-bordered pill with a yellow lightbulb. */
+.wcw-suggestion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 12px;
+  padding: 10px 8px;
+  border: 1.5px dashed rgba(247, 243, 245, 0.30);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.wcw-suggestion-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wcw-suggestion-text {
+  font-family: var(--font-brand, var(--font-ui));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: #F7F3F5;
+}
+
+/* Local keyframes mirror of the search-bar sound-wave bounce so the bars
+   animate even if HomeScreen.css hasn't been loaded into the document. */
+.wcw .sw-bar { transform-origin: center; }
+.wcw .sw-bar--active {
+  animation: wcw-sw-bounce 0.8s ease-in-out infinite alternate;
+}
+@keyframes wcw-sw-bounce {
+  0%   { transform: scaleY(0.5); opacity: 0.6; }
+  100% { transform: scaleY(1);   opacity: 1; }
 }
 
 /* ── Supporting stats: DIST + ETA ────────────────────────────────────── */
@@ -114,76 +262,143 @@
   color: #F7F3F5;
 }
 
-/* ── Actions row: End (muted) + Check journey (primary) ──────────────── */
-.wcw-actions {
+/* ── Progress strip — boots walking along a dotted curve to the flag ── */
+.wcw-progress {
+  position: relative;
+  height: 32px;
+  margin: 0 0 12px;
+}
+.wcw-progress-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wcw-progress-boots {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  transition: left 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.wcw-progress-flag {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Bottom buttons section ──────────────────────────────────────────── */
+.wcw-bottom {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
-.wcw-end-btn {
-  padding: 0 20px;
-  height: 44px;
-  border: 1px solid rgba(247, 243, 245, 0.20);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(247, 243, 245, 0.72);
+.wcw-bottom-left {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.wcw-bottom-right {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Rest / End text+icon pills */
+.wcw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(247, 243, 245, 0.85);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
 }
-.wcw-end-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+.wcw-pill:hover {
+  background: rgba(0, 0, 0, 0.45);
   color: #F7F3F5;
 }
-/* Icon-only siblings to .wcw-end-btn — pause and mute toggles. Same
-   surface treatment, square 44x44, no label. Active state (toggled on)
-   gets a subtle yellow tint to reinforce the crossed-out icon. */
+.wcw-pill--active {
+  color: #FFD501;
+  background: rgba(255, 213, 1, 0.18);
+}
+.wcw-pill--active:hover {
+  background: rgba(255, 213, 1, 0.26);
+}
+
+/* Mute and Speak — square icon buttons. Match the pill height (36px) so
+   the row reads as one consistent control bar. */
 .wcw-icon-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 1px solid rgba(247, 243, 245, 0.20);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(247, 243, 245, 0.72);
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(247, 243, 245, 0.85);
   cursor: pointer;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .wcw-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
   color: #F7F3F5;
 }
 .wcw-icon-btn--active {
   color: #FFD501;
-  background: rgba(255, 213, 1, 0.10);
-  border-color: rgba(255, 213, 1, 0.32);
+  background: rgba(255, 213, 1, 0.18);
 }
 .wcw-icon-btn--active:hover {
-  background: rgba(255, 213, 1, 0.16);
+  background: rgba(255, 213, 1, 0.26);
 }
-.wcw-check-btn {
-  flex: 1;
-  height: 44px;
-  border: none;
-  border-radius: 14px;
-  background: rgba(255, 213, 1, 0.14);
+
+/* Speak: pulses while held; locked state shows a steady accent ring. */
+.wcw-speak {
+  position: relative;
+}
+.wcw-speak--active {
   color: #FFD501;
-  font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  display: flex;
+  background: rgba(255, 213, 1, 0.24);
+  transform: scale(1.04);
+}
+.wcw-speak--locked {
+  box-shadow: 0 0 0 2px rgba(255, 213, 1, 0.55);
+}
+/* Lock badge appears in the top-right of the speak button while latched. */
+.wcw-speak-lock {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FFD501;
+  color: #1E1541;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  box-shadow: 0 0 0 2px rgba(30, 21, 65, 0.95);
+  pointer-events: none;
 }
-.wcw-check-btn:hover { background: rgba(255, 213, 1, 0.22); }
-.wcw-check-btn:active { transform: scale(0.985); }

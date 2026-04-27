@@ -30,6 +30,13 @@ function App() {
   // targets the first non-visited confirmed stop; visited stops can't be
   // removed from the Timeline.
   const [visitedIds, setVisitedIds] = useState(() => new Set());
+  // Map<stopId, timestamp> — wall-clock when the user confirmed reaching
+  // each stop. Powers the per-stop linger-minute math on the Reward screen.
+  const [visitedAt, setVisitedAt] = useState(() => new Map());
+  // Map<stopId, ms> — accumulated time the user has actually been within the
+  // arrival geofence of each stop (auto-tracked via WatchLocation, no tap
+  // required). The Reward screen prefers this over visitedAt timestamps.
+  const [stopDwellMs, setStopDwellMs] = useState(() => new Map());
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
 
@@ -78,6 +85,8 @@ function App() {
               setLastKnownLocation(userLoc);
               setTripStartTime(Date.now());
               setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
               setScreen('navigation');
             }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
@@ -135,21 +144,19 @@ function App() {
         {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
             onGoBack={() => {
-              // End from navigation: route to the achievement page if the
-              // user actually completed any stops; otherwise wipe walk state
-              // and return Home (so leftover chat-planned IDs don't break
-              // the next "Start exploring" tap).
-              if (visitedIds.size >= 1) {
-                setScreen('reward');
-              } else {
-                setJourneyItems([]);
-                setAddedIds(new Set());
-                setVisitedIds(new Set());
-                setStartLocation(null);
-                setTripStartTime(null);
-                setScreen('home');
-              }
+              // Back arrow = abandon the walk → wipe all walk state so the
+              // next Home session doesn't inherit chat-planned stop IDs that
+              // would break "Start exploring".
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
             }}
+            onEndWalk={() => setScreen('reward')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             journeyItems={journeyItems}
@@ -159,23 +166,34 @@ function App() {
             setAddedIds={setAddedIds}
             visitedIds={visitedIds}
             setVisitedIds={setVisitedIds}
+            setVisitedAt={setVisitedAt}
+            setStopDwellMs={setStopDwellMs}
             vibePreferences={quizPreferences}
             showVoice={screen === 'navigation'}
           />
         )}
         {screen === 'reward' && (
           <RewardScreen
+            journeyItems={journeyItems}
+            visitedIds={visitedIds}
+            visitedAt={visitedAt}
+            stopDwellMs={stopDwellMs}
+            tripStartTime={tripStartTime}
+            nearbyPlaces={nearbyPlaces}
+            userLocation={lastKnownLocation}
+            vibePreferences={quizPreferences}
             onComplete={() => {
-              // Walk state is preserved through the achievement page so the
-              // reward screen can read it. Wipe on dismissal so Home starts
-              // fresh.
+              // Reward dismissed → fresh slate for the next session.
               setJourneyItems([]);
               setAddedIds(new Set());
               setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
               setStartLocation(null);
               setTripStartTime(null);
               setScreen('home');
             }}
+            onResume={() => setScreen('navigation')}
           />
         )}
         {screen === 'constraints' && (
