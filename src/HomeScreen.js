@@ -42,6 +42,7 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
   return L.divIcon({
     className: "",
     html: `<div class="${classes.join(' ')}">
+    ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
     <div class="sugg-pin-dot">
       ${added && sequence
         ? `<span class="sugg-pin-dot-number">${sequence}</span>`
@@ -876,6 +877,15 @@ export default function HomeScreen({
                 <div className="quiz-gateway-blob quiz-gateway-blob--1" />
                 <div className="quiz-gateway-blob quiz-gateway-blob--2" />
                 <div className="quiz-gateway-blob quiz-gateway-blob--3" />
+                <svg
+                  className="quiz-gateway-icon"
+                  width="20" height="20" viewBox="0 0 24 24"
+                  fill="#FFF7E6" stroke="#FFF7E6" strokeWidth="1.2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polygon points="13 2 4 14 11 14 9 22 20 10 13 10 15 2" />
+                </svg>
               </button>
             )}
             <button

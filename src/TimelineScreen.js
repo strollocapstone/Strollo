@@ -150,6 +150,44 @@ function warningTagsForItem(item) {
 }
 
 // ── Expanded card detail ──────────────────────────────────────────────────
+// Map-pin marker rendered on the vertical rail at the user's current
+// position (= the next-target confirmed card, or top of the rail when
+// nothing is confirmed yet).
+function RailPin() {
+  return (
+    <svg
+      className="tl-rail-pin"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="#8851D4"
+      stroke="white"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+      aria-label="You are here"
+      role="img"
+    >
+      <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z" />
+      <circle cx="12" cy="10" r="2.6" fill="white" stroke="none" />
+    </svg>
+  );
+}
+
+function CardWarningTags({ item }) {
+  const tags = warningTagsForItem(item);
+  if (tags.length === 0) return null;
+  return (
+    <div className="tl-card-tags">
+      {tags.map((t) => (
+        <span className="tl-card-tag" key={t.id}>
+          {t.icon}
+          <span>{t.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function CardDetail({ item, onCollapse, onAdd }) {
   const mapsQuery = item.lat && item.lng
     ? `${item.lat},${item.lng}`
@@ -200,6 +238,7 @@ function CardDetail({ item, onCollapse, onAdd }) {
             <span>{item.walkMin ? `${item.walkMin} minute walk from you` : item.time}</span>
           </div>
         </div>
+        <CardWarningTags item={item} />
         <p className="tl-detail-desc">{item.description}</p>
       </div>
 
@@ -268,6 +307,7 @@ export default function TimelineScreen({
   nearbyPlaces = [],
   addedIds,
   setAddedIds,
+  visitedIds,
   userLocation,
   tripStartTime,
   onEndWalk,
@@ -284,50 +324,167 @@ export default function TimelineScreen({
     setTimeout(() => onGoBack(), 280);
   };
   const [expandedId, setExpandedId] = useState(null);
+  // Lightbulb toggle in the topbar — when off, suggestion cards are hidden.
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  // First-time hint: gently bounce the first card to the left every 5s so
+  // the user discovers the swipe-to-reveal gesture. Persisted via
+  // localStorage so it only ever fires once per device. Cleared as soon
+  // as the user has demonstrably understood (any reveal / expand / drag).
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("strollo:tl-hint-seen")) {
+        setShowSwipeHint(true);
+        localStorage.setItem("strollo:tl-hint-seen", "1");
+      }
+    } catch (e) {
+      // localStorage unavailable (private mode, etc.) — fail open, no hint.
+    }
+  }, []);
   // Swipe-to-reveal: while dragging, track {id, dx}. On release past the
-  // threshold, set revealedId so a '−' button appears to the right of the
-  // card; the user then taps '−' to actually remove. Tapping the revealed
-  // card (without dragging) closes the reveal.
+  // threshold, set revealedId so the action stack appears behind the card.
+  // Confirmed cards reveal 1 action (Remove); suggestion cards reveal 3
+  // (Add / Dismiss / Dislike). Tapping the revealed card closes it.
   const [swipe, setSwipe] = useState({ id: null, dx: 0 });
   const [revealedId, setRevealedId] = useState(null);
+  // Local-to-this-screen suggestion filtering: dismissed and disliked
+  // suggestions drop out of the top-3 ranking, so the next-closest fills in.
+  const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const [dislikedIds, setDislikedIds] = useState(() => new Set());
   useStopwatch(tripStartTime);
 
   const SWIPE_THRESHOLD = 50;
-  const REVEALED_OFFSET = -72;
-  const swipeStartRef = React.useRef({ id: null, startX: 0, moved: false });
+  // Per-card reveal width: width of the action stack for that card type.
+  // Buttons are 64px wide with 4px gap.
+  const REVEALED_CONFIRMED = -64;
+  const REVEALED_SUGGESTION = -(64 * 3 + 4 * 2);
+  const swipeStartRef = React.useRef({ id: null, startX: 0, startY: 0, moved: false, offset: 0 });
 
-  const onCardPointerDown = (e, id, isConfirmed) => {
-    if (!isConfirmed) return;
-    swipeStartRef.current = { id, startX: e.clientX, moved: false };
-    setSwipe({ id, dx: revealedId === id ? REVEALED_OFFSET : 0 });
+  // ── Long-press → drag-to-reorder for non-visited confirmed cards ────────
+  // After ~400ms of stillness on a reorderable card, the press becomes a
+  // drag: the card lifts and follows the pointer. Releasing computes the
+  // new index from row midpoints under the pointer and rewrites
+  // journeyItems. Cards in visitedIds are not draggable.
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragDeltaY, setDragDeltaY] = useState(0);
+  const dragRef = React.useRef({
+    id: null,
+    startY: 0,
+    pointerY: 0,
+    longPressTimer: null,
+    rowRects: [],
+    reorderableIds: [],
+  });
+  const rowElRefs = React.useRef(new Map());
+  const setRowRef = (id) => (el) => {
+    if (el) rowElRefs.current.set(id, el);
+    else rowElRefs.current.delete(id);
+  };
+
+  const cancelLongPress = () => {
+    if (dragRef.current.longPressTimer) {
+      clearTimeout(dragRef.current.longPressTimer);
+      dragRef.current.longPressTimer = null;
+    }
+  };
+
+  const beginDrag = (id, reorderableIds) => {
+    // Snapshot row rects so we can decide drop position from pointer Y.
+    const rects = reorderableIds.map((rid) => {
+      const el = rowElRefs.current.get(rid);
+      return el ? { id: rid, rect: el.getBoundingClientRect() } : null;
+    }).filter(Boolean);
+    dragRef.current.rowRects = rects;
+    dragRef.current.reorderableIds = reorderableIds;
+    setDraggingId(id);
+    setDragDeltaY(0);
+    setSwipe({ id: null, dx: 0 });
+    setRevealedId(null);
+  };
+
+  const computeDropIndex = (pointerY) => {
+    const ids = dragRef.current.reorderableIds;
+    let idx = 0;
+    for (let i = 0; i < dragRef.current.rowRects.length; i++) {
+      const r = dragRef.current.rowRects[i];
+      const mid = r.rect.top + r.rect.height / 2;
+      if (pointerY > mid) idx = i + 1;
+    }
+    return Math.min(ids.length - 1, Math.max(0, idx));
+  };
+
+  const onCardPointerDown = (e, id, offset, opts) => {
+    const { isVisited = false, isReorderable = false, reorderableIds = [] } = opts || {};
+    if (isVisited) return; // visited cards: no swipe, no drag
+    swipeStartRef.current = { id, startX: e.clientX, startY: e.clientY, moved: false, offset };
+    setSwipe({ id, dx: revealedId === id ? offset : 0 });
+    cancelLongPress();
+    if (isReorderable) {
+      dragRef.current.startY = e.clientY;
+      dragRef.current.pointerY = e.clientY;
+      dragRef.current.longPressTimer = setTimeout(() => {
+        const s = swipeStartRef.current;
+        if (s.id === id && !s.moved) beginDrag(id, reorderableIds);
+      }, 400);
+    }
   };
   const onCardPointerMove = (e) => {
+    if (draggingId !== null) {
+      dragRef.current.pointerY = e.clientY;
+      setDragDeltaY(e.clientY - dragRef.current.startY);
+      return;
+    }
     const s = swipeStartRef.current;
     if (!s.id) return;
     const raw = e.clientX - s.startX;
-    const base = revealedId === s.id ? REVEALED_OFFSET : 0;
-    const dx = Math.min(0, base + raw);
-    if (Math.abs(raw) > 4) s.moved = true;
+    const rawY = e.clientY - s.startY;
+    if (Math.abs(raw) > 4 || Math.abs(rawY) > 4) {
+      s.moved = true;
+      cancelLongPress();
+    }
+    const base = revealedId === s.id ? s.offset : 0;
+    const dx = Math.max(s.offset, Math.min(0, base + raw));
     setSwipe({ id: s.id, dx });
   };
   const onCardPointerUp = () => {
+    cancelLongPress();
+    if (draggingId !== null) {
+      const id = draggingId;
+      const ids = dragRef.current.reorderableIds;
+      const orig = ids.indexOf(id);
+      const target = computeDropIndex(dragRef.current.pointerY);
+      if (target !== orig && onJourneyChange && orig >= 0) {
+        const newReorder = ids.filter((_, i) => i !== orig);
+        newReorder.splice(target, 0, id);
+        // Rebuild journeyItems: visited stays first in current order, then
+        // the reordered non-visited confirmed list, then any other items.
+        const idToItem = new Map(journeyItems.map((j) => [j.id, j]));
+        const visitedItems = journeyItems.filter((j) => visitedIds?.has(j.id));
+        const reorderedItems = newReorder.map((rid) => idToItem.get(rid)).filter(Boolean);
+        const otherItems = journeyItems.filter(
+          (j) => !visitedIds?.has(j.id) && !ids.includes(j.id)
+        );
+        onJourneyChange([...visitedItems, ...reorderedItems, ...otherItems]);
+      }
+      setDraggingId(null);
+      setDragDeltaY(0);
+      return;
+    }
     const s = swipeStartRef.current;
     if (!s.id) return;
     const id = s.id;
-    swipeStartRef.current = { id: null, startX: 0, moved: false };
+    const offset = s.offset;
+    swipeStartRef.current = { id: null, startX: 0, startY: 0, moved: false, offset: 0 };
     setSwipe((cur) => {
       if (cur.id !== id) return cur;
-      // Closing a revealed card: user swiped right past threshold
-      if (revealedId === id && cur.dx > REVEALED_OFFSET + SWIPE_THRESHOLD) {
+      if (revealedId === id && cur.dx > offset + SWIPE_THRESHOLD) {
         setRevealedId(null);
         return { id: null, dx: 0 };
       }
-      // Opening reveal
       if (revealedId !== id && cur.dx <= -SWIPE_THRESHOLD) {
         setRevealedId(id);
         return { id: null, dx: 0 };
       }
-      // Snap back to current state
       return { id: null, dx: 0 };
     });
   };
@@ -338,8 +495,10 @@ export default function TimelineScreen({
     if (revealedId && revealedId !== id) { setRevealedId(null); return; }
     setExpandedId((cur) => (cur === id ? null : id));
   };
-  // Split places by added state
-  const confirmedPlaces = nearbyPlaces.filter((p) => addedIds?.has(p.id));
+  // Split places by added state. Confirmed stops follow the journey order
+  // (so an added suggestion stays where it was rendered, not at the end);
+  // the suggestion pool keeps coming from the full nearby-places set.
+  const confirmedPlaces = journeyItems.filter((p) => addedIds?.has(p.id));
   const suggestionPool = nearbyPlaces.filter((p) => !addedIds?.has(p.id));
 
   // Filter suggestions by the user's vibe preferences (if any are active)
@@ -350,32 +509,29 @@ export default function TimelineScreen({
     ? suggestionPool
     : suggestionPool.filter((p) => allowedDescs.has(p.desc));
 
-  // Suggestion proximity origin: the LAST confirmed stop if any, otherwise the user
-  const lastConfirmed = confirmedPlaces[confirmedPlaces.length - 1];
-  const suggestOrigin = lastConfirmed
-    ? { lat: lastConfirmed.lat, lng: lastConfirmed.lng }
-    : (userLocation ? { lat: userLocation[0], lng: userLocation[1] } : null);
-  const originPoint = userLocation
+  // 3 closest attractions to the user (overall) become the suggestion set.
+  // Dismissed and disliked suggestions are filtered out so the next-closest
+  // attraction takes their slot.
+  const userPoint = userLocation
     ? { lat: userLocation[0], lng: userLocation[1] }
     : null;
-  const rankedSuggestions = [...relevantPool]
-    .map((p) => ({ p, d: estimateWalkMin(suggestOrigin, p) }))
+  const filteredPool = relevantPool.filter(
+    (p) => !dismissedIds.has(p.id) && !dislikedIds.has(p.id)
+  );
+  const rankedSuggestions = [...filteredPool]
+    .map((p) => ({ p, d: estimateWalkMin(userPoint, p) }))
     .sort((a, b) => a.d - b.d)
     .slice(0, MAX_SUGGESTIONS)
     .map(({ p }) => p);
 
-  // Build timeline: confirmed places first, then the top nearest suggestions
-  const orderedPlaces = [...confirmedPlaces, ...rankedSuggestions];
-
-  const items = orderedPlaces.map((p, idx) => {
-    const prev = idx > 0 ? orderedPlaces[idx - 1] : originPoint;
+  const buildItem = (p, prev, type) => {
     const category = p.desc || "Place";
     return {
       id: p.id,
-      type: addedIds?.has(p.id) ? "confirmed" : "suggestion",
+      type,
       name: p.name,
       category,
-      time: addedIds?.has(p.id) ? "Planned stop" : "Suggested nearby",
+      time: type === "confirmed" ? "Planned stop" : "Suggested nearby",
       walkMin: estimateWalkMin(prev, p),
       image: p.image || imageForCategory(category),
       hours: p.hours,
@@ -383,14 +539,45 @@ export default function TimelineScreen({
       lat: p.lat,
       lng: p.lng,
     };
-  });
+  };
+
+  const confirmedItems = confirmedPlaces.map((p, i) =>
+    buildItem(p, i > 0 ? confirmedPlaces[i - 1] : userPoint, "confirmed")
+  );
+  // The current-target = first non-visited confirmed stop. Drives the rail
+  // pin position. Reorderable = non-visited confirmed (current + future).
+  const currentTargetId = confirmedItems.find((c) => !visitedIds?.has(c.id))?.id ?? null;
+  const reorderableIds = confirmedItems
+    .filter((c) => !visitedIds?.has(c.id))
+    .map((c) => c.id);
+  const suggestionItems = showSuggestions
+    ? rankedSuggestions.map((p) => buildItem(p, userPoint, "suggestion"))
+    : [];
+  const items = [...confirmedItems, ...suggestionItems];
 
   const handleAdd = (id) => {
-    // Append the newly-added place to the end of the journey so navigation
-    // naturally heads to it after all the existing stops.
+    // Insert the place right after its closest existing confirmed stop, so
+    // the new confirmed card replaces the suggestion in-place rather than
+    // jumping to the end of the journey. With no confirmed stops yet, just
+    // append.
     const place = nearbyPlaces.find((p) => p.id === id);
     if (place && onJourneyChange && !journeyItems.some((j) => j.id === id)) {
-      onJourneyChange([...journeyItems, place]);
+      let insertAt = journeyItems.length;
+      if (journeyItems.length > 0 && place.lat && place.lng) {
+        let bestIdx = journeyItems.length - 1;
+        let bestD = Infinity;
+        journeyItems.forEach((j, i) => {
+          if (!j.lat || !j.lng) return;
+          const d = tlHaversineKm([place.lat, place.lng], [j.lat, j.lng]);
+          if (d < bestD) { bestD = d; bestIdx = i; }
+        });
+        insertAt = bestIdx + 1;
+      }
+      onJourneyChange([
+        ...journeyItems.slice(0, insertAt),
+        place,
+        ...journeyItems.slice(insertAt),
+      ]);
     }
     setAddedIds?.((prev) => {
       const next = new Set(prev);
@@ -398,6 +585,7 @@ export default function TimelineScreen({
       return next;
     });
     setExpandedId(null);
+    setRevealedId(null);
   };
 
   const handleRemove = (id) => {
@@ -407,25 +595,29 @@ export default function TimelineScreen({
       return next;
     });
     setExpandedId(null);
+    setRevealedId(null);
   };
 
-  // Per-card Skip: drop this specific stop from the live journey so navigation
-  // advances past it (or skips over it if it's not the current target).
-  const handleSkipStop = (id) => {
-    if (onJourneyChange) {
-      onJourneyChange(journeyItems.filter((j) => j.id !== id));
-    }
-    setAddedIds?.((prev) => {
+  const handleDismiss = (id) => {
+    setDismissedIds((prev) => {
       const next = new Set(prev);
-      next.delete(id);
+      next.add(id);
       return next;
     });
     setExpandedId(null);
+    setRevealedId(null);
   };
 
-  // Planned stops first, then a single row of nearby suggestion pills.
-  const confirmedItems = items.filter((it) => it.type === "confirmed");
-  const suggestionItems = items.filter((it) => it.type === "suggestion");
+  const handleDislike = (id) => {
+    setDislikedIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setExpandedId(null);
+    setRevealedId(null);
+  };
+
 
   // Helper: distance between two coord-bearing items in meters (straight-line)
   const distMetersBetween = (a, b) => {
@@ -433,30 +625,96 @@ export default function TimelineScreen({
     return tlHaversineKm([a.lat, a.lng], [b.lat, b.lng]) * 1000;
   };
 
-  const rows = [];
-  confirmedItems.forEach((item, i) => {
-    rows.push({ kind: "card", item, isFirst: i === 0, key: `card-${item.id}` });
-    if (i < confirmedItems.length - 1) {
-      const next = confirmedItems[i + 1];
-      rows.push({
-        kind: "walk",
-        walkMin: next.walkMin,
-        distM: distMetersBetween(item, next),
-        key: `walk-between-${item.id}`,
+  // Suggestion placement:
+  //   - No confirmed stops: render in proximity order to the user.
+  //   - With confirmed stops: each suggestion attaches to the confirmed stop
+  //     it's closest to, and renders immediately after that stop.
+  const suggestionsByConfirmed = new Map();
+  confirmedItems.forEach((c) => suggestionsByConfirmed.set(c.id, []));
+  if (confirmedItems.length > 0) {
+    suggestionItems.forEach((s) => {
+      let best = confirmedItems[0];
+      let bestD = Infinity;
+      confirmedItems.forEach((c) => {
+        const d = distMetersBetween(s, c);
+        if (d !== null && d < bestD) { bestD = d; best = c; }
       });
-    }
-  });
-  // Single horizontally-scrolling row of suggestion pills (same look as the
-  // HomeScreen's add-state pills — dot+icon + name + "+").
-  if (suggestionItems.length > 0) {
-    rows.push({ kind: "suggest-row", items: suggestionItems, key: "suggest-row" });
+      suggestionsByConfirmed.get(best.id).push({ s, d: bestD });
+    });
+    suggestionsByConfirmed.forEach((arr) => arr.sort((a, b) => a.d - b.d));
   }
+
+  // Once the user has successfully revealed an action stack, expanded a
+  // card, or started a drag-reorder, kill the hint — they've found the
+  // gesture and the bounce becomes noise.
+  useEffect(() => {
+    if (showSwipeHint && (revealedId || expandedId || draggingId)) {
+      setShowSwipeHint(false);
+    }
+  }, [showSwipeHint, revealedId, expandedId, draggingId]);
+
+  const rows = [];
+  if (confirmedItems.length === 0) {
+    if (suggestionItems.length > 0) {
+      rows.push({ kind: "pin", key: "pin-top" });
+    }
+    suggestionItems.forEach((it) => {
+      rows.push({ kind: "card", item: it, isFirst: false, key: `card-${it.id}` });
+    });
+  } else {
+    confirmedItems.forEach((item, i) => {
+      rows.push({ kind: "card", item, isFirst: i === 0, key: `card-${item.id}` });
+      (suggestionsByConfirmed.get(item.id) || []).forEach(({ s }) => {
+        rows.push({ kind: "card", item: s, isFirst: false, key: `card-${s.id}` });
+      });
+      if (i < confirmedItems.length - 1) {
+        const next = confirmedItems[i + 1];
+        rows.push({
+          kind: "walk",
+          walkMin: next.walkMin,
+          distM: distMetersBetween(item, next),
+          fromName: item.name,
+          toName: next.name,
+          key: `walk-between-${item.id}`,
+        });
+      }
+    });
+  }
+
+  const firstCardItemId = rows.find((r) => r.kind === "card")?.item?.id ?? null;
 
   return (
     <div className={`tl-screen${closing ? " tl-screen--closing" : ""}`}>
-      {/* ── Top bar: title only ── */}
+      {/* ── Top bar: title + lightbulb suggestions toggle ── */}
       <div className="tl-topbar">
         <span className="tl-suggestions-title">Your current exploration</span>
+        <button
+          type="button"
+          className="tl-bulb-btn"
+          onClick={() => setShowSuggestions((v) => !v)}
+          aria-pressed={showSuggestions}
+          aria-label={showSuggestions ? "Hide suggestions" : "Show suggestions"}
+          title={showSuggestions ? "Hide suggestions" : "Show suggestions"}
+        >
+          {showSuggestions ? (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18h6" />
+              <path d="M10 22h4" />
+              <path d="M12 2a7 7 0 0 0-4 12.7 4 4 0 0 1 1.5 3.1V18h5v-.2a4 4 0 0 1 1.5-3.1A7 7 0 0 0 12 2z" />
+            </svg>
+          ) : (
+            <>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18h6" />
+                <path d="M10 22h4" />
+                <path d="M12 2a7 7 0 0 0-4 12.7 4 4 0 0 1 1.5 3.1V18h5v-.2a4 4 0 0 1 1.5-3.1A7 7 0 0 0 12 2z" />
+              </svg>
+              <svg className="tl-bulb-slash" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="20" x2="20" y2="4" />
+              </svg>
+            </>
+          )}
+        </button>
       </div>
 
       {/* ── Timeline ── */}
@@ -474,40 +732,11 @@ export default function TimelineScreen({
         {rows.length > 0 && <div className="tl-rail" />}
 
         {rows.map((row) => {
-          if (row.kind === "suggest-row") {
+          if (row.kind === "pin") {
             return (
-              <div className="tl-row tl-row--suggest-row" key={row.key}>
-                <div className="tl-rail-cell" />
-                <div className="tl-content-cell">
-                  <div className="location-card-carousel tl-suggest-carousel">
-                    {row.items.map((it) => (
-                      <div className="location-card" key={`suggest-${it.id}`}>
-                        <div className="location-card-info">
-                          <div className="location-card-name-row">
-                            <span className="location-card-name">{it.name}</span>
-                            <button
-                              type="button"
-                              className="location-card-add"
-                              onClick={() => handleAdd(it.id)}
-                              aria-label={`Add ${it.name} to your journey`}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.6" strokeLinecap="round">
-                                <line x1="12" y1="5" x2="12" y2="19"/>
-                                <line x1="5" y1="12" x2="19" y2="12"/>
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="location-card-category">
-                            <span className="material-symbols-rounded location-card-icon">
-                              {TL_CATEGORY_ICONS[it.category] || "location_on"}
-                            </span>
-                            <span className="location-card-address">{it.category}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="tl-row tl-row--pin-only" key={row.key}>
+                <div className="tl-rail-cell"><RailPin /></div>
+                <div className="tl-content-cell" />
               </div>
             );
           }
@@ -516,11 +745,18 @@ export default function TimelineScreen({
               <div className="tl-row tl-row--walk" key={row.key}>
                 <div className="tl-rail-cell" />
                 <div className="tl-content-cell">
-                  <span className="tl-walk-label">
-                    {row.distM !== null && <span>{fmtImperial(row.distM)}</span>}
-                    {row.distM !== null && <span className="tl-walk-dot">·</span>}
-                    <span>{row.walkMin} min walk</span>
-                  </span>
+                  <div className="tl-walk-label">
+                    <div className="tl-walk-primary">
+                      {row.distM !== null && <span>{fmtImperial(row.distM)}</span>}
+                      {row.distM !== null && <span className="tl-walk-dot">·</span>}
+                      <span>{row.walkMin} min walk</span>
+                    </div>
+                    {row.fromName && row.toName && (
+                      <div className="tl-walk-secondary">
+                        from {row.fromName} to {row.toName}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -529,11 +765,31 @@ export default function TimelineScreen({
           const { item } = row;
           const isSuggestion = item.type === "suggestion";
           const isExpanded = expandedId === item.id;
+          const isVisited = !isSuggestion && (visitedIds?.has(item.id) ?? false);
+          const isCurrentTarget = !isSuggestion && item.id === currentTargetId;
+          const isReorderable = !isSuggestion && reorderableIds.includes(item.id);
+          const isBeingDragged = draggingId === item.id;
+          // First-card swipe hint applies to whichever card is rendered first
+          // in the rows list (could be a confirmed stop or, when nothing is
+          // confirmed, the top suggestion). Suppressed during any user
+          // interaction with this card so the inline transform wins.
+          const isFirstCard = item.id === firstCardItemId;
 
           return (
-            <div className={`tl-row tl-row--card ${isSuggestion ? "tl-row--suggestion" : ""}`} key={row.key}>
+            <div
+              className={`tl-row tl-row--card ${isSuggestion ? "tl-row--suggestion" : ""} ${isVisited ? "tl-row--visited" : ""}`}
+              key={row.key}
+              ref={isReorderable ? setRowRef(item.id) : undefined}
+            >
               <div className="tl-rail-cell">
-                <div className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}`} aria-hidden="true" />
+                {isCurrentTarget ? (
+                  <RailPin />
+                ) : (
+                  <div
+                    className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}${isVisited ? " tl-rail-node--visited" : ""}`}
+                    aria-hidden="true"
+                  />
+                )}
               </div>
               <div className="tl-content-cell">
                 {isExpanded ? (
@@ -546,52 +802,109 @@ export default function TimelineScreen({
                 ) : (() => {
                   const isDragging = swipe.id === item.id;
                   const isRevealed = revealedId === item.id && !isDragging;
-                  const dx = isDragging ? swipe.dx : (isRevealed ? REVEALED_OFFSET : 0);
-                  const transition = isDragging ? "none" : "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)";
+                  const cardOffset = isSuggestion ? REVEALED_SUGGESTION : REVEALED_CONFIRMED;
+                  const dx = isDragging ? swipe.dx : (isRevealed ? cardOffset : 0);
+                  const swipeTransition = isDragging ? "none" : "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)";
+                  // While the user is reorder-dragging this card, the
+                  // translateY follows the pointer and translateX is 0.
+                  const cardTransform = isBeingDragged
+                    ? `translateY(${dragDeltaY}px)`
+                    : `translateX(${dx}px)`;
+                  const cardTransition = isBeingDragged ? "none" : swipeTransition;
+                  // Visited cards: no swipe-to-reveal action stack.
+                  const showActions = !isVisited;
+                  // Show the bouncy hint only on the first card, only when
+                  // the user isn't currently touching/expanding/dragging it.
+                  const showHint =
+                    showSwipeHint &&
+                    isFirstCard &&
+                    !isVisited &&
+                    !isExpanded &&
+                    !isDragging &&
+                    !isBeingDragged &&
+                    !isRevealed;
                   return (
                 <div className={`tl-card-swipe ${isRevealed || isDragging ? "tl-card-swipe--active" : ""}`}>
-                  {!isSuggestion && (
-                    <button
-                      className="tl-card-remove-action"
-                      onClick={() => handleRemove(item.id)}
-                      aria-label={`Remove ${item.name}`}
-                      tabIndex={isRevealed ? 0 : -1}
-                    >
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round">
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                    </button>
+                  {showActions && (
+                    <div className="tl-card-actions" style={{ width: Math.max(0, -dx) }}>
+                      {isSuggestion ? (
+                        <>
+                          <button
+                            className="tl-card-action tl-card-action--add"
+                            style={{ right: 136 }}
+                            onClick={() => handleAdd(item.id)}
+                            aria-label={`Add ${item.name} to your plan`}
+                            tabIndex={isRevealed ? 0 : -1}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            <span className="tl-card-action-label">Add</span>
+                          </button>
+                          <button
+                            className="tl-card-action tl-card-action--dismiss"
+                            style={{ right: 68 }}
+                            onClick={() => handleDismiss(item.id)}
+                            aria-label={`Dismiss ${item.name}`}
+                            tabIndex={isRevealed ? 0 : -1}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round">
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                            </svg>
+                            <span className="tl-card-action-label">Dismiss</span>
+                          </button>
+                          <button
+                            className="tl-card-action tl-card-action--dislike"
+                            style={{ right: 0 }}
+                            onClick={() => handleDislike(item.id)}
+                            aria-label={`Dislike ${item.name}`}
+                            tabIndex={isRevealed ? 0 : -1}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M17 14V2" />
+                              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+                            </svg>
+                            <span className="tl-card-action-label">Dislike</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="tl-card-action tl-card-action--remove"
+                          style={{ right: 0 }}
+                          onClick={() => handleRemove(item.id)}
+                          aria-label={`Skip ${item.name}`}
+                          tabIndex={isRevealed ? 0 : -1}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none" aria-hidden="true">
+                            <polygon points="4 5 13 12 4 19 4 5" />
+                            <polygon points="13 5 22 12 13 19 13 5" />
+                          </svg>
+                          <span className="tl-card-action-label">Skip</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                   <div
-                    className={`tl-card ${isSuggestion ? "tl-card--suggestion" : ""}`}
+                    className={`tl-card ${isSuggestion ? "tl-card--suggestion" : ""} ${isVisited ? "tl-card--visited" : ""} ${isBeingDragged ? "tl-card--reorder-dragging" : ""} ${showHint ? "tl-card--hint-swipe" : ""}`}
                     onClick={() => onCardClick(item.id)}
-                    onPointerDown={(e) => onCardPointerDown(e, item.id, !isSuggestion)}
+                    onPointerDown={(e) => onCardPointerDown(e, item.id, cardOffset, { isVisited, isReorderable, reorderableIds })}
                     onPointerMove={onCardPointerMove}
                     onPointerUp={onCardPointerUp}
                     onPointerCancel={onCardPointerUp}
-                    style={{ transform: `translateX(${dx}px)`, transition }}
+                    style={{ transform: cardTransform, transition: cardTransition }}
                   >
                     <div className="tl-card-icon" aria-hidden="true">
                       <span className="material-symbols-rounded">
-                        {TL_CATEGORY_ICONS[item.category] || "location_on"}
+                        {isVisited ? "check" : (TL_CATEGORY_ICONS[item.category] || "location_on")}
                       </span>
                     </div>
                     <div className="tl-card-text">
                       <span className="tl-card-name">{item.name}</span>
-                      <span className="tl-card-cat">{item.category}</span>
+                      <span className="tl-card-cat">{isVisited ? "Visited" : item.category}</span>
+                      <CardWarningTags item={item} />
                     </div>
-                    {!isSuggestion
-                      && journeyItems.length > 1
-                      && item.id !== confirmedItems[confirmedItems.length - 1]?.id && (
-                      <button
-                        type="button"
-                        className="tl-card-skip-btn"
-                        onClick={(e) => { e.stopPropagation(); handleSkipStop(item.id); }}
-                        aria-label={`Skip ${item.name}`}
-                      >
-                        Skip
-                      </button>
-                    )}
                   </div>
                 </div>
                   );
