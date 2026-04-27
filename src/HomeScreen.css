@@ -25,6 +25,22 @@
   background: var(--color-bg);
 }
 
+/* On actual phone-sized viewports, drop the design-prototype chrome
+   (rounded corners, drop shadow, fixed 375x812 box) and let the app
+   fill the entire screen. On wider screens we keep the framed preview
+   so the design still reads as a phone mockup. `dvh` accounts for
+   iOS Safari's dynamic toolbar; falls back to vh on older browsers. */
+@media (max-width: 500px) {
+  .phone-frame {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
 /* ── Map ── */
 .map-perspective-wrapper { position: absolute; inset: 0; z-index: 0; }
 .map-container           { position: absolute; inset: 0; }

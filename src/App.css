@@ -7,6 +7,16 @@
   padding: 40px 0;
 }
 
+/* On phone-sized viewports, drop the desktop preview's vertical padding
+   so the phone-frame's full-screen sizing actually reaches the edges. */
+@media (max-width: 500px) {
+  .App {
+    padding: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
 .App-logo {
   height: 40vmin;
   pointer-events: none;
