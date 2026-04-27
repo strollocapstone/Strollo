@@ -817,9 +817,9 @@ export default function TimelineScreen({
       <div className="tl-timeline">
         {rows.length === 0 && (
           <div className="tl-empty">
-            <p>No suggestions yet.</p>
-            <p className="tl-empty-hint">
-              Visit the Map tab and ask Strollo for places nearby — they'll show up here.
+            <p className="tl-empty-title">No stops added to your exploration!</p>
+            <p className="tl-empty-body">
+              Add suggested stops from the map or ask Strollo for some suggestions.
             </p>
           </div>
         )}
