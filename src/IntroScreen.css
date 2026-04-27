@@ -23,95 +23,73 @@
 /* ── Animation stage ────────────────────────────────────────────────────── */
 .intro-stage {
   position: relative;
-  width: 220px;
-  height: 240px;
+  width: 240px;
+  height: 260px;
   margin: 24px auto 28px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  overflow: hidden;
+  /* Soft bottom-to-top fade so bubbles emerge gently and dissolve at the top
+     instead of cropping at the stage edges. */
+  -webkit-mask-image: linear-gradient(
+    to top,
+    transparent 0%,
+    black 18%,
+    black 82%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to top,
+    transparent 0%,
+    black 18%,
+    black 82%,
+    transparent 100%
+  );
 }
 
-/* Pocket sits at the bottom of the stage */
-.intro-pocket {
+/* Walk-themed emojis bubbling up from the bottom. Each bubble carries its
+   own --drift and --scale via inline style; the keyframes use those vars
+   so all bubbles share one animation but feel distinct. */
+.intro-bubble {
   position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
-  width: 200px;
-  height: 180px;
-  filter: drop-shadow(0 12px 18px rgba(30, 21, 65, 0.18));
-  z-index: 2;
-}
-
-/* Phone — starts above the pocket and slides DOWN behind the front lip.
-   z-index 1 keeps it tucked behind the front of the pocket (z-index 2). */
-.intro-phone {
-  position: absolute;
-  left: 50%;
-  bottom: 32px; /* final resting height inside the pocket */
-  transform: translateX(-50%);
-  width: 64px;
-  height: 116px;
-  z-index: 1;
-  animation: intro-phone-slide 3600ms cubic-bezier(0.5, 0.05, 0.3, 1) infinite;
-}
-
-@keyframes intro-phone-slide {
-  /* Phone hovers above pocket */
-  0%   { transform: translate(-50%, -120px); opacity: 0; }
-  12%  { transform: translate(-50%, -120px); opacity: 1; }
-  /* Slides down and into the pocket */
-  42%  { transform: translate(-50%, 0);      opacity: 1; }
-  /* Settles for a beat (haptic ring + waves play during this hold) */
-  78%  { transform: translate(-50%, 0);      opacity: 1; }
-  /* Lifts back out for the loop */
-  92%  { transform: translate(-50%, -120px); opacity: 0.6; }
-  100% { transform: translate(-50%, -120px); opacity: 0; }
-}
-
-/* ── Glowing haptic rings ─────────────────────────────────────────────── */
-.intro-ring {
-  position: absolute;
-  left: 50%;
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  /* Soft gradient ring + glow instead of a flat purple stroke. */
-  border: 2px solid rgba(136, 81, 212, 0.55);
-  background: radial-gradient(circle, rgba(136, 81, 212, 0.18) 0%, transparent 65%);
-  box-shadow: 0 0 18px rgba(136, 81, 212, 0.25);
+  bottom: -12%;
+  font-size: 38px;
+  line-height: 1;
+  transform: translate(-50%, 0) scale(var(--scale, 1));
   opacity: 0;
   pointer-events: none;
-  z-index: 0;
+  filter: drop-shadow(0 6px 12px rgba(30, 21, 65, 0.16));
+  animation-name: intro-bubble-rise;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.32, 0.0, 0.32, 1);
+  will-change: transform, opacity;
 }
-/* Rings rising from the pocket */
-.intro-ring--1,
-.intro-ring--2 {
-  bottom: 60px;
-  transform: translate(-50%, 50%) scale(0.4);
-}
-.intro-ring--1 { animation: intro-ring-bottom 3600ms ease-out infinite; }
-.intro-ring--2 { animation: intro-ring-bottom 3600ms ease-out 480ms infinite; }
-@keyframes intro-ring-bottom {
-  0%, 42%   { transform: translate(-50%, 50%) scale(0.4); opacity: 0; }
-  46%       { opacity: 0.55; }
-  68%       { transform: translate(-50%, 50%) scale(1.6); opacity: 0; }
-  100%      { transform: translate(-50%, 50%) scale(1.6); opacity: 0; }
-}
-/* Mirrored rings expanding upward from where the phone sits — replaces the
-   old straight sound-wave arcs with the same visual treatment as the bottom
-   rings, just pulsing in the opposite direction. */
-.intro-ring--top {
-  top: 36px;
-  transform: translate(-50%, -50%) scale(0.4);
-}
-.intro-ring--top-1 { animation: intro-ring-top 3600ms ease-out 220ms infinite; }
-.intro-ring--top-2 { animation: intro-ring-top 3600ms ease-out 700ms infinite; }
-@keyframes intro-ring-top {
-  0%, 42%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
-  46%       { opacity: 0.55; }
-  68%       { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
-  100%      { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+
+@keyframes intro-bubble-rise {
+  0% {
+    transform: translate(-50%, 0) scale(calc(var(--scale, 1) * 0.6)) rotate(-6deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -30px) scale(var(--scale, 1)) rotate(0deg);
+  }
+  50% {
+    transform:
+      translate(calc(-50% + var(--drift, 0px)), -150px)
+      scale(var(--scale, 1)) rotate(8deg);
+    opacity: 1;
+  }
+  85% {
+    transform:
+      translate(calc(-50% + var(--drift, 0px) * 1.5), -260px)
+      scale(calc(var(--scale, 1) * 0.92)) rotate(-6deg);
+    opacity: 0.7;
+  }
+  100% {
+    transform:
+      translate(calc(-50% + var(--drift, 0px) * 2), -320px)
+      scale(calc(var(--scale, 1) * 0.8)) rotate(2deg);
+    opacity: 0;
+  }
 }
 
 /* ── Copy ───────────────────────────────────────────────────────────────── */
@@ -164,11 +142,12 @@
   box-shadow: 0 2px 8px rgba(255, 213, 1, 0.35);
 }
 
-/* ── Reduced motion: still show the phone in the pocket, skip the loop ── */
+/* ── Reduced motion: hold each bubble at a static mid-stage position
+   instead of looping the rise animation. ── */
 @media (prefers-reduced-motion: reduce) {
-  .intro-phone {
+  .intro-bubble {
     animation: none;
-    transform: translate(-50%, 0);
+    opacity: 0.85;
+    transform: translate(-50%, -130px) scale(var(--scale, 1));
   }
-  .intro-ring { animation: none; opacity: 0.4; }
 }
