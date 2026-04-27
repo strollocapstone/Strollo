@@ -770,14 +770,21 @@ export default function HomeScreen({
     if (stop) toggleStopByName(stop.name);
   }, [suggestedStops, toggleStopByName]);
 
-  // Scroll messages to bottom whenever content changes. rAF defers the
-  // scroll until after layout so scrollHeight reflects the just-mounted
-  // suggest rail, not the previous (bubble-only) state.
+  // Scroll the LAST AI message bubble to the top of the messages viewport
+  // when content changes, so the user sees the warm acknowledgement first
+  // and the suggest rail just below. Falls back to scrolling the container
+  // to its bottom if no bubble is found.
   useEffect(() => {
     const el = chatMsgsDomRef.current;
     if (!el) return;
     const id = requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      const lastAi = el.querySelectorAll('.chat-msg--ai');
+      const target = lastAi[lastAi.length - 1];
+      if (target) {
+        el.scrollTop = target.offsetTop - el.offsetTop;
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     });
     return () => cancelAnimationFrame(id);
   }, [chatMessages, suggestedStops, chatLoading]);
