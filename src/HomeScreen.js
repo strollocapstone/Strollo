@@ -44,7 +44,9 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
     html: `<div class="${classes.join(' ')}">
     ${isPill && added && !expanded && sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
     <div class="sugg-pin-dot">
-      <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+      ${added && sequence
+        ? `<span class="sugg-pin-dot-number">${sequence}</span>`
+        : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
     </div>
     ${!isMini ? `<span class="${isPill ? 'sugg-pin-name' : 'sugg-pin-label'}">${name}</span>` : ''}
     ${isPill && expanded ? `<div class="sugg-pin-extra">
