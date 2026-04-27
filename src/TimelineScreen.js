@@ -155,20 +155,35 @@ function warningTagsForItem(item) {
 // nothing is confirmed yet).
 function RailPin() {
   return (
+    <span className="tl-rail-boots" aria-label="You are here" role="img">
+      <svg className="tl-rail-foot tl-rail-foot--left" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#1E1541"/>
+        <line x1="6" y1="14" x2="17" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+        <line x1="6" y1="19" x2="17" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+      </svg>
+      <svg className="tl-rail-foot tl-rail-foot--right" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 2 C23 2 25 5 25 10 L25 32 C25 38 23 44 18 44 L11 44 C8 44 6 42 5 38 L4 32 C4 28 6 26 9 26 L10 26 L10 10 C10 5 12 2 15 2 Z" fill="#1E1541"/>
+        <line x1="11" y1="14" x2="22" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+        <line x1="11" y1="19" x2="22" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+      </svg>
+    </span>
+  );
+}
+
+function FinalStopPin() {
+  return (
     <svg
-      className="tl-rail-pin"
-      width="22"
-      height="22"
+      className="tl-rail-final-pin"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       fill="#8851D4"
-      stroke="white"
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-      aria-label="You are here"
+      stroke="none"
+      aria-label="Final stop"
       role="img"
     >
       <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z" />
-      <circle cx="12" cy="10" r="2.6" fill="white" stroke="none" />
+      <circle cx="12" cy="10" r="2.6" fill="white" />
     </svg>
   );
 }
@@ -188,7 +203,7 @@ function CardWarningTags({ item }) {
   );
 }
 
-function CardDetail({ item, onCollapse, onAdd }) {
+function CardDetail({ item, onCollapse, onAdd, onDismiss, onDislike }) {
   const mapsQuery = item.lat && item.lng
     ? `${item.lat},${item.lng}`
     : encodeURIComponent(item.name);
@@ -243,12 +258,39 @@ function CardDetail({ item, onCollapse, onAdd }) {
       </div>
 
       {item.type === "suggestion" && (
-        <div className="tl-detail-actions">
+        <div className="tl-detail-actions tl-detail-actions--suggestion">
           <button
-            className="tl-btn tl-btn--primary"
+            className="tl-card-action tl-card-action--add tl-detail-action"
             onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            aria-label={`Add ${item.name} to your plan`}
           >
-            Add to Timeline
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span className="tl-card-action-label">Add</span>
+          </button>
+          <button
+            className="tl-card-action tl-card-action--dismiss tl-detail-action"
+            onClick={(e) => { e.stopPropagation(); onDismiss?.(); }}
+            aria-label={`Dismiss ${item.name}`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+            <span className="tl-card-action-label">Dismiss</span>
+          </button>
+          <button
+            className="tl-card-action tl-card-action--dislike tl-detail-action"
+            onClick={(e) => { e.stopPropagation(); onDislike?.(); }}
+            aria-label={`Dislike ${item.name}`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 14V2" />
+              <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+            </svg>
+            <span className="tl-card-action-label">Dislike</span>
           </button>
         </div>
       )}
@@ -310,13 +352,39 @@ export default function TimelineScreen({
   visitedIds,
   userLocation,
   tripStartTime,
-  onEndWalk,
   onGoBack,
   journeyItems = [],
   onJourneyChange,
   preferences,
 }) {
   const [closing, setClosing] = useState(false);
+  const screenRef = React.useRef(null);
+  const [isScrollable, setIsScrollable] = useState(false);
+  const [userLocationLabel, setUserLocationLabel] = useState("");
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    const [lat, lng] = userLocation;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const a = data?.address || {};
+        const label =
+          a.amenity ||
+          a.shop ||
+          a.building ||
+          [a.house_number, a.road].filter(Boolean).join(" ") ||
+          a.neighbourhood ||
+          a.suburb ||
+          a.city ||
+          data?.display_name?.split(",").slice(0, 2).join(", ");
+        if (label) setUserLocationLabel(label);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [userLocation]);
   const handleClose = () => {
     if (closing || !onGoBack) return;
     setClosing(true);
@@ -544,9 +612,17 @@ export default function TimelineScreen({
   const confirmedItems = confirmedPlaces.map((p, i) =>
     buildItem(p, i > 0 ? confirmedPlaces[i - 1] : userPoint, "confirmed")
   );
-  // The current-target = first non-visited confirmed stop. Drives the rail
-  // pin position. Reorderable = non-visited confirmed (current + future).
-  const currentTargetId = confirmedItems.find((c) => !visitedIds?.has(c.id))?.id ?? null;
+  // The current-target = first non-visited confirmed stop. Only used to place
+  // the boots inline once the user has actually visited at least one stop.
+  // Until then, the boots+address sit at the top of the rail above all stops.
+  const hasVisited = (visitedIds?.size ?? 0) > 0;
+  const currentTargetId = hasVisited
+    ? confirmedItems.find((c) => !visitedIds?.has(c.id))?.id ?? null
+    : null;
+  // Final-stop = last confirmed item; gets a destination pin instead of a dot.
+  const finalStopId = confirmedItems.length > 0
+    ? confirmedItems[confirmedItems.length - 1].id
+    : null;
   const reorderableIds = confirmedItems
     .filter((c) => !visitedIds?.has(c.id))
     .map((c) => c.id);
@@ -654,10 +730,12 @@ export default function TimelineScreen({
   }, [showSwipeHint, revealedId, expandedId, draggingId]);
 
   const rows = [];
+  // Show the boots+address row at the top whenever the user hasn't walked to
+  // a stop yet (regardless of whether stops are queued up below).
+  if (!hasVisited && (confirmedItems.length > 0 || suggestionItems.length > 0)) {
+    rows.push({ kind: "pin", key: "pin-top" });
+  }
   if (confirmedItems.length === 0) {
-    if (suggestionItems.length > 0) {
-      rows.push({ kind: "pin", key: "pin-top" });
-    }
     suggestionItems.forEach((it) => {
       rows.push({ kind: "card", item: it, isFirst: false, key: `card-${it.id}` });
     });
@@ -683,8 +761,26 @@ export default function TimelineScreen({
 
   const firstCardItemId = rows.find((r) => r.kind === "card")?.item?.id ?? null;
 
+  useEffect(() => {
+    const el = screenRef.current;
+    if (!el) return;
+    const update = () => {
+      const overflowing = el.scrollHeight > el.clientHeight + 1;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      setIsScrollable(overflowing && !atBottom);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro?.disconnect();
+    };
+  }, [rows.length, expandedId]);
+
   return (
-    <div className={`tl-screen${closing ? " tl-screen--closing" : ""}`}>
+    <div ref={screenRef} className={`tl-screen${closing ? " tl-screen--closing" : ""}`}>
       {/* ── Top bar: title + lightbulb suggestions toggle ── */}
       <div className="tl-topbar">
         <span className="tl-suggestions-title">Your current exploration</span>
@@ -736,7 +832,11 @@ export default function TimelineScreen({
             return (
               <div className="tl-row tl-row--pin-only" key={row.key}>
                 <div className="tl-rail-cell"><RailPin /></div>
-                <div className="tl-content-cell" />
+                <div className="tl-content-cell">
+                  <span className="tl-you-are-here">
+                    {userLocationLabel || "You are here"}
+                  </span>
+                </div>
               </div>
             );
           }
@@ -784,6 +884,8 @@ export default function TimelineScreen({
               <div className="tl-rail-cell">
                 {isCurrentTarget ? (
                   <RailPin />
+                ) : !isSuggestion && item.id === finalStopId ? (
+                  <FinalStopPin />
                 ) : (
                   <div
                     className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}${isVisited ? " tl-rail-node--visited" : ""}`}
@@ -798,6 +900,8 @@ export default function TimelineScreen({
                     onCollapse={() => setExpandedId(null)}
                     onAdd={() => handleAdd(item.id)}
                     onRemove={() => handleRemove(item.id)}
+                    onDismiss={() => handleDismiss(item.id)}
+                    onDislike={() => handleDislike(item.id)}
                   />
                 ) : (() => {
                   const isDragging = swipe.id === item.id;
@@ -836,7 +940,7 @@ export default function TimelineScreen({
                             aria-label={`Add ${item.name} to your plan`}
                             tabIndex={isRevealed ? 0 : -1}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                               <line x1="12" y1="5" x2="12" y2="19" />
                               <line x1="5" y1="12" x2="19" y2="12" />
                             </svg>
@@ -849,7 +953,7 @@ export default function TimelineScreen({
                             aria-label={`Dismiss ${item.name}`}
                             tabIndex={isRevealed ? 0 : -1}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                               <line x1="6" y1="6" x2="18" y2="18" />
                               <line x1="18" y1="6" x2="6" y2="18" />
                             </svg>
@@ -862,7 +966,7 @@ export default function TimelineScreen({
                             aria-label={`Dislike ${item.name}`}
                             tabIndex={isRevealed ? 0 : -1}
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M17 14V2" />
                               <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
                             </svg>
@@ -877,7 +981,7 @@ export default function TimelineScreen({
                           aria-label={`Skip ${item.name}`}
                           tabIndex={isRevealed ? 0 : -1}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
                             <polygon points="4 5 13 12 4 19 4 5" />
                             <polygon points="13 5 22 12 13 19 13 5" />
                           </svg>
@@ -915,8 +1019,8 @@ export default function TimelineScreen({
         })}
       </div>
 
-      {/* ── Sticky bottom bar: Map (primary) · End ── */}
-      <div className="tl-bottom-bar">
+      {/* ── Sticky bottom bar: Map (primary) ── */}
+      <div className={`tl-bottom-bar${isScrollable ? " tl-bottom-bar--scrollable" : ""}`}>
         <button className="tl-back-btn" onClick={handleClose} aria-label="Back to map">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21" />
@@ -925,7 +1029,6 @@ export default function TimelineScreen({
           </svg>
           <span>Back to map</span>
         </button>
-        <button className="tl-end-btn" onClick={onEndWalk}>End</button>
       </div>
     </div>
   );
