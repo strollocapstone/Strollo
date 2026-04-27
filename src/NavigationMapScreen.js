@@ -27,9 +27,10 @@ const stopLabelIcon = (name, desc, sequence) => {
   return L.divIcon({
     className: "",
     html: `<div class="sugg-pin sugg-pin--added">
-      ${sequence ? `<div class="sugg-pin-badge">${sequence}</div>` : ''}
       <div class="sugg-pin-dot">
-        <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
+        ${sequence
+          ? `<span class="sugg-pin-dot-number">${sequence}</span>`
+          : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
       </div>
       <span class="sugg-pin-name">${name}</span>
     </div>`,
