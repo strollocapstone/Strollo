@@ -120,7 +120,7 @@ const BLOB_OFFSETS = [
 ];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, vibePreferences, showVoice = true }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -198,6 +198,15 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
       out.add(nextTarget.id);
       return out;
     });
+    // Stamp the arrival time so the Reward screen can compute real per-stop
+    // dwell minutes (next stop's arrival - this stop's arrival).
+    if (setVisitedAt) {
+      setVisitedAt((prev) => {
+        const out = new Map(prev);
+        out.set(nextTarget.id, Date.now());
+        return out;
+      });
+    }
   };
 
   // Apply voice-extracted edit actions to the journey
@@ -531,7 +540,7 @@ export default function NavigationMapScreen({ onGoBack, onSetConstraints, onOpen
               }
             }}
             onCheckJourney={onOpenTimeline}
-            onEnd={onGoBack}
+            onEnd={onEndWalk || onGoBack}
           />
         );
       })()}

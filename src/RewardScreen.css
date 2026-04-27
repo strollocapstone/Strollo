@@ -211,11 +211,28 @@
   width: 100px;
   height: 100px;
   box-shadow:
-    0 0 0 6px rgba(255, 213, 1, 0.35),
-    0 8px 18px rgba(52, 35, 62, 0.14);
+    0 0 0 6px rgba(255, 213, 1, 0.45),
+    0 0 28px 6px rgba(255, 213, 1, 0.40),
+    0 8px 18px rgba(52, 35, 62, 0.16);
   animation:
     reward-stop-pop 620ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards,
-    reward-hero-halo 3.6s ease-in-out 700ms infinite;
+    reward-hero-halo 3.2s ease-in-out 700ms infinite;
+}
+
+/* Soft pulsing outer halo ring around the hero — sits behind the stop and
+   breathes outward to amplify the "this is the spot you loved" cue. */
+.reward-trail-halo {
+  position: absolute;
+  inset: -22px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 213, 1, 0.42) 0%, rgba(255, 213, 1, 0) 65%);
+  z-index: -1;
+  pointer-events: none;
+  animation: reward-trail-halo-pulse 3.2s ease-in-out infinite;
+}
+@keyframes reward-trail-halo-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.55; }
+  50%      { transform: scale(1.18); opacity: 0.95; }
 }
 
 .reward-trail-stop-inner {
@@ -269,35 +286,51 @@
 
 .reward-trail-sparkle {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: radial-gradient(circle, #FFFFFF 0%, #FFD501 55%, rgba(255, 213, 1, 0) 75%);
   z-index: 4;
   pointer-events: none;
-  filter: drop-shadow(0 0 6px rgba(255, 213, 1, 0.6));
+  filter: drop-shadow(0 0 8px rgba(255, 213, 1, 0.75));
 }
 
 .reward-trail-sparkle--a {
-  top: -4px;
-  left: 8px;
+  top: -8px;
+  left: 12px;
   animation: reward-sparkle 2.6s ease-in-out infinite;
 }
 
 .reward-trail-sparkle--b {
   top: 14px;
-  right: -6px;
-  width: 7px;
-  height: 7px;
+  right: -10px;
+  width: 9px;
+  height: 9px;
   animation: reward-sparkle 2.4s ease-in-out 700ms infinite;
 }
 
 .reward-trail-sparkle--c {
-  bottom: -2px;
-  left: -4px;
+  bottom: -6px;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  animation: reward-sparkle 2.8s ease-in-out 1400ms infinite;
+}
+
+.reward-trail-sparkle--d {
+  top: -2px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  animation: reward-sparkle 2.2s ease-in-out 350ms infinite;
+}
+
+.reward-trail-sparkle--e {
+  bottom: 18px;
+  right: -2px;
   width: 6px;
   height: 6px;
-  animation: reward-sparkle 2.8s ease-in-out 1400ms infinite;
+  animation: reward-sparkle 3s ease-in-out 1100ms infinite;
 }
 
 .reward-trail-label {
@@ -322,7 +355,7 @@
   font-family: "Unbounded", sans-serif;
   font-size: 16px;
   color: #34233E;
-  margin: 0 0 6px;
+  margin: 0 0 18px;
 }
 
 .reward-revisit-sub {
@@ -334,6 +367,8 @@
   letter-spacing: 0;
 }
 
+/* Visual treatment matches HomeScreen's .location-card so the suggested
+   spots and the revisit cards feel like one component. */
 .reward-revisit-card {
   display: flex;
   align-items: center;
@@ -345,7 +380,7 @@
   border: none;
   border-radius: 20px;
   padding: 12px 14px;
-  box-shadow: 0 4px 16px rgba(52, 35, 62, 0.06);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
   margin-bottom: 10px;
   animation: reward-slide-in 540ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
@@ -353,24 +388,38 @@
 .reward-revisit-text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
+/* Title — matches .location-card-name */
 .reward-revisit-name {
-  font-family: "Satoshi", sans-serif;
+  font-family: var(--font-ui);
   font-weight: 600;
   font-size: 14px;
-  color: #34233E;
+  color: #1E1541;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Category row — matches .location-card-category (icon + text) */
 .reward-revisit-cat {
-  font-family: "Satoshi", sans-serif;
-  font-size: 13px;
-  color: #3F2D4E;
-  opacity: 1;
-  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: #5A4B64;
+}
+.reward-revisit-icon {
+  font-size: 14px;
+  color: #8851D4;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .reward-revisit-note {
@@ -380,6 +429,14 @@
   color: #6B37B8;
   margin-top: 6px;
   line-height: 1.4;
+}
+
+/* Rating row holds both thumbs-up and thumbs-down side-by-side. */
+.reward-revisit-rating {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .reward-revisit-heart {
@@ -405,6 +462,244 @@
   transform: scale(1.25);
 }
 
+/* Thumbs-down: rounded but in a warmer rejection color so up vs. down read
+   as opposites at a glance. */
+.reward-revisit-heart--down {
+  color: #C97A6E;
+}
+.reward-revisit-heart--down:hover {
+  transform: scale(1.12) rotate(6deg);
+}
+
+/* ── Suggestions appearing beneath a thumbs-upped card ────────────────── */
+.reward-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -2px 0 14px 18px;
+  padding-left: 10px;
+  border-left: 2px dashed rgba(136, 81, 212, 0.35);
+  animation: reward-slide-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reward-suggestions-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: var(--color-body);
+  margin: 0 0 2px;
+}
+.reward-suggestions-empty {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: rgba(30, 21, 65, 0.55);
+  margin: 6px 0;
+}
+/* Same dashed-purple outline + frosted background as HomeScreen
+   .location-card default state. */
+.reward-suggestion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border: 1.5px dashed rgba(136, 81, 212, 0.55);
+  border-radius: 18px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+}
+.reward-suggestion-card .reward-revisit-text {
+  flex: 1;
+  min-width: 0;
+}
+.reward-suggestion-heart {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #8851D4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.reward-suggestion-heart:hover { transform: scale(1.12) rotate(-6deg); }
+.reward-suggestion-heart:active { transform: scale(1.25); }
+.reward-suggestion-heart--faved { animation: reward-heart-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* ── Feedback banner shown when a card is thumbs-downed ───────────────── */
+.reward-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -2px 0 14px 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(201, 122, 110, 0.12);
+  border: 1px solid rgba(201, 122, 110, 0.28);
+  animation: reward-slide-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reward-feedback-text {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: #1E1541;
+  margin: 0;
+  line-height: 1.4;
+}
+.reward-feedback-btn {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #8851D4;
+  font-family: "Satoshi", sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(136, 81, 212, 0.45);
+}
+.reward-feedback-btn:hover {
+  color: #6B37B8;
+  text-decoration-color: #6B37B8;
+}
+
+/* ── Empty state — ended a walk with nothing logged ───────────────────── */
+.reward-screen--empty {
+  background: linear-gradient(180deg, #FAF6FF 0%, #EAE0FA 100%);
+}
+.reward-bg-frost--solid {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.reward-scroll--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100%;
+  /* Bottom padding shrunk so the action pills sit closer to the screen edge,
+     creating more breathing room between them and the centered content. */
+  padding: 40px 28px 16px;
+  position: relative;
+  z-index: 1;
+}
+.reward-empty {
+  /* `margin: auto 0` centers this block vertically inside the flex column
+     while consuming all remaining space, which pushes the .reward-actions
+     row down to the bottom edge of the screen. */
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 320px;
+  width: 100%;
+  animation: reward-fade-up 500ms ease-out 60ms backwards;
+}
+.reward-empty-art {
+  width: 140px;
+  height: 140px;
+  margin-bottom: 18px;
+  filter: drop-shadow(0 8px 14px rgba(74, 59, 146, 0.20));
+  animation: reward-empty-bob 3.6s ease-in-out infinite alternate;
+}
+@keyframes reward-empty-bob {
+  from { transform: translateY(0)   rotate(-2deg); }
+  to   { transform: translateY(-6px) rotate(2deg); }
+}
+.reward-empty-title {
+  font-family: "Unbounded", sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #34233E;
+  margin: 0 0 28px; /* extra breathing room before the body */
+  letter-spacing: -0.2px;
+}
+.reward-empty-body {
+  font-family: "Satoshi", sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #5A4B64;
+  margin: 0;
+}
+/* Empty-state CTAs sit toward the bottom of the screen with a generous gap
+   above so the "Plan an exploration" pill doesn't crowd the body copy. */
+.reward-scroll--empty .reward-actions {
+  width: 100%;
+  max-width: 320px;
+  margin: 56px auto 0;
+}
+
+/* ── Drifting dark fog/smoke layer (empty state only) ─────────────────── */
+.reward-empty-fog {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.reward-empty-fog-puff {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(40, 28, 60, 0.30) 0%, rgba(40, 28, 60, 0.12) 40%, rgba(40, 28, 60, 0) 70%);
+  filter: blur(28px);
+  will-change: transform, opacity;
+}
+.reward-empty-fog-puff--1 {
+  width: 320px; height: 220px;
+  left: -22%; top: 8%;
+  animation: reward-fog-drift-a 18s ease-in-out infinite alternate;
+}
+.reward-empty-fog-puff--2 {
+  width: 280px; height: 200px;
+  right: -18%; top: 28%;
+  background: radial-gradient(circle, rgba(28, 22, 48, 0.34) 0%, rgba(28, 22, 48, 0.10) 40%, rgba(28, 22, 48, 0) 70%);
+  animation: reward-fog-drift-b 22s ease-in-out infinite alternate;
+}
+.reward-empty-fog-puff--3 {
+  width: 360px; height: 240px;
+  left: -14%; bottom: 18%;
+  background: radial-gradient(circle, rgba(50, 36, 70, 0.32) 0%, rgba(50, 36, 70, 0.10) 45%, rgba(50, 36, 70, 0) 75%);
+  animation: reward-fog-drift-c 26s ease-in-out infinite alternate;
+}
+.reward-empty-fog-puff--4 {
+  width: 260px; height: 180px;
+  right: -10%; bottom: -6%;
+  animation: reward-fog-drift-d 20s ease-in-out infinite alternate;
+}
+@keyframes reward-fog-drift-a {
+  0%   { transform: translate(0, 0)        scale(1);    opacity: 0.65; }
+  50%  { transform: translate(60px, 24px)  scale(1.12); opacity: 0.85; }
+  100% { transform: translate(40px, -18px) scale(1.05); opacity: 0.7;  }
+}
+@keyframes reward-fog-drift-b {
+  0%   { transform: translate(0, 0)        scale(1);    opacity: 0.55; }
+  50%  { transform: translate(-50px, 30px) scale(1.10); opacity: 0.75; }
+  100% { transform: translate(-30px, 10px) scale(0.95); opacity: 0.6;  }
+}
+@keyframes reward-fog-drift-c {
+  0%   { transform: translate(0, 0)         scale(1);    opacity: 0.6;  }
+  50%  { transform: translate(70px, -22px)  scale(1.15); opacity: 0.8;  }
+  100% { transform: translate(40px, -40px)  scale(1.05); opacity: 0.65; }
+}
+@keyframes reward-fog-drift-d {
+  0%   { transform: translate(0, 0)         scale(1);    opacity: 0.55; }
+  50%  { transform: translate(-60px, -30px) scale(1.08); opacity: 0.75; }
+  100% { transform: translate(-20px, -10px) scale(1);    opacity: 0.6;  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reward-empty-fog-puff { animation: none; opacity: 0.6; }
+}
+
 .reward-revisit-heart--faved {
   color: #8851D4;
   animation: reward-heart-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -414,20 +709,48 @@
 
 .reward-actions {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 12px;
   margin-top: 40px;
   animation: reward-fade-up 500ms ease-out 1100ms backwards;
 }
 
-.reward-share-btn {
-  flex: 1;
+/* "Oops, I'm not actually done" — full-width pill that shares the quiz
+   undo button's frosted-glass treatment (translucent white + blur + soft
+   shadow), with the icon and label sitting inline. */
+.reward-undo-pill {
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 0 18px;
-  height: 48px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: 0 2px 10px rgba(62, 42, 18, 0.12);
+  color: #1E1541;
+  font-family: "Satoshi", sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.15s ease-out, background 0.15s ease;
+}
+.reward-undo-pill:hover { background: rgba(255, 255, 255, 0.55); }
+.reward-undo-pill:active { transform: scale(0.98); }
+
+.reward-share-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  height: 44px; /* matches .reward-undo-pill so the two stacked CTAs align */
   border: none;
   border-radius: 999px;
   background: #FFD501;
