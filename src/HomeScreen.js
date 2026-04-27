@@ -1373,7 +1373,7 @@ export default function HomeScreen({
             <div className="listen-blob listen-blob--3" />
           </div>
 
-          <div className="search-handle" />
+          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)} />
 
           {/* State: idle — search input */}
           {!listenCardMode && (
