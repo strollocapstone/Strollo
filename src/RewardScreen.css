@@ -462,13 +462,18 @@
   transform: scale(1.25);
 }
 
-/* Thumbs-down: rounded but in a warmer rejection color so up vs. down read
-   as opposites at a glance. */
+/* Thumbs-down: red so up vs. down read as opposites at a glance. */
 .reward-revisit-heart--down {
-  color: #C97A6E;
+  color: #D43B3B;
 }
 .reward-revisit-heart--down:hover {
   transform: scale(1.12) rotate(6deg);
+}
+/* When the down button is toggled it also picks up the .--faved modifier
+   which would otherwise force the color back to brand purple — pin it to
+   red so the filled thumbs-down stays red. */
+.reward-revisit-heart--down.reward-revisit-heart--faved {
+  color: #D43B3B;
 }
 
 /* ── Suggestions appearing beneath a thumbs-upped card ────────────────── */
