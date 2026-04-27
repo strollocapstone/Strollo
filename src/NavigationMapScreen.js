@@ -85,24 +85,6 @@ const stopLabelIconMuted = (name, desc, expanded = false, removable = false) => 
   });
 };
 
-// ── Organic area-of-interest blob markers (atmospheric, behind route) ─────
-const ORGANIC_RADII = [
-  "65% 35% 50% 50% / 40% 60% 40% 60%",
-  "40% 60% 45% 55% / 55% 45% 60% 40%",
-  "55% 45% 60% 40% / 50% 50% 45% 55%",
-  "45% 55% 35% 65% / 60% 40% 55% 45%",
-  "60% 40% 55% 45% / 35% 65% 50% 50%",
-  "50% 50% 40% 60% / 45% 55% 60% 40%",
-  "35% 65% 55% 45% / 50% 50% 40% 60%",
-];
-
-const makeBlob = (w, h, rot, idx) => L.divIcon({
-  className: "",
-  html: `<div style="width:${w}px;height:${h}px;border-radius:${ORGANIC_RADII[idx % ORGANIC_RADII.length]};background:radial-gradient(ellipse at 42% 42%,rgba(136,81,212,0.15) 0%,rgba(136,81,212,0.06) 45%,transparent 70%);transform:rotate(${rot}deg);pointer-events:none;"></div>`,
-  iconSize: [w, h],
-  iconAnchor: [w / 2, h / 2],
-});
-
 // Auto-zoom the map to fit both the user and the next destination in the visible
 // area above the bottom card, at the highest zoom level that still fits. Padding
 // reserves vertical space for the navigation card (~260px including gap) and the
@@ -134,20 +116,6 @@ function computeBearing([lat1, lng1], [lat2, lng2]) {
   const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLng);
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
-
-// Scatter pattern — applied relative to a center lat/lng.
-const BLOB_OFFSETS = [
-  { dLat:  0.0045, dLng:  0.0025, w: 120, h:  90, rot:  15 },
-  { dLat: -0.0010, dLng: -0.0060, w: 180, h: 110, rot: -25 },
-  { dLat:  0.0008, dLng: -0.0005, w:  90, h:  70, rot:  40 },
-  { dLat: -0.0012, dLng:  0.0015, w:  70, h:  55, rot: -10 },
-  { dLat:  0.0030, dLng:  0.0050, w: 110, h:  80, rot:  55 },
-  { dLat: -0.0030, dLng: -0.0070, w: 140, h: 100, rot: -35 },
-  { dLat:  0.0015, dLng:  0.0035, w:  80, h:  65, rot:  20 },
-  { dLat:  0.0050, dLng:  0.0005, w: 100, h:  75, rot: -45 },
-  { dLat: -0.0010, dLng: -0.0030, w:  75, h:  55, rot:  30 },
-  { dLat:  0.0025, dLng: -0.0012, w:  60, h:  50, rot: -15 },
-];
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
 export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, showVoice = true }) {
@@ -217,19 +185,6 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     }
     setExpandedStopId(null);
   }, [journeyItems, onJourneyChange, setAddedIds]);
-
-  // Atmospheric blob markers pinned around the initial center (once).
-  const blobs = useMemo(() => {
-    const [lat, lng] = initialCenter;
-    if (!lat || !lng) return [];
-    return BLOB_OFFSETS.map((b, i) => ({
-      pos: [lat + b.dLat, lng + b.dLng],
-      w: b.w, h: b.h, rot: b.rot, idx: i,
-    }));
-    // initialCenter is computed on every render but its value only changes when
-    // startLocation/journeyItems change; memo guards against churn.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCenter[0], initialCenter[1]]);
 
   const handleLocate = (pos) => {
     setUserLocation(pos);
@@ -447,11 +402,6 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       >
         <MapContainer center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
-
-          {/* Atmospheric purple area-of-interest blobs */}
-          {blobs.map((b, i) => (
-            <Marker key={`blob-${i}`} position={b.pos} icon={makeBlob(b.w, b.h, b.rot, b.idx)} />
-          ))}
 
           {/* Faint hint of the WHOLE confirmed route (visited + future) so
               the user sees the broader plan even though only the active
