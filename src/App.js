@@ -30,6 +30,13 @@ function App() {
   // targets the first non-visited confirmed stop; visited stops can't be
   // removed from the Timeline.
   const [visitedIds, setVisitedIds] = useState(() => new Set());
+  // Map<stopId, timestamp> — wall-clock when the user confirmed reaching
+  // each stop. Powers the per-stop linger-minute math on the Reward screen.
+  const [visitedAt, setVisitedAt] = useState(() => new Map());
+  // Map<stopId, ms> — accumulated time the user has actually been within the
+  // arrival geofence of each stop (auto-tracked via WatchLocation, no tap
+  // required). The Reward screen prefers this over visitedAt timestamps.
+  const [stopDwellMs, setStopDwellMs] = useState(() => new Map());
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
 
@@ -64,7 +71,7 @@ function App() {
         )}
         {(screen === 'home' || screen === 'constraints') && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setVisitedIds(new Set()); setScreen('navigation'); }}
+            onStartWalk={(items, userLoc) => { setJourneyItems(items); setStartLocation(userLoc); setLastKnownLocation(userLoc); setTripStartTime(Date.now()); setVisitedIds(new Set()); setVisitedAt(new Map()); setStopDwellMs(new Map()); setScreen('navigation'); }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             onOpenQuiz={() => setScreen('quiz')}
@@ -119,6 +126,7 @@ function App() {
         {(screen === 'navigation' || screen === 'timeline') && (
           <NavigationMapScreen
             onGoBack={() => setScreen('home')}
+            onEndWalk={() => setScreen('reward')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
             onOpenTimeline={() => setScreen('timeline')}
             journeyItems={journeyItems}
@@ -128,12 +136,25 @@ function App() {
             setAddedIds={setAddedIds}
             visitedIds={visitedIds}
             setVisitedIds={setVisitedIds}
+            setVisitedAt={setVisitedAt}
+            setStopDwellMs={setStopDwellMs}
             vibePreferences={quizPreferences}
             showVoice={screen === 'navigation'}
           />
         )}
         {screen === 'reward' && (
-          <RewardScreen onComplete={() => setScreen('home')} />
+          <RewardScreen
+            journeyItems={journeyItems}
+            visitedIds={visitedIds}
+            visitedAt={visitedAt}
+            stopDwellMs={stopDwellMs}
+            tripStartTime={tripStartTime}
+            nearbyPlaces={nearbyPlaces}
+            userLocation={lastKnownLocation}
+            vibePreferences={quizPreferences}
+            onComplete={() => setScreen('home')}
+            onResume={() => setScreen('navigation')}
+          />
         )}
         {screen === 'constraints' && (
           <PreWalkConstraintsScreen
