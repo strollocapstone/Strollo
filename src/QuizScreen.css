@@ -55,40 +55,40 @@
   filter: blur(35px);
 }
 .quiz-blob--1 {
-  width: 260px; height: 160px;
-  left: -8%; top: 6%;
+  width: 210px; height: 130px;
+  left: 58%; top: 14%;
   background: radial-gradient(circle, #8851D4 0%, #6C5CE7 50%, transparent 100%);
   animation: quiz-blob1 6s ease-in-out infinite alternate;
 }
 .quiz-blob--2 {
   width: 240px; height: 150px;
   left: 30%; top: 36%;
-  background: radial-gradient(circle, #00B4D8 0%, #0984E3 50%, transparent 100%);
+  background: radial-gradient(circle, #FFD96B 0%, #FFA94B 55%, transparent 100%);
   animation: quiz-blob2 7s ease-in-out infinite alternate;
 }
 .quiz-blob--3 {
   width: 260px; height: 170px;
-  right: -6%; top: 62%;
+  left: -10%; top: 48%;
   background: radial-gradient(circle, #E040FB 0%, #A29BFE 50%, transparent 100%);
   animation: quiz-blob3 8s ease-in-out infinite alternate;
 }
 @keyframes quiz-blob1 {
-  0%   { transform: translate(0, 0) scale(1);       opacity: 0.55; }
-  33%  { transform: translate(30px, 14px) scale(1.10); opacity: 0.75; }
-  66%  { transform: translate(55px, -8px) scale(0.95); opacity: 0.50; }
-  100% { transform: translate(14px, 8px) scale(1.05);  opacity: 0.65; }
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.40; }
+  33%  { transform: translate(30px, 14px) scale(1.10); opacity: 0.55; }
+  66%  { transform: translate(55px, -8px) scale(0.95); opacity: 0.38; }
+  100% { transform: translate(14px, 8px) scale(1.05);  opacity: 0.48; }
 }
 @keyframes quiz-blob2 {
-  0%   { transform: translate(0, 0) scale(1);       opacity: 0.50; }
-  33%  { transform: translate(-26px, 14px) scale(1.10); opacity: 0.70; }
-  66%  { transform: translate(14px, 8px) scale(0.95);   opacity: 0.45; }
-  100% { transform: translate(-20px, -6px) scale(1.08); opacity: 0.65; }
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.70; }
+  33%  { transform: translate(-26px, 14px) scale(1.10); opacity: 0.92; }
+  66%  { transform: translate(14px, 8px) scale(0.95);   opacity: 0.65; }
+  100% { transform: translate(-20px, -6px) scale(1.08); opacity: 0.85; }
 }
 @keyframes quiz-blob3 {
-  0%   { transform: translate(0, 0) scale(1);       opacity: 0.50; }
-  33%  { transform: translate(-30px, 10px) scale(1.08); opacity: 0.70; }
-  66%  { transform: translate(-48px, 16px) scale(0.95); opacity: 0.45; }
-  100% { transform: translate(-18px, 4px) scale(1.05);  opacity: 0.60; }
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.38; }
+  33%  { transform: translate(30px, 10px) scale(1.08); opacity: 0.55; }
+  66%  { transform: translate(48px, 16px) scale(0.95); opacity: 0.34; }
+  100% { transform: translate(18px, 4px) scale(1.05);  opacity: 0.45; }
 }
 
 /* Entrance: slide up from the bottom when the user opens the quiz from the
@@ -125,9 +125,9 @@
   transform: translateY(-6px);
 }
 .quiz-done-hint {
-  margin-top: 14px !important;
-  font-size: 13px !important;
-  color: #3A2D1B !important;
+  margin: 0 auto !important;
+  font-size: 15px !important;
+  color: #3B1F6E !important;
   opacity: 0.85;
 }
 
@@ -408,6 +408,18 @@
   14%  { transform: translate(0, -22px) rotate(-1deg); opacity: 1; }
   100% { transform: translate(0, 820px) rotate(2deg); opacity: 0; }
 }
+/* Undo animations — card slides back from the direction it had exited.
+   Mirrors the exit translate so the card visibly returns to its slot. */
+@keyframes quiz-undo-up {
+  /* Last swipe was UP (off the top) → slide back DOWN into place */
+  0%   { transform: translate(0, -820px) rotate(-2deg); opacity: 0; }
+  100% { transform: translate(0, 0)      rotate(0deg);  opacity: 1; }
+}
+@keyframes quiz-undo-down {
+  /* Last swipe was DOWN (off the bottom) → slide back UP into place */
+  0%   { transform: translate(0, 820px) rotate(2deg); opacity: 0; }
+  100% { transform: translate(0, 0)     rotate(0deg); opacity: 1; }
+}
 .quiz-card-photo {
   flex: 1;
   background-color: #E8DFCC;
@@ -430,15 +442,17 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  overflow: hidden;
+  /* let the white halo bleed past the polaroid edges */
+  overflow: visible;
   border-radius: 3px;
   z-index: 3;
 }
+/* Both halves render the FULL polaroid; each clip-path reveals only its
+   side of a shared, irregular seam. This lets the tear make deep, organic
+   excursions that interlock perfectly between the two halves. */
 .quiz-tear-half {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 50%;
+  inset: 0;
   background: rgba(255, 253, 247, 0.96);
   padding: 12px 12px 32px;
   display: flex;
@@ -462,53 +476,44 @@
   letter-spacing: 0.2px;
   line-height: 1.15;
 }
+/* Shared irregular seam — both halves trace the SAME (x,y) points along the
+   tear so they match up jag-for-jag. The seam wiggles between ~42% and 60%
+   of the polaroid width with deliberately uneven amplitudes. */
 .quiz-tear-half--top {
-  /* "top" class kept for JSX compatibility — now represents the LEFT half */
-  left: 0;
-  /* jagged tear edge along the right side */
+  /* LEFT half — keep everything left of the seam */
   clip-path: polygon(
-    0 0, 96% 0,
-    99% 4%, 95% 8%, 100% 12%, 96% 16%, 99% 20%, 95% 24%,
-    100% 28%, 96% 32%, 99% 36%, 95% 40%, 100% 44%, 96% 48%,
-    99% 52%, 95% 56%, 100% 60%, 96% 64%, 99% 68%, 95% 72%,
-    100% 76%, 96% 80%, 99% 84%, 95% 88%, 100% 92%, 96% 96%,
-    99% 100%, 0 100%
+    0 0, 50% 0,
+    54% 4%, 44% 8%, 58% 12%, 49% 16%, 42% 20%, 56% 24%,
+    47% 28%, 60% 32%, 43% 36%, 52% 40%, 46% 44%, 58% 48%,
+    42% 52%, 55% 56%, 48% 60%, 58% 64%, 44% 68%, 51% 72%,
+    46% 76%, 58% 80%, 43% 84%, 54% 88%, 47% 92%, 56% 96%,
+    50% 100%, 0 100%
   );
-  /* White edge tracing the jagged tear line — drop-shadow follows the clip
-     silhouette, so a white halo offset toward the seam draws a visible
-     "ripped paper" line. */
-  filter: drop-shadow(2px 0 0 rgba(255, 255, 255, 0.9))
-          drop-shadow(3px 0 4px rgba(255, 255, 255, 0.55));
+  /* Stacked white drop-shadows trace the clip silhouette to draw a thick
+     "ripped paper" highlight along the seam (offset toward the right). */
+  filter: drop-shadow(2px 0 0 #FFFFFF)
+          drop-shadow(2px 0 0 #FFFFFF)
+          drop-shadow(0 1px 0 rgba(255, 255, 255, 0.9))
+          drop-shadow(3px 0 5px rgba(255, 255, 255, 0.75));
   transform-origin: center;
   animation: quiz-tear-left 720ms cubic-bezier(0.5, 0.05, 0.3, 1) forwards;
 }
 .quiz-tear-half--bottom {
-  /* "bottom" class kept for JSX compatibility — now represents the RIGHT half */
-  right: 0;
+  /* RIGHT half — keep everything right of the same seam (vertices listed
+     in reverse y so the polygon traces its perimeter clockwise). */
   clip-path: polygon(
-    4% 0, 100% 0, 100% 100%, 1% 100%,
-    5% 96%, 0 92%, 4% 88%, 1% 84%, 5% 80%, 0 76%,
-    4% 72%, 1% 68%, 5% 64%, 0 60%, 4% 56%, 1% 52%,
-    5% 48%, 0 44%, 4% 40%, 1% 36%, 5% 32%, 0 28%,
-    4% 24%, 1% 20%, 5% 16%, 0 12%, 4% 8%, 1% 4%
+    50% 0, 100% 0, 100% 100%, 50% 100%,
+    56% 96%, 47% 92%, 54% 88%, 43% 84%, 58% 80%, 46% 76%,
+    51% 72%, 44% 68%, 58% 64%, 48% 60%, 55% 56%, 42% 52%,
+    58% 48%, 46% 44%, 52% 40%, 43% 36%, 60% 32%, 47% 28%,
+    56% 24%, 42% 20%, 49% 16%, 58% 12%, 44% 8%, 54% 4%
   );
-  filter: drop-shadow(-2px 0 0 rgba(255, 255, 255, 0.9))
-          drop-shadow(-3px 0 4px rgba(255, 255, 255, 0.55));
+  filter: drop-shadow(-2px 0 0 #FFFFFF)
+          drop-shadow(-2px 0 0 #FFFFFF)
+          drop-shadow(0 1px 0 rgba(255, 255, 255, 0.9))
+          drop-shadow(-3px 0 5px rgba(255, 255, 255, 0.75));
   transform-origin: center;
   animation: quiz-tear-right 720ms cubic-bezier(0.5, 0.05, 0.3, 1) forwards;
-}
-/* Each half shows its own slice of the photo — left half anchors photo to its
-   right edge so the seam matches; right half anchors to its left edge. */
-.quiz-tear-half--top .quiz-tear-photo {
-  background-position: left center;
-  margin-right: -100%;
-}
-.quiz-tear-half--bottom .quiz-tear-photo {
-  background-position: right center;
-  margin-left: -100%;
-}
-.quiz-tear-half--bottom .quiz-tear-caption {
-  visibility: hidden; /* avoid duplicating caption text */
 }
 /* Tear vertically from the middle: brief grip at the seam, then the two halves
    separate horizontally (left goes left, right goes right) so it reads as a
@@ -679,17 +684,27 @@
   justify-content: center;
 }
 .quiz-done-inner {
+  position: relative;
+  z-index: 2;
   text-align: center;
 }
 .quiz-done h1 {
   font-family: var(--font-brand);
-  font-size: 28px;
-  color: var(--color-accent);
-  margin: 0 0 6px;
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  color: #3B1F6E;
+  letter-spacing: -0.3px;
+  margin: 0 0 32px;
 }
 .quiz-done p {
-  color: #2B1F12;
-  margin: 0;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #3B1F6E;
+  max-width: 320px;
+  margin: 0 auto 14px;
 }
 
 /* ── Reduced motion ─────────────────────────────────────────────────────── */

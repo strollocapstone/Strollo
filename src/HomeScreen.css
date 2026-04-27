@@ -4,7 +4,7 @@
   --color-accent:    #3B1F6E;
   --color-accent-2:  #8851D4;
   --color-warning:   #FF6B35;
-  --color-bg:        #FFFFFF;
+  --color-bg:        #FBF8F3;
   --color-body:      #1E1541;
   --font-brand:      "Unbounded", sans-serif;
   --font-ui:         "Satoshi", sans-serif;
@@ -58,8 +58,8 @@
 .foot { width: 18px; height: 30px; }
 .foot--left  { animation: step-left  1.2s ease-in-out infinite; transform-origin: bottom center; }
 .foot--right { animation: step-right 1.2s ease-in-out infinite; transform-origin: bottom center; }
-@keyframes step-left  { 0%,100%{transform:translateY(0) rotate(-4deg);opacity:1;} 50%{transform:translateY(-5px) rotate(-8deg);opacity:0.6;} }
-@keyframes step-right { 0%,100%{transform:translateY(-5px) rotate(4deg);opacity:0.6;} 50%{transform:translateY(0) rotate(8deg);opacity:1;} }
+@keyframes step-left  { 0%,100%{transform:translateY(0) rotate(-4deg);} 50%{transform:translateY(-5px) rotate(-8deg);} }
+@keyframes step-right { 0%,100%{transform:translateY(-5px) rotate(4deg);} 50%{transform:translateY(0) rotate(8deg);} }
 
 /* ── Suggestion label pins (map) ── */
 /* ── POI pin (collapsed & expanded) ── */
@@ -229,8 +229,8 @@
   transition: background 0.15s ease;
 }
 .sugg-pin-add-btn:hover { background: #E6DAF5; }
-.sugg-pin-add-btn--remove { background: #FDEDEE; }
-.sugg-pin-add-btn--remove:hover { background: #FBD9DC; }
+.sugg-pin-add-btn--remove { background: rgba(255, 255, 255, 0.58); }
+.sugg-pin-add-btn--remove:hover { background: rgba(255, 255, 255, 0.78); }
 
 /* Dot variant — just the icon chip, no pill / name / triangle / badge */
 .sugg-pin--dot {

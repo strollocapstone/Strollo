@@ -51,7 +51,7 @@ const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
     ${isPill && expanded ? `<div class="sugg-pin-extra">
       <button class="sugg-pin-add-btn${added ? ' sugg-pin-add-btn--remove' : ''}" data-action="toggle" aria-label="${added ? 'Remove from itinerary' : 'Add to itinerary'}">
         ${added
-          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D44" stroke-width="3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>`
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" stroke-width="3.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>`
           : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
       </button>
     </div>` : ''}
@@ -77,7 +77,7 @@ const makeAiPinIcon = (name, desc, expanded, added = false, sequence = null) => 
         ${desc ? `<span class="sugg-pin-desc">${desc}</span>` : ''}
         <button class="sugg-pin-add-btn${added ? ' sugg-pin-add-btn--remove' : ''}" data-action="toggle" aria-label="${added ? 'Remove from itinerary' : 'Add to itinerary'}">
           ${added
-            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D44" stroke-width="3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>`
+            ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" stroke-width="3.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>`
             : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8851D4" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`}
         </button>
       </div>` : ''}
@@ -908,8 +908,9 @@ export default function HomeScreen({
   const onDragEnd   = (e) => {
     if (dragStartY.current === null) return;
     const endY = e.changedTouches?.[0]?.clientY ?? e.clientY;
-    if (dragStartY.current - endY > 20) setSheetOpen(true);
-    else if (endY - dragStartY.current > 20) setSheetOpen(false);
+    // Drag-up to expand has been disabled — the sheet now opens only via the
+    // handle tap or input focus. Drag-down still closes the sheet.
+    if (endY - dragStartY.current > 20) setSheetOpen(false);
     dragStartY.current = null;
   };
 
@@ -1372,9 +1373,7 @@ export default function HomeScreen({
             <div className="listen-blob listen-blob--3" />
           </div>
 
-          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)}>
-            <div className="handle-bar" />
-          </div>
+          <div className="search-handle" onClick={() => !listenCardMode && setSheetOpen((o) => !o)} />
 
           {/* State: idle — search input */}
           {!listenCardMode && (
