@@ -1509,43 +1509,8 @@ export default function HomeScreen({
           )}
 
           <div className={`sheet-content ${sheetOpen && !listenCardMode ? "visible" : ""}`}>
-            <div className="suggested-spots-row">
-              <h3 className="suggested-spots-title">Suggested spots</h3>
-              <span className="suggested-spots-count">
-                {addedIds.size > 0
-                  ? `${addedIds.size} of ${allItems.length} spots selected`
-                  : `${allItems.length} spots`}
-              </span>
-            </div>
-            <div
-              className="location-card-carousel"
-              ref={carouselRef}
-              onMouseDown={onCarouselMouseDown}
-              onMouseMove={onCarouselMouseMove}
-              onMouseUp={onCarouselMouseUp}
-              onMouseLeave={onCarouselMouseUp}
-              onClickCapture={onCarouselClickCapture}
-              style={{ cursor: "grab" }}
-            >
-              {nearbyLoading && allItems.length === 0 && (
-                <p className="empty-state">Finding places near you...</p>
-              )}
-              {!nearbyLoading && nearbyError && (
-                <p className="empty-state">{nearbyError}</p>
-              )}
-              {!nearbyLoading && !nearbyError && allItems.length === 0 && (
-                <p className="empty-state">No places found nearby. Try refreshing.</p>
-              )}
-              {allItems.map((item) => (
-                <LocationCard
-                  key={item.id}
-                  item={item}
-                  added={addedIds.has(item.id)}
-                  onToggle={handleToggleAdd}
-                />
-              ))}
-            </div>
-
+            {/* Suggested-spots carousel removed — chat overlay is now the
+                primary surface for discovering places. */}
           </div>
         </div>
       )}
