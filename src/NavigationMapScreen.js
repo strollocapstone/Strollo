@@ -7,7 +7,7 @@ import WalkCompanionWidget from "./WalkCompanionWidget";
 import VoiceFullScreen from "./VoiceFullScreen";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
-import { youIcon, WatchLocation, haversineKm } from "./mapUtils";
+import { youIcon, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
 // Category → Material Symbol glyph (mirrors the one used on HomeScreen for added pins).
@@ -28,14 +28,42 @@ const REMOVE_BTN_HTML = `<div class="sugg-pin-extra">
   </button>
 </div>`;
 
-// Added-pill stop pin — identical look to the HomeScreen "added" pill so navigation
-// and home share one visual vocabulary (purple icon circle + name + sequence badge).
-// When `expanded` is true and `removable` is true, the pill reveals an X button
-// the user can tap to drop that stop from the route.
-const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false) => {
+// Stop pin — mirrors the HomeScreen makePinIcon tier ladder so nav and home
+// share one visual vocabulary. mode: 'pill' (full white-bg pill with name),
+// 'dot' (yellow circle + name beneath), 'mini' (bare purple dot), 'hidden'.
+// `sequence` (when provided) puts the number inside the yellow circle in
+// place of the category icon. `muted` is purely a visual variant for the
+// non-active stops (faded purple-dot version of mini).
+const stopLabelIcon = (name, desc, sequence, mode = 'pill', removable = false, muted = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  if (mode === 'mini') {
+    return L.divIcon({
+      className: "",
+      html: `<div class="sugg-pin sugg-pin--mini${muted ? ' sugg-pin--muted' : ''}" aria-label="${name}">
+        <div class="sugg-pin-dot"></div>
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
+  if (mode === 'dot') {
+    return L.divIcon({
+      className: "",
+      html: `<div class="sugg-pin sugg-pin--dot${muted ? ' sugg-pin--muted' : ''}" aria-label="${name}">
+        <div class="sugg-pin-dot">
+          ${sequence
+            ? `<span class="sugg-pin-dot-number">${sequence}</span>`
+            : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
+        </div>
+        <span class="sugg-pin-label">${name}</span>
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
+  // pill (default)
   const classes = ["sugg-pin", "sugg-pin--added"];
-  if (expanded) classes.push("sugg-pin--open");
+  if (mode === 'open') classes.push("sugg-pin--open");
   return L.divIcon({
     className: "",
     html: `<div class="${classes.join(' ')}">
@@ -45,40 +73,7 @@ const stopLabelIcon = (name, desc, sequence, expanded = false, removable = false
           : `<span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>`}
       </div>
       <span class="sugg-pin-name">${name}</span>
-      ${expanded && removable ? REMOVE_BTN_HTML : ""}
-    </div>`,
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-};
-
-// Faint companion pin for non-current confirmed stops (visited + future
-// stops on the planned route). Same shape as stopLabelIcon but smaller,
-// label-less, and dimmed — they're context, not the active destination.
-// When tapped/expanded, becomes a full pill with the same X remove control.
-const stopLabelIconMuted = (name, desc, expanded = false, removable = false) => {
-  const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
-  if (expanded) {
-    const classes = ["sugg-pin", "sugg-pin--added", "sugg-pin--open"];
-    return L.divIcon({
-      className: "",
-      html: `<div class="${classes.join(' ')}">
-        <div class="sugg-pin-dot">
-          <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
-        </div>
-        <span class="sugg-pin-name">${name}</span>
-        ${removable ? REMOVE_BTN_HTML : ""}
-      </div>`,
-      iconSize: [0, 0],
-      iconAnchor: [0, 0],
-    });
-  }
-  return L.divIcon({
-    className: "",
-    html: `<div class="sugg-pin sugg-pin--dot sugg-pin--muted" aria-label="${name}">
-      <div class="sugg-pin-dot">
-        <span class="material-symbols-rounded sugg-pin-dot-icon">${icon}</span>
-      </div>
+      ${mode === 'open' && removable ? REMOVE_BTN_HTML : ""}
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -170,6 +165,9 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // Only one can be open at a time; tapping another pin or the same pin
   // again closes it.
   const [expandedStopId, setExpandedStopId] = useState(null);
+  // Tracks the live Leaflet zoom so we can demote stop pins to mini purple
+  // dots when the map auto-fits to a wide bounds (mirrors HomeScreen tier).
+  const [mapZoom, setMapZoom] = useState(14);
 
   // Drop a stop from the route + addedIds. Mirrors the WCW skip logic so
   // map removal and "skip next stop" stay in sync.
@@ -402,6 +400,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       >
         <MapContainer center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
+          <ZoomTracker onZoom={setMapZoom} />
 
           {/* Faint hint of the WHOLE confirmed route (visited + future) so
               the user sees the broader plan even though only the active
@@ -441,11 +440,19 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             .map((s) => {
               const expanded = expandedStopId === s.id;
               const isVisited = visitedIds?.has(s.id);
+              // Tier (mirrors HomeScreen): pill on tap, mini purple dot when
+              // zoomed out, labeled dot otherwise. Hidden at extreme low zoom.
+              let mode;
+              if (expanded) mode = 'open';
+              else if (mapZoom < 12) mode = 'hidden';
+              else if (mapZoom < 14) mode = 'mini';
+              else mode = 'dot';
+              if (mode === 'hidden') return null;
               return (
                 <Marker
                   key={`stop-muted-${s.id}`}
                   position={[s.lat, s.lng]}
-                  icon={stopLabelIconMuted(s.name, s.desc, expanded, !isVisited)}
+                  icon={stopLabelIcon(s.name, s.desc, null, mode, !isVisited, true)}
                   eventHandlers={{
                     click: (e) => {
                       const target = e.originalEvent?.target;
@@ -461,15 +468,23 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             })}
 
           {/* Salient pin for the active destination = first non-visited
-              confirmed Timeline item. Tap to reveal X; tap X to drop it. */}
+              confirmed Timeline item. Stays a pill (it's the focus) but
+              shrinks to a labeled dot / mini when the map is zoomed out,
+              matching HomeScreen's tier ladder. Tap to reveal X. */}
           {nextTarget && (() => {
             const expanded = expandedStopId === nextTarget.id;
             const isVisited = visitedIds?.has(nextTarget.id);
+            let mode;
+            if (expanded) mode = 'open';
+            else if (mapZoom < 12) mode = 'hidden';
+            else if (mapZoom < 14) mode = 'mini';
+            else mode = 'pill';
+            if (mode === 'hidden') return null;
             return (
               <Marker
                 key={`stop-${nextTarget.id}`}
                 position={[nextTarget.lat, nextTarget.lng]}
-                icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1, expanded, !isVisited)}
+                icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1, mode, !isVisited, false)}
                 eventHandlers={{
                   click: (e) => {
                     const target = e.originalEvent?.target;
