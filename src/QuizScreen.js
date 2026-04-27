@@ -406,7 +406,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
             </button>
             {infoOpen && (
               <span className="quiz-info-tooltip" role="tooltip">
-                Sharing your preferences helps Strollo give you more accurate recommendations.
+                Sharing your preferences helps Strollo give you more accurate suggestions for your explorations.
               </span>
             )}
           </span>

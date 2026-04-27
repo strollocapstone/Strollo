@@ -37,7 +37,7 @@
   font-weight: 700;
   font-size: 64px;
   line-height: 1;
-  color: #34233E;
+  color: #3B1F6E;
   letter-spacing: -1px;
   opacity: 0;
   animation: ls-text-in 600ms cubic-bezier(0.22, 1, 0.36, 1) 80ms forwards;
@@ -147,7 +147,7 @@
   font-weight: 500;
   font-size: 17px;
   letter-spacing: 0.4px;
-  color: #5A4B3C;
+  color: #3B1F6E;
   opacity: 0;
   animation: ls-tagline-in 500ms ease-out 1600ms forwards,
              ls-tagline-pulse 2000ms ease-in-out 2100ms infinite;
