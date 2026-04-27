@@ -1494,12 +1494,15 @@
 .chat-suggest-card {
   width: 208px; min-height: 156px;
   padding: 14px 16px; border-radius: 18px;
-  background: #fff; border: 1px solid rgba(52,35,62,0.06);
+  background: #fff;
+  /* Mirror the Timeline page's suggestion style: dashed purple outline by
+     default, solid when the user adds the card. */
+  border: 1.5px dashed rgba(136, 81, 212, 0.55);
   box-shadow: 0 2px 8px rgba(52,35,62,0.05);
   display: flex; flex-direction: column; justify-content: space-between;
   gap: 8px;
   cursor: pointer; flex-shrink: 0; text-align: left;
-  transition: box-shadow 0.15s, opacity 0.15s, outline 0.15s;
+  transition: box-shadow 0.15s, opacity 0.15s, outline 0.15s, border-color 0.15s, border-style 0.15s;
   /* Suppress the default mobile tap-highlight + focus outline that flashed blue. */
   -webkit-tap-highlight-color: transparent;
   outline: none;
@@ -1511,7 +1514,11 @@
   outline-offset: 2px;
 }
 .chat-suggest-card.compact { width: 168px; min-height: 132px; padding: 12px 14px; }
-.chat-suggest-card.on { outline: 1.5px solid var(--chat-purple); outline-offset: -1.5px; box-shadow: 0 6px 18px rgba(136,81,212,0.18); }
+.chat-suggest-card.on {
+  /* Selected = solid purple border (matches Timeline confirmed cards). */
+  border: 1.5px solid var(--chat-purple);
+  box-shadow: 0 6px 18px rgba(136,81,212,0.18);
+}
 /* Default (unselected) state — clean white card, no dimming or strikethrough.
    Becomes "selected" on tap (.on adds the purple outline + filled action button). */
 .chat-suggest-card.off { /* intentionally bare — default look */ }
