@@ -208,6 +208,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
+  // Unique-per-mount key for the MapContainer. Prevents the
+  // "Map container is already initialized" crash that fires in
+  // production when React 18 reuses a DOM node across screen
+  // transitions: leaflet's `_leaflet_id` is attached to that node and
+  // the new map's `_initContainer` rejects re-init. A fresh key forces
+  // React to allocate a new DOM node, breaking the reuse.
+  const mapKeyRef = useRef(`nav-map-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
   // Pin dropped on the map when Gemini suggests a specific place. Pans the
   // map so the pin sits in the vertical center of the band above the widget.
@@ -542,7 +549,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         className={`map-wrapper${headingUp ? " heading-up" : ""}`}
         style={{ "--map-rotation": `${navBearing}deg` }}
       >
-        <MapContainer center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
+        <MapContainer key={mapKeyRef.current} center={initialCenter} zoom={14} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           <ZoomTracker onZoom={setMapZoom} />
 

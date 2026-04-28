@@ -293,6 +293,12 @@ export default function HomeScreen({
   quizPending,
 }) {
   const [userLocation, setUserLocation]   = useState(initialLocation || null);
+  // Per-mount key for MapContainer. Forces React to allocate a fresh
+  // DOM node on every Home mount so that, when navigating back from
+  // NavigationMapScreen, leaflet doesn't see a stale `_leaflet_id` on
+  // the reused node and crash with "Map container is already
+  // initialized".
+  const homeMapKeyRef = useRef(`home-map-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
   const [showLocatePrompt, setShowLocatePrompt] = useState(false);
   const [locateError, setLocateError]           = useState("");
@@ -1043,7 +1049,7 @@ export default function HomeScreen({
 
       {/* ── MAP ── */}
       <div className="map-perspective-wrapper">
-        <MapContainer center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
+        <MapContainer key={homeMapKeyRef.current} center={userLocation || [0, 0]} zoom={userLocation ? 17 : 2} zoomControl={false} attributionControl={false} className="map-container">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           {!chatSplitActive && visibleNearbyPlaces.filter((s) => s.lat && s.lng).map((s) => {
             const isAdded = addedIds.has(s.id);
