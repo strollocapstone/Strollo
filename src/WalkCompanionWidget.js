@@ -224,7 +224,12 @@ function WalkCompanionWidgetInner({
   // Browser TTS for AI replies (default off).
   // The hook itself is enabled whenever any surface is live; per-surface
   // gating happens at each call site (see nav-TTS effect and pushMessage).
-  const { speak: ttsSpeak, cancel: ttsCancel, prime: ttsPrime } = useTtsSpeak({ enabled: activeVoice !== "off" });
+  const { speak: ttsSpeak, cancel: ttsCancel, prime: ttsPrime, speaking: ttsSpeaking } = useTtsSpeak({ enabled: activeVoice !== "off" });
+  // Auto-restart STT after a conv-AI TTS reply finishes — set when we kick
+  // off ttsSpeak for an AI reply, cleared when we honor it (or the user
+  // manually cancels).
+  const restartSttAfterTtsRef = useRef(false);
+  const prevTtsSpeakingRef = useRef(false);
 
   // Auto-flip when the conv overlay opens / closes during a walk. Empty
   // state (no destination) keeps whatever the user last chose.
@@ -612,7 +617,10 @@ function WalkCompanionWidgetInner({
     setMessages((ms) => [...ms, msg]);
     if (role === "ai") {
       console.log("[Strollo] AI message pushed; activeVoice =", activeVoice);
-      if (activeVoice === "conv") ttsSpeak(text);
+      if (activeVoice === "conv") {
+        restartSttAfterTtsRef.current = true;
+        ttsSpeak(text);
+      }
     }
     return msg;
   }, [activeVoice, ttsSpeak]);
@@ -766,6 +774,7 @@ function WalkCompanionWidgetInner({
     finalTranscriptRef.current = "";
     stopConvListening();
     ttsCancel();
+    restartSttAfterTtsRef.current = false;
     setSpeakActive(false);
     setActiveVoice("conv");
     setConvMode("tips");
@@ -827,9 +836,32 @@ function WalkCompanionWidgetInner({
     // Prime TTS inside this click handler so the post-Gemini speak() call
     // works (Chrome/Safari require an in-gesture activation).
     ttsPrime();
-    if (speakActive) stopSpeak();
-    else startSpeak();
+    if (speakActive) {
+      // User explicitly stopped — don't re-arm the mic when the (now
+      // cancelled) TTS finishes.
+      restartSttAfterTtsRef.current = false;
+      stopSpeak();
+    } else {
+      startSpeak();
+    }
   };
+
+  // After a conv-AI reply's TTS finishes, automatically re-open the mic so
+  // the user can keep talking without tapping. Only fires when the AI
+  // pushed the message (restartSttAfterTtsRef set) and the user hasn't
+  // already started listening or cancelled.
+  useEffect(() => {
+    const wasSpeaking = prevTtsSpeakingRef.current;
+    prevTtsSpeakingRef.current = ttsSpeaking;
+    if (!wasSpeaking || ttsSpeaking) return;
+    if (!restartSttAfterTtsRef.current) return;
+    restartSttAfterTtsRef.current = false;
+    if (speakActive) return;
+    if (activeVoice !== "conv") return;
+    if (!(convOpen || isEmpty)) return;
+    startSpeak();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ttsSpeaking]);
 
   const listening = speakActive;
   // While the in-walk conversation overlay is open the conv-section already
