@@ -11,7 +11,9 @@
 // always beats the real mirrors and the map ends up with zero POIs.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  "https://lz4.overpass-api.de/api/interpreter",
+  "https://z.overpass-api.de/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
 ];
 
@@ -39,13 +41,27 @@ export default async function handler(req, res) {
   }
 
   const attempt = async (endpoint) => {
+    // Overpass instances require a non-empty, identifiable User-Agent or
+    // they return 406 Not Acceptable. Accept: application/json gets the
+    // structured response we expect to parse.
     const r = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": "Strollo/1.0 (https://strollo-ten.vercel.app; capstone@berkeley.edu)",
+      },
       body: `data=${encodeURIComponent(query)}`,
     });
     if (!r.ok) throw new Error(`HTTP ${r.status} from ${endpoint}`);
-    return r.json();
+    const json = await r.json();
+    // Some mirrors answer 200 with `remark` indicating an internal error
+    // (e.g. "runtime error: Query timed out"). Treat those as failure so
+    // Promise.any moves on to the next mirror.
+    if (json && json.remark && /error|timed out/i.test(json.remark) && !Array.isArray(json.elements)) {
+      throw new Error(`mirror remark: ${json.remark}`);
+    }
+    return json;
   };
 
   try {
@@ -53,6 +69,11 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
     res.status(200).json(data);
   } catch (err) {
-    res.status(502).json({ error: "All Overpass endpoints unavailable" });
+    // err is an AggregateError when Promise.any exhausts. Surface the
+    // individual mirror failures so future debugging doesn't need
+    // re-deployment.
+    const detail = err?.errors?.map((e) => e?.message).filter(Boolean) || [String(err)];
+    console.warn("[Overpass proxy] all mirrors failed:", detail);
+    res.status(502).json({ error: "All Overpass endpoints unavailable", detail });
   }
 }
