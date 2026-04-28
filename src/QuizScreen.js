@@ -8,7 +8,7 @@ import "./QuizScreen.css";
 // DURATION_OPTIONS, ACCESSIBILITY_OPTIONS, AVOIDANCE_OPTIONS, MAP_FILTERS ids).
 // antiAvoidances apply when the card is hard-passed.
 // Six cards cover every preference dimension at least once between them.
-const QUIZ_DECK = [
+export const QUIZ_DECK = [
   { id: "p1",  image: "https://images.unsplash.com/photo-1759430711861-fc858ebce8b2?q=80&w=1740&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
     caption: "Late night food spots open past midnight",
     vibes: ["foodie", "moody", "social", "retro"],
@@ -71,7 +71,7 @@ const QUIZ_DECK = [
 // ── Preset aggregation ────────────────────────────────────────────────────
 const DURATION_ORDER = ["15 min", "30 min", "60 min", "120 min", "No time limit"];
 
-function buildMergedPreset(history, deck) {
+export function buildMergedPreset(history, deck) {
   const liked = [], hated = [];
   for (const h of history) {
     const card = deck.find(d => d.id === h.polaroidId);

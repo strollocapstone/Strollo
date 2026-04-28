@@ -3,16 +3,17 @@ import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';
 import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
-import QuizScreen from './QuizScreen';
+import QuizScreen, { QUIZ_DECK, buildMergedPreset } from './QuizScreen';
 import RewardScreen from './RewardScreen';
 import LoadingScreen from './LoadingScreen';
 import IntroScreen from './IntroScreen';
+import DevSwitch from './DevSwitch';
 import './App.css';
 
 function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
-  const [screen, setScreen] = useState('loading');
+  const [screen, setScreen] = useState('devSwitch');
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
@@ -49,6 +50,30 @@ function App() {
     // no-op — preferences reset on each reload by design
   };
 
+  // Dev-mode shortcut: synthesize a "every card swiped YES" quiz history,
+  // run it through the same preset builder the real quiz uses, then jump
+  // straight to home. Mirrors QuizScreen's onComplete payload so HomeScreen
+  // sees identical state to a real run.
+  const handleDevMode = () => {
+    const history = QUIZ_DECK.map((c) => ({ polaroidId: c.id, direction: 'up' }));
+    const vibeScores = {};
+    for (const h of history) {
+      const card = QUIZ_DECK.find((d) => d.id === h.polaroidId);
+      if (!card) continue;
+      for (const v of card.vibes) vibeScores[v] = (vibeScores[v] || 0) + 1;
+    }
+    const mergedPreset = buildMergedPreset(history, QUIZ_DECK);
+    const prefs = {
+      vibeScores,
+      mergedPreset,
+      quizHistory: history,
+      completedAt: new Date().toISOString(),
+    };
+    setQuizPreferences(prefs);
+    if (mergedPreset) setPreferences(mergedPreset);
+    setScreen('home');
+  };
+
   // Prefetch user location as early as possible (even while the quiz is open)
   // so HomeScreen can start loading nearby places the moment it mounts.
   useEffect(() => {
@@ -68,6 +93,12 @@ function App() {
   return (
     <div className="App">
       <div className="phone-frame">
+        {screen === 'devSwitch' && (
+          <DevSwitch
+            onDev={handleDevMode}
+            onNormalUser={() => setScreen('loading')}
+          />
+        )}
         {screen === 'loading' && (
           <LoadingScreen onComplete={() => setScreen('intro')} />
         )}
@@ -192,6 +223,7 @@ function App() {
             setVisitedAt={setVisitedAt}
             setStopDwellMs={setStopDwellMs}
             vibePreferences={quizPreferences}
+            preferences={preferences}
             nearbyPlaces={nearbyPlaces}
             showVoice={screen === 'navigation'}
           />
