@@ -30,6 +30,7 @@ import {
   cleanResponseText,
   geocodePlace,
 } from "./geminiService";
+import { cancelCloudTts, isMobile } from "./cloudTtsService";
 
 // Progress strip that replaces the divider above the buttons section.
 // Renders boots → dotted curve → flag, where the boots position scales
@@ -494,6 +495,9 @@ function WalkCompanionWidgetInner({
       try { recogRef.current.abort(); } catch (e) {}
       recogRef.current = null;
     }
+    // Force-release the iOS audio session so the mic isn't blocked by a
+    // still-active <audio> element from a previous Cloud TTS reply.
+    try { cancelCloudTts(); } catch (_e) {}
     clearInterval(pollRef.current);
     finalTranscriptRef.current = "";
     combinedTranscriptRef.current = "";
@@ -557,12 +561,21 @@ function WalkCompanionWidgetInner({
     };
 
     recogRef.current = r;
-    try {
-      r.start();
-      console.log("[STT] r.start() succeeded");
-    } catch (e) {
-      console.warn("[STT] r.start() threw:", e?.name);
-    }
+    // On iOS, give the audio session ~180ms to release after we paused the
+    // <audio> element above. Starting recognition immediately makes WebKit
+    // route the mic into the still-active playback session, where it
+    // produces no onresult events. Desktop starts immediately.
+    const startNow = () => {
+      if (recogRef.current !== r) return;
+      try {
+        r.start();
+        console.log("[STT] r.start() succeeded");
+      } catch (e) {
+        console.warn("[STT] r.start() threw:", e?.name);
+      }
+    };
+    if (isMobile()) setTimeout(startNow, 180);
+    else startNow();
 
     // Polling loop — runs every 200ms and decides whether to auto-stop.
     pollRef.current = setInterval(() => {

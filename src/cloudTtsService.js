@@ -88,6 +88,10 @@ export async function speakViaCloud(text, opts = {}) {
 export function cancelCloudTts() {
   if (!audioEl) return;
   try { audioEl.pause(); audioEl.currentTime = 0; } catch (_e) {}
+  // iOS holds the playback audio session even after pause(), which blocks
+  // SpeechRecognition from receiving mic input. Clearing src + load()
+  // forces the WebKit audio session to release so the mic can take over.
+  try { audioEl.removeAttribute("src"); audioEl.load(); } catch (_e) {}
   currentRequestId++;
 }
 
