@@ -160,8 +160,16 @@ function WalkCompanionWidgetInner({
   onSpeakEnd,
 }, forwardedRef) {
   // eslint-disable-next-line no-unused-vars
-  const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(false);
+  // `paused` was a no-op state slot; kept as a const literal so existing
+  // dead branches still compile until the next pass cleans them up.
+  const paused = false;
+  // Flip-switch TTS: at most one surface speaks at a time.
+  //   "nav"  → nav maneuvers speak, conv stays silent
+  //   "conv" → AI replies speak, nav stays silent
+  //   "off"  → both surfaces silent
+  // Auto-flips to "conv" when the conv overlay opens, back to "nav" on
+  // close. Tapping either speaker icon flips manually (and cancels any
+  // utterance in flight on the previous surface).
   const [speakActive, setSpeakActive] = useState(false);
 
   // Whether the widget is in its empty (no-destination) state. The parent
@@ -175,10 +183,19 @@ function WalkCompanionWidgetInner({
   // ── Strollo Conversation state (only active when isEmpty) ──────────────
   // 'tips' = default; 'conversation' = reel of messages; 'minimized' = peek bar.
   const [convMode, setConvMode] = useState("tips");
+  // In-walk overlay: when true (and !isEmpty), the conversation section
+  // stacks above the nav chrome inside the same widget. Tapping SAY
+  // ANYTHING during a walk flips this on; the × button flips it off.
+  const [convOpen, setConvOpen] = useState(false);
+  // Counts places appended via the conversation while the overlay is
+  // open — shows the yellow "Update walk plan" CTA at the bottom of the
+  // conv-section once it goes above zero. Resets each time the overlay
+  // is closed (so the CTA only nags about *unconfirmed* additions).
+  const [convAddedCount, setConvAddedCount] = useState(0);
   const [messages, setMessages] = useState([]);
   // TTS on by default — every Gemini reply is spoken via the browser's
   // SpeechSynthesis. User can mute via the speaker icon in the bottom row.
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [activeVoice, setActiveVoice] = useState(() => destination ? "nav" : "conv");
   const [tipNonce, setTipNonce] = useState(0);
   // Rotating angle injected into the tip prompt while idling on Tips mode, so
   // the auto-narration feels varied across the 60s rotation cycle.
@@ -204,7 +221,41 @@ function WalkCompanionWidgetInner({
   });
 
   // Browser TTS for AI replies (default off).
-  const { speak: ttsSpeak, cancel: ttsCancel, prime: ttsPrime } = useTtsSpeak({ enabled: voiceOn });
+  // The hook itself is enabled whenever any surface is live; per-surface
+  // gating happens at each call site (see nav-TTS effect and pushMessage).
+  const { speak: ttsSpeak, cancel: ttsCancel, prime: ttsPrime } = useTtsSpeak({ enabled: activeVoice !== "off" });
+
+  // Auto-flip when the conv overlay opens / closes during a walk. Empty
+  // state (no destination) keeps whatever the user last chose.
+  useEffect(() => {
+    if (isEmpty) return;
+    setActiveVoice(convOpen ? "conv" : "nav");
+  }, [convOpen, isEmpty]);
+
+  // Cancel any in-flight utterance ONLY on a real flip — never on the
+  // initial mount. React fast-refresh / hot-reload remounts the widget
+  // mid-walk; if this effect fires on first mount, it cancels the
+  // walk-start utterance the moment it's queued (every speak() call
+  // immediately fires `onerror: canceled` with no `onstart` ever
+  // logged). The flipMounted ref skips the first invocation.
+  const flipMountedRef = useRef(false);
+  useEffect(() => {
+    if (!flipMountedRef.current) {
+      flipMountedRef.current = true;
+      return;
+    }
+    ttsCancel();
+  }, [activeVoice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tiny flip-switch helpers — each speaker icon owns its own surface.
+  const toggleNavVoice = useCallback(
+    () => setActiveVoice((v) => (v === "nav" ? "off" : "nav")),
+    []
+  );
+  const toggleConvVoice = useCallback(
+    () => setActiveVoice((v) => (v === "conv" ? "off" : "conv")),
+    []
+  );
 
   // ── Navigation TTS: speaks the maneuver on three triggers (walk-start,
   // skip, new maneuver). ETA is only spoken on the very first utterance
@@ -240,15 +291,29 @@ function WalkCompanionWidgetInner({
     return s.split(/\s+/)[0] || "";
   })();
   useEffect(() => {
-    if (!voiceOn) return;
+    if (activeVoice !== "nav") return;
     if (!destination) {
-      // Walk ended — clear any pending walk-start utterance.
+      // Walk ended — clear any pending walk-start utterance AND reset
+      // session refs so the next walk (even to the same destination)
+      // re-fires trigger 1 cleanly. Without this reset, restarting a
+      // walk to the same place produces zero TTS because prevDestRef is
+      // still set from the previous session.
       if (walkStartTimerRef.current) {
         clearTimeout(walkStartTimerRef.current);
         walkStartTimerRef.current = null;
       }
+      prevDestRef.current = null;
+      prevInstrPrefixRef.current = null;
+      lastNavSpeakAtRef.current = 0;
       return;
     }
+    // Refresh the TTS user-gesture activation token. The user just took
+    // an action (tapped Start exploring, or skipped, or arrived) which
+    // changed destination/instruction; this effect runs synchronously in
+    // the same task as that click, which is still inside the gesture
+    // activation window. Priming here grants ~5 s of cover for the
+    // deferred 1 s walk-start timer to actually speak.
+    try { ttsPrime(); } catch (_e) {}
     // Live snapshot refs: the deferred walk-start timer reads these at
     // fire-time so it always speaks the *latest* instruction / ETA, not
     // whatever was current when the timer was scheduled.
@@ -320,7 +385,29 @@ function WalkCompanionWidgetInner({
       ttsSpeak(line);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destination, instrPrefix, instruction, eta, voiceOn]);
+  }, [destination, instrPrefix, instruction, eta, activeVoice]);
+
+  // No cancel-on-open: calling speechSynthesis.cancel() right after
+  // ttsPrime() invalidates the user-gesture activation that primes the
+  // queue, and subsequent async speak() calls (Gemini's reply) silently
+  // no-op. The nav-TTS effect already early-returns when convOpen is
+  // true, so we simply let any in-flight maneuver utterance finish.
+
+  // Document-wide TTS priming. The walk-start utterance fires from a 1 s
+  // setTimeout AFTER the user's tap on "Start exploring" (which lives in
+  // NavigationMapScreen, not inside this widget — so the widget's own
+  // pointerdown handler can't catch it). Chrome / Safari then block the
+  // deferred speak() because the gesture activation has expired by the
+  // time the timer fires. A capture-phase pointerdown listener on the
+  // document refreshes the activation token on EVERY tap anywhere on the
+  // page — cheap (one silent utterance, gated by primedRef), and means
+  // the first maneuver TTS reliably plays no matter where the last
+  // gesture happened.
+  useEffect(() => {
+    const onAnyPointer = () => { try { ttsPrime(); } catch (_e) {} };
+    document.addEventListener("pointerdown", onAnyPointer, { capture: true });
+    return () => document.removeEventListener("pointerdown", onAnyPointer, { capture: true });
+  }, [ttsPrime]);
 
   // ── Conversation: inline STT with polling-based silence detection ──────
   // Built from scratch with a 200ms poll that checks Date.now() against the
@@ -506,11 +593,11 @@ function WalkCompanionWidgetInner({
     const msg = { id, role, text, places: places || [] };
     setMessages((ms) => [...ms, msg]);
     if (role === "ai") {
-      console.log("[Strollo] AI message pushed; voiceOn =", voiceOn);
-      if (voiceOn) ttsSpeak(text);
+      console.log("[Strollo] AI message pushed; activeVoice =", activeVoice);
+      if (activeVoice === "conv") ttsSpeak(text);
     }
     return msg;
-  }, [voiceOn, ttsSpeak]);
+  }, [activeVoice, ttsSpeak]);
 
   const askAi = useCallback(async (userText, history) => {
     // Slim, tone-free conversation prompt — emits 📍 lines so the reel can
@@ -616,7 +703,13 @@ function WalkCompanionWidgetInner({
     setTripToast(`Added "${name}" to your trip`);
     if (tripToastTimerRef.current) clearTimeout(tripToastTimerRef.current);
     tripToastTimerRef.current = setTimeout(() => setTripToast(null), 1800);
-  }, [onAddByName]);
+    // If we're in-walk and the overlay is open, surface the yellow
+    // "Update walk plan" CTA so the user can commit the new stop(s)
+    // back to the route in one tap.
+    if (convOpen && !isEmpty) {
+      setConvAddedCount((n) => n + 1);
+    }
+  }, [onAddByName, convOpen, isEmpty]);
 
   const removeLocation = useCallback((name) => {
     if (!name || !onRemoveByName) return;
@@ -631,7 +724,7 @@ function WalkCompanionWidgetInner({
     // async `speak()` that fires after Gemini's reply lands.
     ttsPrime();
     setConvMode("conversation");
-    setVoiceOn(true);
+    setActiveVoice("conv");
     const userMsg = { id: `m-${++idRef.current}`, role: "user", text: p.prompt };
     setMessages((ms) => {
       const next = [...ms, userMsg];
@@ -651,17 +744,10 @@ function WalkCompanionWidgetInner({
     stopConvListening();
     ttsCancel();
     setSpeakActive(false);
-    setVoiceOn(true);
+    setActiveVoice("conv");
     setConvMode("tips");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopConvListening, ttsCancel]);
-
-  const toggleVoice = useCallback(() => {
-    setVoiceOn((v) => {
-      if (v) ttsCancel();
-      return !v;
-    });
-  }, [ttsCancel]);
 
   // Tip auto-refresh is FROZEN: no entry bump, no idle rotation. The tip
   // rendered on first load stays in place until the user manually triggers
@@ -669,13 +755,16 @@ function WalkCompanionWidgetInner({
   // restoring the entry-bump effect and the 60s flavor-rotation interval.
   // (TIP_FLAVORS / setTipFlavor are kept around for the future.)
 
-  // Cancel any in-flight TTS/STT on unmount only — callbacks live in refs
-  // so dep changes don't re-fire this cleanup mid-session.
-  const cleanupRefs = useRef({ ttsCancel, stopConvListening });
-  cleanupRefs.current.ttsCancel = ttsCancel;
+  // Cancel STT (mic) on unmount — must release the recognizer or the
+  // browser keeps it open. We deliberately do NOT cancel TTS on unmount:
+  // React fast-refresh / hot-reload remounts the widget mid-walk, which
+  // would cancel the walk-start utterance the moment it tries to play.
+  // SpeechSynthesis is global and will naturally stop when the page
+  // navigates / closes, so leaking pending utterances on dev remounts
+  // is harmless and keeps audio reliable.
+  const cleanupRefs = useRef({ stopConvListening });
   cleanupRefs.current.stopConvListening = stopConvListening;
   useEffect(() => () => {
-    cleanupRefs.current.ttsCancel?.();
     cleanupRefs.current.stopConvListening?.();
     if (tripToastTimerRef.current) clearTimeout(tripToastTimerRef.current);
   }, []);
@@ -691,6 +780,13 @@ function WalkCompanionWidgetInner({
     if (isEmpty) {
       if (convMode !== "conversation") setConvMode("conversation");
       startConvListening();
+    } else {
+      // Walking-state path — open the in-walk conversation overlay above
+      // the nav chrome, switch to conversation mode, and start listening.
+      // Same STT/Gemini flow as empty-state.
+      if (!convOpen) setConvOpen(true);
+      if (convMode !== "conversation") setConvMode("conversation");
+      startConvListening();
     }
     onSpeakStart?.();
   };
@@ -698,7 +794,7 @@ function WalkCompanionWidgetInner({
     setSpeakActive(false);
     // useSpeechRecognition's onAutoStop will fire when the recognizer ends,
     // which is where the user message gets committed and Gemini is asked.
-    if (isEmpty) stopConvListening();
+    stopConvListening();
     onSpeakEnd?.();
   };
 
@@ -713,6 +809,12 @@ function WalkCompanionWidgetInner({
   };
 
   const listening = speakActive;
+  // While the in-walk conversation overlay is open the conv-section already
+  // shows the listening UI (interim transcript + LISTENING button). Don't
+  // also morph the nav-section below the divider into a "you're saying"
+  // view — keep the normal walking chrome (Heading to / turn / DIST/ETA)
+  // visible so the user can still see where they're going while talking.
+  const navListening = listening && !(convOpen && !isEmpty);
   const glowing = !!suggestion && !listening;
 
   // Drag-up to expand into the full-screen chat. Tracks pointerdown only when
@@ -720,6 +822,13 @@ function WalkCompanionWidgetInner({
   // for ~60px of upward movement and calls onExpand once.
   const expandRef = useRef({ active: false, startY: 0 });
   const onWidgetPointerDown = (e) => {
+    // Re-arm the TTS user-gesture activation on every touch — Chrome and
+    // Safari let `speechSynthesis.speak()` fire silently when called from
+    // an async context (the nav-TTS 1 s timer, the post-Gemini speak)
+    // unless a recent gesture has primed the queue. A cheap inaudible
+    // utterance from inside this handler refreshes the activation token
+    // for the next ~5 s, which covers both deferred call sites.
+    try { ttsPrime(); } catch (_e) {}
     if (!onExpand) return;
     if (e.target.closest("button, [data-no-drag]")) return;
     expandRef.current = { active: true, startY: e.clientY };
@@ -738,14 +847,131 @@ function WalkCompanionWidgetInner({
   return (
     <div
       ref={forwardedRef}
-      className={`wcw${listening ? " wcw--listening" : ""}${glowing ? " wcw--glow" : ""}`}
+      className={`wcw${navListening ? " wcw--listening" : ""}${glowing ? " wcw--glow" : ""}`}
       onPointerDown={onWidgetPointerDown}
       onPointerMove={onWidgetPointerMove}
       onPointerUp={onWidgetPointerEnd}
       onPointerCancel={onWidgetPointerEnd}
     >
+      {/* In-walk conversation overlay — stacks above the nav chrome inside
+          the same widget. Only renders during a walk; empty-state handles
+          conversation through its own branch lower in the tree. */}
+      {!isEmpty && convOpen && (
+        <>
+          <div className="wcw-conv-section">
+            <div className="wcw-status-row">
+              <span className="wcw-listening-label wcw-listening-label--solo">
+                <span className="wcw-listening-dot" />
+                Conversation
+              </span>
+              {trip.length > 0 && (
+                <span className="strollo-saved-badge" aria-label={`${trip.length} saved`}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 2C8.4 2 5.5 4.9 5.5 8.5c0 4.7 6.5 12 6.5 12s6.5-7.3 6.5-12C18.5 4.9 15.6 2 12 2z" />
+                    <circle cx="12" cy="8.5" r="2.4" fill="#fff" />
+                  </svg>
+                  {trip.length} saved
+                </span>
+              )}
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="wcw-icon-btn wcw-close-btn"
+                onClick={() => {
+                  stopConvListening();
+                  setSpeakActive(false);
+                  setConvOpen(false);
+                  setConvAddedCount(0);
+                }}
+                aria-label="Close conversation"
+                title="Close conversation"
+                data-no-drag
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+            <div className="strollo-conv-body strollo-conv-body--inline">
+              <ConversationReel
+                messages={messages}
+                listening={speakActive}
+                interim={interim}
+                trip={trip}
+                onAddLocation={(name) => addLocation(name)}
+                onRemoveLocation={(name) => removeLocation(name)}
+              />
+            </div>
+            <div className="wcw-bottom wcw-bottom--conv">
+              <div className="wcw-bottom-left">
+                <button
+                  type="button"
+                  className={`wcw-icon-btn${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                  onClick={toggleConvVoice}
+                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                  aria-pressed={activeVoice === "conv"}
+                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute (mutes navigation)"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "conv" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "conv" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="wcw-icon-btn"
+                  onClick={handleRestart}
+                  disabled={messages.length === 0 && !interim}
+                  aria-label="Restart conversation"
+                  title="Restart conversation"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 12a8 8 0 1 0 2.5-5.8" />
+                    <path d="M4 4v4h4" />
+                  </svg>
+                </button>
+              </div>
+              <div className="wcw-bottom-right">
+                <button
+                  type="button"
+                  className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}`}
+                  onClick={onSpeakToggle}
+                  aria-label={speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops"}
+                  aria-pressed={speakActive}
+                >
+                  <SoundBars active={speakActive} color="currentColor" />
+                  <span className="wcw-speak-label">{speakActive ? "Listening" : "Say anything"}</span>
+                </button>
+              </div>
+            </div>
+            {convAddedCount > 0 && (
+              <button
+                type="button"
+                className="wcw-update-plan-btn"
+                onClick={() => {
+                  stopConvListening();
+                  setSpeakActive(false);
+                  setConvOpen(false);
+                  setConvAddedCount(0);
+                }}
+                data-no-drag
+              >
+                Update walk plan
+                {convAddedCount > 1 ? ` · ${convAddedCount}` : ""}
+              </button>
+            )}
+          </div>
+          <div className="wcw-conv-divider" aria-hidden="true" />
+        </>
+      )}
+
       <div className="wcw-status-row">
-        {listening ? (
+        {navListening ? (
           <>
             <span className="wcw-listening-label">
               <span className="wcw-listening-dot" />
@@ -870,7 +1096,7 @@ function WalkCompanionWidgetInner({
 
       {/* Walking-state body — preserved verbatim for non-empty journeys */}
       {!isEmpty && (
-        listening ? (
+        navListening ? (
           <h2 className="wcw-turn">{`“${transcript || "…"}”`}</h2>
         ) : paused ? null : suggestion ? (
           <div className="wcw-suggestion" role="status">
@@ -893,17 +1119,17 @@ function WalkCompanionWidgetInner({
                 hierarchy than the SAY ANYTHING bar — compact, subtle. */}
             <button
               type="button"
-              className={`wcw-turn-speaker${muted ? " wcw-turn-speaker--muted" : ""}`}
-              onClick={() => setMuted((v) => !v)}
-              aria-label={muted ? "Unmute" : "Mute"}
-              aria-pressed={muted}
+              className={`wcw-turn-speaker${activeVoice !== "nav" ? " wcw-turn-speaker--muted" : ""}`}
+              onClick={toggleNavVoice}
+              aria-label={activeVoice === "nav" ? "Mute navigation" : "Unmute navigation"}
+              aria-pressed={activeVoice !== "nav"}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
                 <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
-                {!muted && (
+                {activeVoice === "nav" && (
                   <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 )}
-                {muted && (
+                {activeVoice !== "nav" && (
                   <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 )}
               </svg>
@@ -912,7 +1138,7 @@ function WalkCompanionWidgetInner({
         )
       )}
 
-      {!listening && !isEmpty && (
+      {!navListening && !isEmpty && (
         <div className="wcw-stats">
           <div className="wcw-stat">
             <span className="wcw-stat-label">DIST</span>
@@ -927,6 +1153,7 @@ function WalkCompanionWidgetInner({
       {/* ProgressStrip removed per design — the dotted boots→flag strip
           was redundant with the route line + DIST/ETA stats. */}
 
+      {!(convOpen && !isEmpty) && (
       <div className="wcw-bottom">
         <div className="wcw-bottom-left">
           {/* In empty-state Conversation mode, the left cluster swaps to
@@ -936,18 +1163,18 @@ function WalkCompanionWidgetInner({
             <>
               <button
                 type="button"
-                className={`wcw-icon-btn${voiceOn ? " wcw-icon-btn--active" : ""}`}
-                onClick={toggleVoice}
-                aria-label={voiceOn ? "Turn voice off" : "Turn voice on"}
-                aria-pressed={voiceOn}
-                title={voiceOn ? "Voice on — tap to mute AI replies" : "Voice off — tap to speak AI replies"}
+                className={`wcw-icon-btn${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                onClick={toggleConvVoice}
+                aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                aria-pressed={activeVoice === "conv"}
+                title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
                   <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
-                  {voiceOn && (
+                  {activeVoice === "conv" && (
                     <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   )}
-                  {!voiceOn && (
+                  {activeVoice !== "conv" && (
                     <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   )}
                 </svg>
@@ -1031,6 +1258,7 @@ function WalkCompanionWidgetInner({
           </button>
         </div>
       </div>
+      )}
 
       {tripToast && (
         <div className="strollo-trip-toast" role="status">

@@ -195,6 +195,15 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     () => isExplorationMode ? null : (confirmedStops.find((s) => !visitedIds?.has(s.id)) || null),
     [confirmedStops, visitedIds, isExplorationMode]
   );
+
+  // Dev-only diagnostic: log the journey state every time it changes so
+  // we can see whether saved stops actually land in confirmedStops in
+  // the right order (and which ones have geocoded coords yet).
+  useEffect(() => {
+    console.log("[Nav] journeyItems=", journeyItems.map((j) => `${j.name}(${j.lat ? "✓" : "—"})`));
+    console.log("[Nav] confirmedStops=", confirmedStops.map((s) => s.name));
+    console.log("[Nav] nextTarget=", nextTarget?.name || "(none)");
+  }, [journeyItems, confirmedStops, nextTarget]);
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -249,6 +258,11 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
   const [routeSteps, setRouteSteps]       = useState([]);
+  // Walking geometry chaining the *future* unvisited stops together
+  // (target → stop2 → stop3 …). Drawn faintly behind the salient
+  // user→target leg so the user sees the real shape of the rest of the
+  // walk instead of a straight line cutting across blocks.
+  const [remainingRoute, setRemainingRoute] = useState(null);
   // voiceMode (full-screen voice overlay) was removed; the bottom widget
   // owns the conversation experience now.
   const voiceMode = null;
@@ -283,6 +297,17 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // stop. If nothing is confirmed (or all visited), stopPositions is empty
   // and no route is fetched.
   const stopPositions = nextTarget ? [[nextTarget.lat, nextTarget.lng]] : [];
+
+  // Future unvisited stops AFTER the active target — for the chained
+  // walking geometry that replaces the straight dashed line.
+  const remainingStops = React.useMemo(() => {
+    if (!nextTarget) return [];
+    const idx = confirmedStops.findIndex((s) => s.id === nextTarget.id);
+    if (idx < 0) return [];
+    return confirmedStops
+      .slice(idx + 1)
+      .filter((s) => !visitedIds?.has(s.id));
+  }, [confirmedStops, visitedIds, nextTarget]);
 
   // Live straight-line distance to the next target — drives the "I am here"
   // affordance and the wcw stats. Computed at component scope so the button
@@ -467,6 +492,33 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     }).catch(err => { console.warn("Route fetch failed:", err); });
   }, [userLocation, stopPositions]);
 
+  // Fetch chained walking geometry for the remaining (future) unvisited
+  // stops, anchored at the active target so the seam matches the salient
+  // leg. Re-fetches whenever the remaining-stop list changes (skip,
+  // arrive, add).
+  const remainingKey = remainingStops.map((s) => s.id).join("|");
+  useEffect(() => {
+    if (!nextTarget || remainingStops.length === 0) {
+      setRemainingRoute(null);
+      return;
+    }
+    let cancelled = false;
+    const waypoints = [
+      [nextTarget.lat, nextTarget.lng],
+      ...remainingStops.map((s) => [s.lat, s.lng]),
+    ];
+    getWalkingRoute(waypoints).then((result) => {
+      if (cancelled) return;
+      if (result?.coordinates) setRemainingRoute(result.coordinates);
+      else setRemainingRoute(null);
+    }).catch((err) => {
+      console.warn("Remaining-route fetch failed:", err);
+      if (!cancelled) setRemainingRoute(null);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextTarget?.id, remainingKey]);
+
   // Bearing from user to the next maneuver (falls back to destination).
   // The map rotates by -bearing when headingUp is on, so the road ahead points "up".
   const navBearing = useMemo(() => {
@@ -494,14 +546,30 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           <ZoomTracker onZoom={setMapZoom} />
 
-          {/* Faint hint of the WHOLE confirmed route (visited + future) so
-              the user sees the broader plan even though only the active
-              leg is highlighted. Drawn FIRST so the salient OSRM line and
-              walked trail layer on top of it. Straight-line dashed —
-              context, not navigation. */}
-          {confirmedStops.length > 1 && (
+          {/* Faint hint of the FUTURE leg of the route (target → next
+              unvisited stops), drawn along real walking streets via
+              OSRM rather than a straight line cutting across blocks.
+              Falls back to a thin straight dashed line while OSRM is
+              loading so the path doesn't disappear during a fetch. */}
+          {remainingRoute && (
             <Polyline
-              positions={confirmedStops.map((s) => [s.lat, s.lng])}
+              positions={remainingRoute}
+              pathOptions={{
+                color: "#8851D4",
+                weight: 4,
+                opacity: 0.45,
+                dashArray: "6 8",
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          )}
+          {!remainingRoute && nextTarget && remainingStops.length > 0 && (
+            <Polyline
+              positions={[
+                [nextTarget.lat, nextTarget.lng],
+                ...remainingStops.map((s) => [s.lat, s.lng]),
+              ]}
               pathOptions={{
                 color: "#8851D4",
                 weight: 3,
@@ -830,18 +898,26 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 lng: cachedPin?.lng ?? null,
               };
               // Optimistic append + addedIds flip → pill flips instantly.
-              onJourneyChange([...(journeyItems || []), initialItem]);
+              const optimisticList = [...(journeyItems || []), initialItem];
+              onJourneyChange(optimisticList);
               if (setAddedIds) setAddedIds((p) => {
                 const n = new Set(p); n.add(id); return n;
               });
               // Backfill coords in the background if we didn't have them.
+              // We pass the FULL list (with backfilled coords on the new
+              // item) — never a functional updater, since the parent
+              // stores whatever it receives directly. Passing a function
+              // would corrupt the journey to the function itself and
+              // collapse the list down to whatever the parent assumes.
               if (!cachedPin) {
                 try {
                   const geo = await geocodePlace(name, userLocation?.[0], userLocation?.[1]);
                   if (geo?.lat && geo?.lng) {
-                    onJourneyChange((prev) => (prev || []).map((it) =>
-                      it.id === id ? { ...it, lat: geo.lat, lng: geo.lng } : it
-                    ));
+                    onJourneyChange(
+                      optimisticList.map((it) =>
+                        it.id === id ? { ...it, lat: geo.lat, lng: geo.lng } : it
+                      )
+                    );
                   }
                 } catch (e) { /* keep null coords */ }
               }

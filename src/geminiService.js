@@ -403,12 +403,11 @@ export async function getWalkingRoute(points) {
   return null;
 }
 
-// Fetch nearby places from Overpass with fallback endpoints
-const OVERPASS_ENDPOINTS = [
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass-api.de/api/interpreter",
-];
-
+// Fetch nearby places via the /api/overpass server-side proxy. We can't
+// hit Overpass directly from the browser: kumi.systems is offline and
+// overpass-api.de doesn't set CORS headers, so the request is blocked
+// before a response can be read. The proxy fans out to multiple mirrors
+// server-side and returns the first that succeeds.
 export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal } = {}) {
   const query = `[out:json][timeout:6];(node["amenity"~"cafe|restaurant|bar|ice_cream|bakery|library|theatre"](around:${radiusMeters},${lat},${lon});node["tourism"~"museum|gallery|attraction|viewpoint"](around:${radiusMeters},${lat},${lon});node["leisure"~"park|garden"](around:${radiusMeters},${lat},${lon});node["shop"~"books|florist"](around:${radiusMeters},${lat},${lon}););out body 40;`;
 
@@ -421,61 +420,14 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
     arts_centre: "Arts", park: "Park", garden: "Garden",
   };
 
-  // Try endpoints sequentially (NOT in parallel). Racing both at once
-  // doubles our request rate against the free Overpass quotas — combined
-  // with multiple rings on the home screen we'd flood the service and get
-  // 429'd. Sequential gives the first endpoint a chance to satisfy the
-  // request without burning the second mirror.
-  const attempt = async (endpoint) => {
-    // Up to 2 tries per endpoint with 1.2s backoff — covers transient
-    // 429s without thrashing.
-    for (let i = 0; i < 2; i++) {
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: `data=${encodeURIComponent(query)}`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        signal,
-      });
-      if (res.ok) return res.json();
-      if (res.status === 429 && i === 0) {
-        // Rate limited — wait a beat and retry the same endpoint.
-        await new Promise((r) => setTimeout(r, 1200));
-        continue;
-      }
-      throw new Error(`HTTP ${res.status}`);
-    }
-    throw new Error("retry exhausted");
-  };
-
+  let res;
   try {
-    let data = null;
-    let lastErr = null;
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        data = await attempt(endpoint);
-        break;
-      } catch (e) {
-        if (e?.name === "AbortError") throw e;
-        lastErr = e;
-      }
-    }
-    if (!data) throw lastErr || new Error("All Overpass endpoints unavailable");
-    return data.elements
-      .filter((el) => el.tags?.name)
-      .map((el) => {
-        const tag = el.tags.amenity || el.tags.tourism || el.tags.leisure || el.tags.shop || "";
-        return {
-          id: el.id,
-          name: el.tags.name,
-          desc: categoryMap[tag] || tag || "Place",
-          lat: el.lat,
-          lng: el.lon,
-          hours: el.tags.opening_hours || null,
-          website: el.tags.website || el.tags["contact:website"] || null,
-          phone: el.tags.phone || el.tags["contact:phone"] || null,
-        };
-      });
+    res = await fetch("/api/overpass", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal,
+    });
   } catch (err) {
     if (signal?.aborted || err?.name === "AbortError") {
       const e = new Error("Aborted");
@@ -484,6 +436,24 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
     }
     throw new Error("All Overpass endpoints unavailable");
   }
+
+  if (!res.ok) throw new Error("All Overpass endpoints unavailable");
+  const data = await res.json();
+  return data.elements
+    .filter((el) => el.tags?.name)
+    .map((el) => {
+      const tag = el.tags.amenity || el.tags.tourism || el.tags.leisure || el.tags.shop || "";
+      return {
+        id: el.id,
+        name: el.tags.name,
+        desc: categoryMap[tag] || tag || "Place",
+        lat: el.lat,
+        lng: el.lon,
+        hours: el.tags.opening_hours || null,
+        website: el.tags.website || el.tags["contact:website"] || null,
+        phone: el.tags.phone || el.tags["contact:phone"] || null,
+      };
+    });
 }
 
 export async function sendMessage(conversationHistory, systemPrompt) {

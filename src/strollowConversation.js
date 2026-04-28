@@ -348,6 +348,39 @@ Plain text only. No quotes. No markdown. No preamble. No "Welcome" or "Hi".`;
 // Browser TTS for AI replies. `prime()` MUST be called from inside a user
 // gesture (click handler) once before async `speak()` calls will play —
 // Chrome and Safari otherwise no-op `speak()` outside of user activation.
+
+// Module-level fallback queue. When two-tier watchdog confirms the engine
+// is unrecoverably wedged (utterance never starts even after a forced
+// requeue), we stash the text here and arm a one-shot pointerdown
+// listener that re-attempts the speak inside the user's next gesture.
+// That gesture-scoped speak() call bypasses Chrome's autoplay policy
+// unconditionally, so any tap anywhere on the page unsticks audio.
+let ttsPendingFallback = null;
+let ttsFallbackArmed = false;
+function armTtsFallback(text, speakFn) {
+  ttsPendingFallback = text;
+  if (ttsFallbackArmed) return;
+  ttsFallbackArmed = true;
+  const fire = () => {
+    document.removeEventListener("pointerdown", fire, true);
+    ttsFallbackArmed = false;
+    const t = ttsPendingFallback;
+    ttsPendingFallback = null;
+    if (t) {
+      console.log("[TTS] fallback: firing on pointerdown:", t.slice(0, 60));
+      speakFn(t);
+    }
+  };
+  document.addEventListener("pointerdown", fire, { capture: true });
+  console.log("[TTS] fallback: armed — will speak on next tap");
+}
+// Restored from commit 7bb41cf (the version that audibly worked) after a
+// later refactor inadvertently dropped the explicit voice pick and the
+// silent-utterance prime — both turned out to be load-bearing on macOS
+// Chrome, where the browser's default voice + a missing audio-sink
+// warmup ship audio to a silent sink that reports speaking=true with no
+// audible output. Keep rate/pitch defaults that matched the working
+// build (0.88 / 1.05) and the Samantha / Google US English voice pick.
 export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
   const utteranceRef = useRef(null);
   const primedRef = useRef(false);
@@ -366,7 +399,9 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
   // Establishes user activation for SpeechSynthesis — fire once from the
   // click handler. We use a single-space utterance (rather than empty)
   // because some browsers no-op an empty utterance and never grant the
-  // activation we're after. Idempotent.
+  // activation we're after. Idempotent. Restored from the version that
+  // audibly worked (commit 7bb41cf) — dropping the silent utterance left
+  // macOS Chrome's audio sink unwarmed.
   const prime = () => {
     if (!("speechSynthesis" in window)) return;
     try {
@@ -374,7 +409,7 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
       if (!primedRef.current) {
         const u = new SpeechSynthesisUtterance(" ");
         u.volume = 0;
-        u.rate = 10; // run through it as fast as possible
+        u.rate = 10;
         window.speechSynthesis.speak(u);
         primedRef.current = true;
         console.log("[TTS] primed");
@@ -390,28 +425,67 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
     }
     if (!text) return;
 
-    // No cancel() upfront — that was killing the in-flight utterance and
-    // chopping it after ~1s. Just resume defensively and queue the new one.
-    try { window.speechSynthesis.resume(); } catch (e) { /* ignore */ }
+    const ss = window.speechSynthesis;
+    // Drain stuck state. If pending utterances exist but nothing is
+    // actively speaking, the queue has wedged — Chrome sometimes parks
+    // an utterance in pending forever (especially after a previous
+    // cancel/remount cycle or hot-reload). Clearing it lets the new
+    // utterance start. We deliberately do NOT cancel when actively
+    // speaking, so a long reply isn't chopped mid-sentence.
+    try {
+      if (ss.pending && !ss.speaking) ss.cancel();
+    } catch (e) { /* ignore */ }
+    try { ss.resume(); } catch (e) { /* ignore */ }
 
     const u = new SpeechSynthesisUtterance(text);
+    // Match commit 7bb41cf (the version that worked audibly): explicit
+    // voice pick + slower rate. The default voice on macOS Chrome can
+    // route to a silent sink even though `speaking` flips true; picking
+    // Samantha / Google US English fixes that. Rate 0.88 also matters
+    // for the same reason on some engines.
     u.rate = rate;
     u.pitch = pitch;
-    u.lang = "en-US";
     u.volume = 1;
-    const voices = window.speechSynthesis.getVoices();
+    u.lang = "en-US";
+    const voices = ss.getVoices();
     const pick =
       voices.find((v) => /samantha|google us english|en-us/i.test(`${v.name} ${v.lang}`)) ||
       voices.find((v) => /^en/i.test(v.lang)) ||
       voices[0];
     if (pick) u.voice = pick;
-    u.onstart = () => { console.log("[TTS] onstart"); setSpeaking(true); };
+    u.onstart = () => {
+      console.log("[TTS] onstart — engine is producing audio NOW. If you can't hear it: check tab mute (right-click tab), system output device, and Chrome flags.");
+      setSpeaking(true);
+    };
     u.onend = () => { console.log("[TTS] onend"); setSpeaking(false); };
     u.onerror = (e) => { console.warn("[TTS] onerror:", e?.error || e); setSpeaking(false); };
+    u.onboundary = (e) => { console.log("[TTS] onboundary at char", e?.charIndex, "— audio is actively streaming"); };
+    u.onpause = () => { console.log("[TTS] onpause — engine paused, calling resume()"); try { ss.resume(); } catch (_e) {} };
+    u.onmark = () => { console.log("[TTS] onmark"); };
     utteranceRef.current = u;
-    console.log("[TTS] speaking:", text.slice(0, 80), "@ rate", rate);
-    try { window.speechSynthesis.speak(u); }
+    console.log("[TTS] speaking:", text.slice(0, 80),
+      "| paused=", ss.paused, "pending=", ss.pending, "speaking=", ss.speaking,
+      "| voices=", ss.getVoices().length);
+    try { ss.speak(u); }
     catch (e) { console.warn("[TTS] speak() threw:", e); }
+    // Two-tier watchdog: if onstart hasn't fired within 600 ms, force a
+    // cancel + re-speak (Chrome wedge from hot-reload / pending leftovers).
+    // If even the requeue stalls another 600 ms, defer the line to the
+    // next user pointerdown — guaranteed to bypass autoplay policy.
+    setTimeout(() => {
+      if (utteranceRef.current !== u) return;
+      if (ss.speaking) return;
+      console.warn("[TTS] watchdog: utterance never started, forcing requeue");
+      try { ss.cancel(); } catch (_e) {}
+      try { ss.speak(u); } catch (_e) {}
+      setTimeout(() => {
+        if (utteranceRef.current !== u) return;
+        if (ss.speaking) return;
+        console.warn("[TTS] watchdog tier 2: requeue also stalled — arming pointerdown fallback");
+        utteranceRef.current = null;
+        armTtsFallback(text, speak);
+      }, 600);
+    }, 600);
   };
 
   // Warm voices list (some browsers populate async).
@@ -420,6 +494,29 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
     const w = () => window.speechSynthesis.getVoices();
     w();
     window.speechSynthesis.onvoiceschanged = w;
+  }, []);
+
+  // Dev-only diagnostic: expose a global helper so you can paste
+  // `window.__ttsTest()` into the console and hear an unambiguous test
+  // utterance with the same voice settings the app uses. If THAT also
+  // produces logs but no audio, the issue is system / tab muting, not
+  // the JS — speechSynthesis is reaching the audio device but the OS
+  // is sinking it. Common culprits: tab mute (right-click tab → Mute
+  // Site), macOS Output device set to a disconnected Bluetooth, or
+  // the browser launched with --mute-audio.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__ttsTest = (text = "Audio check. If you can hear this, navigation voice should also work.") => {
+      const ss = window.speechSynthesis;
+      try { ss.cancel(); } catch (_e) {}
+      const u = new SpeechSynthesisUtterance(text);
+      u.volume = 1; u.rate = 1; u.pitch = 1;
+      u.onstart = () => console.log("[ttsTest] onstart");
+      u.onend = () => console.log("[ttsTest] onend");
+      u.onerror = (e) => console.warn("[ttsTest] onerror:", e?.error);
+      ss.speak(u);
+      console.log("[ttsTest] queued. paused=", ss.paused, "speaking=", ss.speaking, "pending=", ss.pending);
+    };
   }, []);
 
   // (Chrome 14s pause/resume keepalive removed — it was cutting off short

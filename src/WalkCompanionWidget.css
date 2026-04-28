@@ -879,3 +879,54 @@
   color: #FFD501;
   background: rgba(255, 213, 1, 0.18);
 }
+
+/* ── In-walk Conversation overlay ─────────────────────────────────────
+   Stacks above the nav chrome inside the same widget. Mounted only
+   when the user taps SAY ANYTHING during a walk. */
+.wcw-conv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.wcw-conv-divider {
+  height: 1px;
+  background: rgba(247, 243, 245, 0.10);
+  margin: 0 -16px 12px;
+}
+/* Cap the inline reel so the widget doesn't grow taller than ~half the
+   viewport when the conversation stacks with the nav chrome. */
+.strollo-conv-body--inline { max-height: 220px; }
+.strollo-conv-body--inline .strollo-reel { max-height: 220px; }
+
+/* Keep the in-walk overlay header on a single line so the × close button
+   stays anchored top-right and doesn't get pushed out by a wrap. */
+.wcw-listening-label--solo { white-space: nowrap; }
+.wcw-conv-section .wcw-close-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+/* Yellow "Update walk plan" CTA — appears at the bottom of the conv
+   section once the user has appended a place via the + pill. Brand
+   yellow, full-width, dark text for high contrast. */
+.wcw-update-plan-btn {
+  margin-top: 4px;
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: #FFD501;
+  color: #1E1541;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(255, 213, 1, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.wcw-update-plan-btn:hover { box-shadow: 0 6px 18px rgba(255, 213, 1, 0.36); }
+.wcw-update-plan-btn:active { transform: scale(0.98); }
