@@ -96,7 +96,13 @@ function App() {
     const onClick = (e) => {
       const btn = e.target?.closest?.("button, [role='button']");
       if (!btn) return;
-      try { window.speechSynthesis?.cancel(); } catch (_e) {}
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      // iOS Safari leaves the engine wedged if cancel() fires when nothing
+      // is speaking — queued utterances after that never play. Only cancel
+      // when there's actually in-flight speech to interrupt.
+      if (!(synth.speaking || synth.pending)) return;
+      try { synth.cancel(); } catch (_e) {}
     };
     document.addEventListener("click", onClick, { capture: true });
     return () => document.removeEventListener("click", onClick, { capture: true });
