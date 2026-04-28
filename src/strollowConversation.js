@@ -8,6 +8,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { reverseGeocode } from "./mapUtils";
 import { sendMessage, buildSystemPrompt } from "./geminiService";
+import {
+  isMobile,
+  isCloudTtsConfigured,
+  unlockMobileAudio,
+  speakViaCloud,
+  cancelCloudTts,
+} from "./cloudTtsService";
 
 export const PROMPT_PILLS = [
   { glyph: "💎", label: "Hidden gems", prompt: "Any hidden gems within walking distance?" },
@@ -387,6 +394,7 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
   const [speaking, setSpeaking] = useState(false);
 
   const cancel = () => {
+    try { cancelCloudTts(); } catch (_e) {}
     try {
       if (window.speechSynthesis) window.speechSynthesis.cancel();
     } catch (e) {
@@ -396,6 +404,10 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
     setSpeaking(false);
   };
 
+  // True when we should route audio through Cloud TTS (<audio>) instead of
+  // window.speechSynthesis. Mobile only, and only if a TTS key is configured.
+  const useCloudPath = isMobile() && isCloudTtsConfigured();
+
   // Establishes user activation for SpeechSynthesis — fire once from the
   // click handler. We use a single-space utterance (rather than empty)
   // because some browsers no-op an empty utterance and never grant the
@@ -403,6 +415,10 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
   // audibly worked (commit 7bb41cf) — dropping the silent utterance left
   // macOS Chrome's audio sink unwarmed.
   const prime = () => {
+    if (useCloudPath) {
+      try { unlockMobileAudio(); } catch (_e) {}
+      return;
+    }
     if (!("speechSynthesis" in window)) return;
     try {
       window.speechSynthesis.resume();
@@ -423,11 +439,19 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
 
   const speak = (text) => {
     if (!enabled) return;
+    if (!text) return;
+    if (useCloudPath) {
+      console.log("[TTS] mobile → Cloud TTS:", text.slice(0, 80));
+      setSpeaking(true);
+      speakViaCloud(text, { rate, pitch })
+        .catch((err) => console.warn("[CloudTTS] failed:", err))
+        .finally(() => setSpeaking(false));
+      return;
+    }
     if (!("speechSynthesis" in window)) {
       console.warn("[TTS] speechSynthesis unavailable in this browser");
       return;
     }
-    if (!text) return;
 
     const ss = window.speechSynthesis;
     // Drain stuck state. If pending utterances exist but nothing is

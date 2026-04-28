@@ -8,6 +8,7 @@ import RewardScreen from './RewardScreen';
 import LoadingScreen from './LoadingScreen';
 import IntroScreen from './IntroScreen';
 import DevSwitch from './DevSwitch';
+import { cancelCloudTts, isCloudTtsPlaying } from './cloudTtsService';
 import './App.css';
 
 function App() {
@@ -96,6 +97,10 @@ function App() {
     const onClick = (e) => {
       const btn = e.target?.closest?.("button, [role='button']");
       if (!btn) return;
+      // Stop Cloud TTS playback (mobile path) if anything is playing.
+      if (isCloudTtsPlaying()) {
+        try { cancelCloudTts(); } catch (_e) {}
+      }
       const synth = window.speechSynthesis;
       if (!synth) return;
       // iOS Safari leaves the engine wedged if cancel() fires when nothing
