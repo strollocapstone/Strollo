@@ -424,6 +424,7 @@ function WalkCompanionWidgetInner({
   const stoppedRef = useRef(true);
   const pollRef = useRef(null);
   const finalTranscriptRef = useRef("");
+  const combinedTranscriptRef = useRef("");
 
   const SILENCE_MS = 1000;       // 1s of silence after last word → auto-stop
   const NO_SPEECH_MS = 8000;     // 8s with nothing heard → auto-stop empty
@@ -459,8 +460,9 @@ function WalkCompanionWidgetInner({
       try { r.abort(); } catch (e) {}
     }
     recogRef.current = null;
-    const captured = finalTranscriptRef.current.trim();
+    const captured = (finalTranscriptRef.current || combinedTranscriptRef.current).trim();
     finalTranscriptRef.current = "";
+    combinedTranscriptRef.current = "";
     setInterim("");
     handleAutoStop(captured);
   }, [handleAutoStop]);
@@ -493,6 +495,7 @@ function WalkCompanionWidgetInner({
     }
     clearInterval(pollRef.current);
     finalTranscriptRef.current = "";
+    combinedTranscriptRef.current = "";
     setInterim("");
     heardSpeechRef.current = false;
     stoppedRef.current = false;
@@ -514,6 +517,7 @@ function WalkCompanionWidgetInner({
       }
       finalTranscriptRef.current = finalText;
       const combined = (finalText + interimText).trim();
+      combinedTranscriptRef.current = combined;
       setInterim(combined);
       if (combined) heardSpeechRef.current = true;
       lastResultAtRef.current = Date.now();

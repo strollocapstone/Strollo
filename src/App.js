@@ -90,6 +90,18 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // Universal rule: any button click stops in-flight TTS. Captures at the
+  // document level so it works regardless of which screen mounted the button.
+  useEffect(() => {
+    const onClick = (e) => {
+      const btn = e.target?.closest?.("button, [role='button']");
+      if (!btn) return;
+      try { window.speechSynthesis?.cancel(); } catch (_e) {}
+    };
+    document.addEventListener("click", onClick, { capture: true });
+    return () => document.removeEventListener("click", onClick, { capture: true });
+  }, []);
+
   return (
     <div className="App">
       <div className="phone-frame">
