@@ -67,6 +67,7 @@ export function useSpeechRecognition({ onAutoStop } = {}) {
       const combined = prefix + final + interim;
       setTranscript(combined);
       transcriptRef.current = combined;
+      console.log("[STT] onresult →", combined);
 
       if (!hasHeardSpeech.current) {
         hasHeardSpeech.current = true;
@@ -75,10 +76,15 @@ export function useSpeechRecognition({ onAutoStop } = {}) {
 
       clearTimeout(silenceTimer.current);
       silenceTimer.current = setTimeout(() => {
-        if (didAutoStop.current) return;
+        console.log("[STT] silence timer fired (1s pause)");
+        if (didAutoStop.current) {
+          console.log("[STT] didAutoStop already true → skipping");
+          return;
+        }
         didAutoStop.current = true;
         const t = transcriptRef.current;
         stop();
+        console.log("[STT] firing onAutoStop with:", t);
         onAutoStopRef.current?.(t);
       }, SILENCE_AFTER_SPEECH_MS);
     };
@@ -95,20 +101,36 @@ export function useSpeechRecognition({ onAutoStop } = {}) {
     };
 
     recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      if (hadError.current) return;
+      console.log("[STT] onend fired (recognizer ended)");
+      if (recognitionRef.current !== recognition) {
+        console.log("[STT] onend: stale recognizer, ignoring");
+        return;
+      }
+      if (hadError.current) {
+        console.log("[STT] onend: had error, ignoring");
+        return;
+      }
       // If silence timer already handled auto-stop, do nothing
-      if (didAutoStop.current) return;
+      if (didAutoStop.current) {
+        console.log("[STT] onend: didAutoStop already true, exiting cleanly");
+        return;
+      }
       // Save accumulated text before restart
       accumulatedText.current = transcriptRef.current;
+      console.log("[STT] onend: attempting restart to keep listening");
       // Try to restart — keeps recognition alive for manual-stop mode (chat)
-      try { recognition.start(); } catch (_) {
+      try {
+        recognition.start();
+        console.log("[STT] onend: restart succeeded");
+      } catch (err) {
+        console.warn("[STT] onend: restart threw:", err?.name);
         // Can't restart — trigger auto-stop as fallback
         if (hasHeardSpeech.current) {
           didAutoStop.current = true;
           clearTimers();
           const t = transcriptRef.current;
           recognitionRef.current = null;
+          console.log("[STT] onend fallback: firing onAutoStop with:", t);
           onAutoStopRef.current?.(t);
         }
       }
@@ -117,7 +139,12 @@ export function useSpeechRecognition({ onAutoStop } = {}) {
     recognitionRef.current = recognition;
     setTranscript("");
     setFinalTranscript("");
-    recognition.start();
+    try {
+      recognition.start();
+      console.log("[STT] recognition.start() succeeded");
+    } catch (err) {
+      console.warn("[STT] recognition.start() threw:", err?.name, err?.message);
+    }
 
     noSpeechTimer.current = setTimeout(() => {
       if (!hasHeardSpeech.current && !didAutoStop.current) {

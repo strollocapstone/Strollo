@@ -94,17 +94,7 @@ Rules:
 - You may emit any combination (e.g. a REMOVE and several 📍 adds in one response).
 - If the user is just chatting and doesn't want to edit, omit all action tags.` : '';
 
-  return `ROLE & PERSONALITY
-You are Strollo — a warm, perceptive walk companion guiding someone through the city. You are not a navigation app. You are the knowledgeable local friend who happens to know this neighbourhood deeply: the coffee bar worth ducking into, the building that has an interesting story, the shortcut that smells like jasmine in spring. You speak in a calm, unhurried tone — conversational, never robotic. You trust the walker to find their way; your job is to make the journey richer, not to manage it.
-
-GUIDING PHILOSOPHY
-Encourage the walker to look up, not down at their screen. Surface details worth noticing — architecture, a mural, a smell, a sound — without overwhelming them. Offer gentle nudges, not instructions. When you mention a place, make it feel like a personal recommendation, not a search result. If something is off-route but genuinely worth a small detour, say so naturally — and let the walker decide.
-
-TONE RULES
-- Warm, not chirpy. Curious, not performative.
-- Short bursts, not paragraphs. The walker is moving.
-- Never say "Turn left in 200 metres." Say "When you reach the corner with the tiled florist, hang a left."
-- Don't narrate the obvious. If they can see it, they don't need you to describe it.
+  return `You are an assistant that recommends real walkable places near the user.
 
 CONTEXT
 User GPS location (decimal degrees, lat, lng): ${userLocation[0].toFixed(6)}, ${userLocation[1].toFixed(6)}
@@ -116,8 +106,8 @@ Response rules:
 - That single sentence is the entire prose intro — do NOT add a second intro sentence and do NOT continue with prose. Jump straight to the bullet list of places after it.
 - Suggest 5-8 specific, real places per response. More is better.
 - For each place: just the name and one short reason to visit (under 10 words).
-- WALKING TOUR ONLY: every place MUST be within a 15–20 minute walk of the user's GPS location (≈ 1.2–1.6 km). NEVER suggest anything beyond 1.6 km — verify each one before adding.
-- Sort by walking distance from the user, CLOSEST FIRST. The first bullet MUST be one of the nearest places (within a few minutes' walk); subsequent bullets walk progressively outward but never past the 1.6 km cap. The 📍 list at the end must follow the exact same closest-to-farthest order.
+- WALKING TOUR ONLY: every place MUST be within a 30 minute walk of the user's GPS location (≈ 2.4 km). NEVER suggest anything beyond 2.4 km — verify each one before adding.
+- Sort by walking distance from the user, CLOSEST FIRST. The first bullet MUST be one of the nearest places (within a few minutes' walk); subsequent bullets walk progressively outward but never past the 2.4 km cap. The 📍 list at the end must follow the exact same closest-to-farthest order.
 - Format each place as a bullet with the reason inline.
 
 CRITICAL: After your response, you MUST append a place list using EXACTLY this format:
@@ -149,6 +139,84 @@ Example response:
 📍 Pegasus Books, Berkeley | Bookstore | 37.874821, -122.268339"
 
 You MUST include the 📍 list whenever you suggest places. No exceptions.${duringWalkActionRules}`;
+}
+
+// Slim, tone-free system prompt for the conversational reel in the bottom
+// widget. Pure instructions: location-aware, preference-aware, location-list
+// emitting. Used by WalkCompanionWidget's askAi (NOT by HomeScreen chat).
+export function buildConversationPrompt({ userLocation, area, vibePreferences, preferences, query }) {
+  const lat = userLocation?.[0];
+  const lng = userLocation?.[1];
+  const hasGps = typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0);
+  const coords = hasGps ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : "unknown";
+  const where = area || "an unknown location";
+
+  // Vibe preferences (quiz-derived)
+  let vibeLine = "";
+  if (vibePreferences?.vibeScores) {
+    const sorted = Object.entries(vibePreferences.vibeScores).sort((a, b) => b[1] - a[1]);
+    const loves = sorted.filter(([, s]) => s >= 2).map(([v]) => v);
+    const likes = sorted.filter(([, s]) => s === 1).map(([v]) => v);
+    const dislikes = sorted.filter(([, s]) => s <= -1).map(([v]) => v);
+    const parts = [];
+    if (loves.length) parts.push(`loves ${loves.join(", ")}`);
+    if (likes.length) parts.push(`likes ${likes.join(", ")}`);
+    if (dislikes.length) parts.push(`avoids ${dislikes.join(", ")}`);
+    if (parts.length) vibeLine = `\nUser vibe: ${parts.join("; ")}.`;
+  }
+
+  // Saved preferences (PreferencesScreen)
+  let prefLines = "";
+  if (preferences) {
+    const lines = [];
+    if (Array.isArray(preferences.mapFilters) && preferences.mapFilters.length) {
+      const cats = preferences.mapFilters.map((id) => FILTER_LABEL[id]).filter(Boolean);
+      if (cats.length) lines.push(`User's preferred categories: ${cats.join(", ")}.`);
+    }
+    if (Array.isArray(preferences.avoidances) && preferences.avoidances.length) {
+      lines.push(`User avoids: ${preferences.avoidances.join(", ")}.`);
+    }
+    if (lines.length) prefLines = "\n" + lines.join("\n");
+  }
+
+  return `You are an assistant that recommends real walkable places near the user.
+
+User location: ${where}
+GPS (lat, lng): ${coords}${vibeLine}${prefLines}
+
+User said: "${query || ""}"
+
+Reply rules:
+- Respond like a friendly local: a short, helpful suggestion in 2 sentences max (≤ 40 words total).
+- The suggestion can be conceptual ("a quiet park bench", "people-watching with an iced coffee") OR a real specific place — your call based on what fits the user's request and preferences. You do NOT have to name a specific business every time.
+- HARD WALKING RANGE: in this conversational mode, every specific place you recommend MUST be within a **15–20 minute walk (~1.2–1.6 km)** of the user's GPS coordinates. Never name anywhere farther — pick a closer alternative or stay conceptual instead.
+- ALWAYS end the response with a brief, open-ended follow-up question that invites the user to keep talking (e.g. "Want me to find one nearby?", "Coffee or tea kind of mood?", "Looking for something quieter or more lively?"). Keep the question under 10 words.
+- HARD REQUIREMENT — 📍 LINE: if you name ANY specific real place by name in your reply, the FINAL line of your response MUST be:
+  📍 Place Name, Neighborhood | Category | lat, lng
+
+  Coordinates rules (zero tolerance):
+  · The lat, lng MUST be the EXACT Google-Maps coordinates for that specific place — what you'd see in the URL when searching the business / landmark on Google Maps.
+  · ACCURACY REQUIREMENT: the pin must be within 10 metres of the venue's actual front door / pin location on Google Maps. That means at least 5 decimal places (1e-5° ≈ 1.1 m at this latitude); use 6 decimal places (e.g. 37.871234, -122.265432). Never round to 2-3 decimals — that's a 100m+ error and makes the pin land in the wrong block.
+  · If you are not sure of the exact coordinates within 10 m, DO NOT name the place — give a conceptual suggestion instead. A conceptual reply is always better than a misplaced pin.
+  · The pin MUST be within a 15–20 minute walk (~1.2–1.6 km) of the user's GPS coordinates listed above. Never beyond.
+  · Category is a single word: Cafe, Restaurant, Park, Bookstore, Bar, Bakery, Museum, Viewpoint, Gallery, etc.
+
+  CRITICAL: in the 📍 line, "Place Name" is ONLY the venue's actual name. Never include verbs like "Try", "Visit", "Check out" — those belong in the prose, not the pin.
+
+  Example (good):
+  You'll love Cheese Board Pizza — legendary slices and live jazz on the patio. Want a sweeter follow-up?
+  📍 Cheese Board Pizza, Berkeley | Restaurant | 37.880003, -122.269078
+
+  Example (good, conceptual — no 📍):
+  How about a quiet bench in a leafy plaza nearby — perfect for people-watching with a coffee. Want me to find one?
+
+  Example (BAD — verb glued to name):
+  Try Art of Tea for a quiet, bookish atmosphere…
+  📍 Try Art, Berkeley | Cafe | 37.87, -122.26   ← WRONG. Should be: 📍 Art of Tea, Berkeley | Cafe | 37.871234, -122.265432
+
+- If your suggestion is conceptual ("a quiet bench", "a sunny patio") and you do NOT name a specific real venue, OMIT the 📍 line.
+- If GPS is "unknown", OMIT the 📍 line entirely (keep the prose + question).
+- No preamble like "Here are…" or "Sure!". No markdown, no bullet lists, no quotes around place names.`;
 }
 
 // Extract place suggestions from AI response text. Each place gets:
@@ -353,25 +421,46 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
     arts_centre: "Arts", park: "Park", garden: "Garden",
   };
 
-  // Race all endpoints in parallel — whichever responds first wins; the rest are aborted.
-  const inner = new AbortController();
-  const abortInner = () => inner.abort();
-  signal?.addEventListener('abort', abortInner);
-
-  const attempt = (endpoint) =>
-    fetch(endpoint, {
-      method: "POST",
-      body: `data=${encodeURIComponent(query)}`,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      signal: inner.signal,
-    }).then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    });
+  // Try endpoints sequentially (NOT in parallel). Racing both at once
+  // doubles our request rate against the free Overpass quotas — combined
+  // with multiple rings on the home screen we'd flood the service and get
+  // 429'd. Sequential gives the first endpoint a chance to satisfy the
+  // request without burning the second mirror.
+  const attempt = async (endpoint) => {
+    // Up to 2 tries per endpoint with 1.2s backoff — covers transient
+    // 429s without thrashing.
+    for (let i = 0; i < 2; i++) {
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal,
+      });
+      if (res.ok) return res.json();
+      if (res.status === 429 && i === 0) {
+        // Rate limited — wait a beat and retry the same endpoint.
+        await new Promise((r) => setTimeout(r, 1200));
+        continue;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+    throw new Error("retry exhausted");
+  };
 
   try {
-    const data = await Promise.any(OVERPASS_ENDPOINTS.map(attempt));
-    inner.abort(); // cancel slower endpoint
+    let data = null;
+    let lastErr = null;
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        data = await attempt(endpoint);
+        break;
+      } catch (e) {
+        if (e?.name === "AbortError") throw e;
+        lastErr = e;
+      }
+    }
+    if (!data) throw lastErr || new Error("All Overpass endpoints unavailable");
     return data.elements
       .filter((el) => el.tags?.name)
       .map((el) => {
@@ -388,14 +477,12 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
         };
       });
   } catch (err) {
-    if (signal?.aborted) {
+    if (signal?.aborted || err?.name === "AbortError") {
       const e = new Error("Aborted");
       e.name = "AbortError";
       throw e;
     }
     throw new Error("All Overpass endpoints unavailable");
-  } finally {
-    signal?.removeEventListener('abort', abortInner);
   }
 }
 

@@ -487,40 +487,23 @@ export default function HomeScreen({
     setNearbyLoading(true);
     setNearbyError("");
 
-    const RADII = [300, 800, 1500];
-    const seen = new Set();
-    let merged = [];
-    let gotAny = false;
     let loadingCleared = false;
 
     try {
-      // Fire all rings in parallel — smallest returns first, larger ones fill in later.
-      // Each ring races both Overpass endpoints via Promise.any inside fetchNearbyPlaces.
-      await Promise.all(RADII.map(async (r) => {
-        try {
-          const places = await fetchNearbyPlaces(loc[0], loc[1], r, { signal: controller.signal });
-          if (controller.signal.aborted) return;
-          const fresh = places.filter(p => !seen.has(p.id));
-          fresh.forEach(p => seen.add(p.id));
-          merged = [...merged, ...fresh];
-          setNearbyPlaces(merged);
-          gotAny = true;
-          // Drop the spinner the moment we have anything to show
-          if (!loadingCleared) {
-            loadingCleared = true;
-            setNearbyLoading(false);
-          }
-        } catch (err) {
-          if (err?.name === "AbortError") return;
-          console.warn(`[Strollo] Ring ${r}m failed:`, err);
-        }
-      }));
-
-      if (controller.signal.aborted) return;
-      if (gotAny) {
+      // Single 1500 m fetch instead of three nested rings — the inner
+      // 300/800 m radii were already a strict subset of the 1500 m result
+      // and tripling the request count was driving Overpass to 429.
+      try {
+        const places = await fetchNearbyPlaces(loc[0], loc[1], 1500, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setNearbyPlaces(places);
+        loadingCleared = true;
+        setNearbyLoading(false);
         lastFetchedLocationRef.current = loc;
         lastFetchTimeRef.current = Date.now();
-      } else {
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        console.warn(`[Strollo] nearby fetch failed:`, err);
         setNearbyError("Couldn't load nearby places. Tap refresh to retry.");
       }
     } finally {
@@ -888,6 +871,7 @@ export default function HomeScreen({
     else next.add(id);
     return next;
   }), []);
+
 
   const bottomSearchRef = useRef(null);
   const buttonStackRef = useRef(null);
@@ -1570,6 +1554,16 @@ export default function HomeScreen({
                 {screenMode === 'confirmed' ? 'walk ready' : 'conversation'}
               </div>
             </div>
+            <button
+              type="button"
+              className="chat-header-close"
+              onClick={closeChat}
+              aria-label="Close conversation"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
           </div>
 
           {/* SCREEN 1 — Empty / first open */}

@@ -1,22 +1,20 @@
 // LockScreen represents the phone's lock screen state during a walk —
 // it is NOT an in-app screen. When the user locks their phone mid-walk,
 // the OS shows this: a dark backdrop with the Walk Companion widget
-// pinned to the top. Same widget as NavigationMapScreen, minus the
-// drag-to-expand gesture (no way to open the full app from the lock
-// screen) and without the map underneath.
-import React, { useState } from "react";
+// pinned to the top. Renders the SAME shared WalkCompanionWidget the
+// NavigationMapScreen uses, just with no map underneath.
+import React from "react";
 import WalkCompanionWidget from "./WalkCompanionWidget";
 
 export default function LockScreen({
-  nextWaypoint = "fox & feather",
+  destination = "fox & feather",
+  instruction = "turn right in 280 ft",
   distance = "280 ft",
-  turn = "right",
-  eta = "3:24",
+  eta = "3 min",
+  progress = 0.4,
+  atTarget = false,
+  canSkip = false,
 }) {
-  const [muted, setMuted] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [locked, setLocked] = useState(false);
-
   return (
     <div
       style={{
@@ -28,18 +26,13 @@ export default function LockScreen({
       }}
     >
       <WalkCompanionWidget
-        nextWaypoint={nextWaypoint}
+        destination={destination}
+        instruction={instruction}
         distance={distance}
-        turn={turn}
         eta={eta}
-        listening={listening}
-        locked={locked}
-        muted={muted}
-        onMuteToggle={() => setMuted((m) => !m)}
-        onListenStart={() => setListening(true)}
-        onListenEnd={() => setListening(false)}
-        onDragLock={() => setLocked(true)}
-        onUnlock={() => { setLocked(false); setListening(false); }}
+        progress={progress}
+        atTarget={atTarget}
+        canSkip={canSkip}
       />
     </div>
   );

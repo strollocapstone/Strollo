@@ -310,6 +310,7 @@
   display: flex;
   gap: 28px;
   padding: 0 0 14px;
+  margin-top: 14px;
 }
 .wcw-stat {
   display: flex;
@@ -372,19 +373,22 @@
 .wcw-bottom {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 18px;
+  padding: 0;
 }
 .wcw-bottom-left {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
 }
+.wcw-bottom-left:empty { display: none; }
 .wcw-bottom-right {
   display: flex;
   gap: 8px;
   flex: 1;
   min-width: 0;
+  align-items: center;
 }
 
 /* Rest / End text+icon pills */
@@ -491,4 +495,387 @@
   justify-content: center;
   box-shadow: 0 0 0 2px rgba(30, 21, 65, 0.95);
   pointer-events: none;
+}
+
+/* ── Strollo Conversation port (empty-state body) ──────────────────────── */
+/* Tips body */
+.strollo-tips-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 8px;
+}
+.strollo-tips-tip {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.32;
+  letter-spacing: -0.012em;
+  color: #fff;
+  text-wrap: pretty;
+  animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
+}
+.strollo-tips-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.strollo-skel {
+  height: 18px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.06) 0%,
+    rgba(255,255,255,0.18) 50%,
+    rgba(255,255,255,0.06) 100%);
+  background-size: 200% 100%;
+  animation: skelShimmer 1.4s ease-in-out infinite;
+}
+@keyframes skelShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes tipIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pillIn {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes reelIn {
+  0%   { opacity: 0; transform: translateY(28px) scale(0.92); filter: blur(2px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes strolloPulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50%      { opacity: 1;    transform: scale(1.1); }
+}
+@keyframes strolloCaret {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 0;   }
+}
+@keyframes strolloToastIn {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Prompt pills */
+.strollo-prompt-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  transition: opacity 300ms;
+}
+.strollo-prompt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: background 180ms;
+}
+.strollo-prompt-pill:hover:enabled { background: rgba(255,255,255,0.14); }
+.strollo-prompt-pill:disabled { cursor: default; }
+.strollo-prompt-pill__glyph {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+/* Conversation body — fills available space, reel scrolls inside */
+.strollo-conv-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 220px;
+  max-height: 320px;
+  margin: 0 -10px 4px;
+}
+.strollo-reel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 100%);
+}
+.strollo-reel::-webkit-scrollbar { display: none; }
+.strollo-reel__spacer {
+  flex: 1;
+  min-height: 60px;
+}
+.strollo-reel__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.strollo-reel__role {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: all 420ms;
+}
+.strollo-reel__role--user { color: rgba(255,255,255,0.4); }
+.strollo-reel__role--ai   { color: rgba(214,188,255,0.55); }
+.strollo-reel__role--live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,255,255,0.5);
+}
+.strollo-reel__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFD501;
+  animation: strolloPulse 1.2s ease-in-out infinite;
+}
+.strollo-reel__interim {
+  font-size: 20px;
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  transition: color 200ms;
+}
+.strollo-reel__caret {
+  display: inline-block;
+  width: 6px;
+  height: 16px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  background: #FFD501;
+  opacity: 0.85;
+  border-radius: 1px;
+  animation: strolloCaret 0.85s steps(2) infinite;
+}
+.strollo-reel__locs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  transition: opacity 420ms;
+}
+
+/* Location pill */
+.strollo-loc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 4px;
+  background: #FFFFFF;
+  border-radius: 999px;
+  border: 1px solid rgba(58,45,92,0.06);
+  box-shadow: 0 4px 12px rgba(58,45,92,0.18);
+  max-width: 100%;
+  animation: pillIn 380ms cubic-bezier(.2,.8,.2,1) both;
+}
+.strollo-loc-pill--saved { border: 1.5px solid #D6BCFF; }
+.strollo-loc-pill__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #7A5BD0;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.strollo-loc-pill__avatar--saved {
+  background: #FFD501;
+  color: #3A2D5C;
+  font-weight: 800;
+  font-size: 12px;
+}
+.strollo-loc-pill__name {
+  color: #3A2D5C;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  padding-right: 4px;
+}
+.strollo-loc-pill__btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 160ms, background 160ms;
+}
+.strollo-loc-pill__btn--add {
+  background: #EFE7FF;
+  color: #7A5BD0;
+}
+.strollo-loc-pill__btn--add:hover { background: #E2D2FF; }
+.strollo-loc-pill__btn--add:active { transform: scale(0.92); }
+.strollo-loc-pill__btn--remove {
+  background: transparent;
+  color: #E0506B;
+}
+.strollo-loc-pill__btn--remove:hover { background: rgba(224,80,107,0.10); }
+
+/* Conversation header saved-badge */
+.strollo-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: rgba(255,213,1,0.18);
+  color: #FFD501;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+/* Minimized peek bar (collapsed tips card) */
+.strollo-peek-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.strollo-peek-bar__loc {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: rgba(255,255,255,0.4);
+  font-style: italic;
+  text-transform: none;
+}
+
+/* Trip toast */
+.strollo-trip-toast {
+  position: absolute;
+  left: 50%;
+  bottom: -50px;
+  transform: translate(-50%, 0);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255,213,1,0.95);
+  color: #3A2D5C;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+  animation: strolloToastIn 320ms cubic-bezier(.2,.8,.2,1) both;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 30;
+}
+
+/* Close button at the top-right of the widget when in Conversation mode —
+   shares the same square icon-button look as the bottom-row controls. */
+.wcw-status-row .wcw-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+/* End walk button — red-tinted icon button. Hover deepens the tint;
+   active state nudges scale for a satisfying tap. */
+.wcw-end-btn {
+  color: #ff6b6b !important;
+  background: rgba(255, 107, 107, 0.12) !important;
+  transition: background 160ms, color 160ms, transform 100ms;
+}
+.wcw-end-btn:hover {
+  color: #ff8585 !important;
+  background: rgba(255, 107, 107, 0.22) !important;
+}
+.wcw-end-btn:active {
+  transform: scale(0.92);
+}
+
+/* Smooth fade-out of the widget chrome when End walk is tapped. The
+   button click toggles `.wcw--ending` for ~240 ms, then the parent
+   navigates home — gives the user a soft "leaving" beat instead of an
+   abrupt screen swap. */
+@keyframes wcw-end-fade {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(20px) scale(0.96); }
+}
+.wcw.wcw--ending {
+  animation: wcw-end-fade 240ms cubic-bezier(.4, 0, .8, .4) forwards;
+  pointer-events: none;
+}
+
+/* Turn instruction row — places the next-turn copy next to a compact
+   inline voice button so the user can speak without breaking eye line
+   from the directive. Lower hierarchy than the giant SAY ANYTHING in
+   conversation mode (smaller, secondary background). */
+.wcw-turn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.wcw-turn-row .wcw-turn {
+  flex: 1;
+  margin: 0;
+}
+/* Inline mute / speaker toggle next to the turn instruction. Same
+   dark-translucent chrome as the Skip pill so they read as a matched
+   pair — kept compact (square, no label) to stay subordinate to the
+   turn copy. */
+.wcw-turn-speaker {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(247, 243, 245, 0.85);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 160ms, color 160ms, transform 100ms;
+}
+.wcw-turn-speaker:hover {
+  background: rgba(0, 0, 0, 0.45);
+  color: #F7F3F5;
+}
+.wcw-turn-speaker:active { transform: scale(0.92); }
+.wcw-turn-speaker--muted {
+  color: #FFD501;
+  background: rgba(255, 213, 1, 0.18);
 }

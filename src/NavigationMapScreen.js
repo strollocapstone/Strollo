@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
 import WalkCompanionWidget from "./WalkCompanionWidget";
-import VoiceFullScreen from "./VoiceFullScreen";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
 import { youIcon, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
@@ -84,6 +83,42 @@ const stopLabelIcon = (name, desc, sequence, mode = 'pill', removable = false, m
 // area above the bottom card, at the highest zoom level that still fits. Padding
 // reserves vertical space for the navigation card (~260px including gap) and the
 // top bar (~60px), so the route sits centered between them.
+// AI-suggested pin — purple sparkle bubble that floats above the spot
+// Gemini just recommended. Visually distinct from confirmed-stop pins so
+// the user knows it's an AI suggestion (not yet added to their route).
+const aiPinIcon = (name) => L.divIcon({
+  className: "",
+  html: `<div class="ai-pin">
+    <span class="ai-pin-glyph">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+        <path d="M12 2l1.6 4.4L18 8l-4.4 1.6L12 14l-1.6-4.4L6 8l4.4-1.6L12 2z"/>
+      </svg>
+    </span>
+    <span class="ai-pin-name">${name}</span>
+  </div>`,
+  iconSize: [0, 0],
+  iconAnchor: [0, 0],
+});
+
+// Pans the map so a target latlng sits in the vertical CENTER of the band
+// above the bottom-pinned WalkCompanionWidget. Computed by projecting the
+// target to screen pixels, shifting Y down by half the widget's height
+// (which moves the pin up on screen), and unprojecting to a new center.
+function PanAboveWidget({ target, widgetHeight }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target || !map) return;
+    try {
+      const z = map.getZoom();
+      const pt = map.project([target.lat, target.lng], z);
+      const offsetY = (widgetHeight + 16) / 2;
+      const newCenter = map.unproject([pt.x, pt.y + offsetY], z);
+      map.flyTo(newCenter, z, { duration: 0.6 });
+    } catch (e) { /* ignore */ }
+  }, [target, widgetHeight, map]);
+  return null;
+}
+
 function NavFitRoute({ userLocation, destination, trigger }) {
   const map = useMap();
   useEffect(() => {
@@ -100,6 +135,27 @@ function NavFitRoute({ userLocation, destination, trigger }) {
   return null;
 }
 
+// Pure "locate me" — always flies to the user's coords on every trigger
+// bump, even when there's no journey destination. Pans with a vertical
+// offset so the user dot ends up in the CENTER of the band above the
+// bottom-pinned widget (not the geometric center of the whole screen).
+function LocateMeOnTrigger({ userLocation, trigger, widgetHeight }) {
+  const map = useMap();
+  const firstRef = useRef(true);
+  useEffect(() => {
+    if (firstRef.current) { firstRef.current = false; return; }
+    if (!userLocation || !map) return;
+    try {
+      const z = 17;
+      const pt = map.project(userLocation, z);
+      const offsetY = (widgetHeight + 16) / 2;
+      const newCenter = map.unproject([pt.x, pt.y + offsetY], z);
+      map.flyTo(newCenter, z, { duration: 0.6 });
+    } catch (e) { /* ignore */ }
+  }, [trigger, userLocation, widgetHeight, map]);
+  return null;
+}
+
 // Bearing from point A to point B in degrees clockwise from north (0..360).
 function computeBearing([lat1, lng1], [lat2, lng2]) {
   const toRad = (d) => (d * Math.PI) / 180;
@@ -113,7 +169,7 @@ function computeBearing([lat1, lng1], [lat2, lng2]) {
 }
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -122,17 +178,50 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     const withCoords = journeyItems.filter((s) => s.lat && s.lng);
     return addedIds ? withCoords.filter((s) => addedIds.has(s.id)) : withCoords;
   }, [journeyItems, addedIds]);
+  // Exploration mode: user landed on this screen with NO journey planned
+  // (came from "Start exploring · 0" or similar). In this mode they're
+  // just browsing/conversing — saving a place via the conversation pill
+  // adds it to the trip but should NOT start navigation. Route drawing
+  // and `nextTarget` stay null until the user explicitly hits the
+  // floating "Start exploring · N" button (which mirrors home's flow).
+  const initialJourneyHadItemsRef = React.useRef(journeyItems.length > 0);
+  const [isExplorationMode, setIsExplorationMode] = useState(
+    !initialJourneyHadItemsRef.current
+  );
   // The actual routing target: first confirmed stop NOT yet visited. As the
   // user confirms "I am here", we advance to the next non-visited stop.
+  // Suppressed in exploration mode so saving doesn't kick off navigation.
   const nextTarget = React.useMemo(
-    () => confirmedStops.find((s) => !visitedIds?.has(s.id)) || null,
-    [confirmedStops, visitedIds]
+    () => isExplorationMode ? null : (confirmedStops.find((s) => !visitedIds?.has(s.id)) || null),
+    [confirmedStops, visitedIds, isExplorationMode]
   );
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
   const [userLocation, setUserLocation] = useState(initialCenter);
   const [locateTrigger, setLocateTrigger] = useState(1); // auto-locate on mount
+  // Pin dropped on the map when Gemini suggests a specific place. Pans the
+  // map so the pin sits in the vertical center of the band above the widget.
+  const [aiSuggestedPin, setAiSuggestedPin] = useState(null);
+
+  // Live widget height — tracked in state so the right-side FAB stack can
+  // sit just above the widget's top-right corner regardless of the widget's
+  // current mode (Tips / Conversation / Minimized).
+  const widgetRef = useRef(null);
+  const screenRef = useRef(null);
+  const [widgetHeight, setWidgetHeight] = useState(248);
+  useLayoutEffect(() => {
+    const el = widgetRef.current;
+    if (!el) return;
+    const apply = () => setWidgetHeight(el.offsetHeight);
+    apply();
+    let ro;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(apply);
+      ro.observe(el);
+    }
+    return () => { if (ro) ro.disconnect(); };
+  });
   // Dev/test cycler so designers can preview the AI presentation modes
   // (none → narration → suggestion → narration+suggestion → none).
   const [aiTestMode, setAiTestMode] = useState(0);
@@ -160,7 +249,9 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const [walkingRoute, setWalkingRoute]   = useState(null);
   const [routeInfo, setRouteInfo]         = useState(null);
   const [routeSteps, setRouteSteps]       = useState([]);
-  const [voiceMode, setVoiceMode]         = useState(null); // null | "full"
+  // voiceMode (full-screen voice overlay) was removed; the bottom widget
+  // owns the conversation experience now.
+  const voiceMode = null;
   // Which stop pin is currently expanded (showing its X remove button).
   // Only one can be open at a time; tapping another pin or the same pin
   // again closes it.
@@ -200,10 +291,11 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     if (!nextTarget || !userLocation) return null;
     return haversineKm(userLocation, [nextTarget.lat, nextTarget.lng]) * 1000;
   }, [nextTarget, userLocation]);
-  // Show the "I am here" button once the user is within 500 m of the next
-  // confirmed stop — gives them latitude to confirm arrival from across a
-  // block or two without needing pixel-perfect positioning.
-  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= 500;
+  // Show the "I'm here" affordance once the user is within ~300 ft (≈91 m)
+  // of the next confirmed stop. Below that threshold the widget's Skip
+  // button flips to a confirm-arrival button.
+  const FT_300_M = 91.44;
+  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M;
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent
@@ -391,7 +483,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   }, [userLocation, routeSteps, stopPositions]);
 
   return (
-    <>
+    <div ref={screenRef} className="nav-screen-root" style={{ display: "contents" }}>
 
       {/* ── MAP ── */}
       <div
@@ -503,12 +595,36 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           <Marker position={userLocation} icon={youIcon} />
           <WatchLocation onUpdate={setUserLocation} />
 
+          {/* AI-suggested pin from Gemini's last reply. Pans into the
+              vertical center of the map area above the widget. */}
+          {aiSuggestedPin &&
+            !(journeyItems || []).some(
+              (j) => j.name && j.name.toLowerCase() === aiSuggestedPin.name.toLowerCase()
+            ) && (
+            <>
+              <Marker
+                key={`ai-pin-${aiSuggestedPin.lat}-${aiSuggestedPin.lng}`}
+                position={[aiSuggestedPin.lat, aiSuggestedPin.lng]}
+                icon={aiPinIcon(aiSuggestedPin.name)}
+              />
+              <PanAboveWidget target={aiSuggestedPin} widgetHeight={widgetHeight} />
+            </>
+          )}
+
           {/* Zoom the map to fit user + next destination with max zoom possible.
               Re-runs whenever userLocation, destination, or the locate button trigger changes. */}
           <NavFitRoute
             userLocation={userLocation}
             destination={stopPositions[0] || null}
             trigger={locateTrigger}
+          />
+          {/* "Locate me" FAB: works even when there's no journey destination
+              (NavFitRoute early-returns in that case). Centers the user dot
+              vertically inside the band above the bottom widget. */}
+          <LocateMeOnTrigger
+            userLocation={userLocation}
+            trigger={locateTrigger}
+            widgetHeight={widgetHeight}
           />
         </MapContainer>
       </div>
@@ -547,14 +663,10 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
            (showVoice=false), so the locate FAB doesn't sit on top of
            the Timeline overlay. ── */}
       {showVoice && (
-        <div className="bottom-right-stack bottom-right-stack--nav">
-          <button className="fab-circle bottom-right-btn bottom-right-btn--journey" onClick={onOpenTimeline} aria-label="Check journey">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
-              <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
-              <path d="M8 3 L18 6 L8 10 Z"/>
-              <circle cx="8" cy="21" r="2"/>
-            </svg>
-          </button>
+        <div
+          className="bottom-right-stack bottom-right-stack--nav"
+          style={{ bottom: `${widgetHeight + 32}px` }}
+        >
           <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
@@ -568,25 +680,28 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         </div>
       )}
 
-      {/* ── "I am here" — appears above the wcw when the user is within
-           150 ft of the next confirmed Timeline target. Tapping it marks
-           the stop as visited; routing automatically advances to the next
-           non-visited stop. ── */}
-      {showVoice && voiceMode !== "full" && nextTarget && isAtTarget && (
-        <div className="nav-arrived-bar">
-          <button
-            type="button"
-            className="nav-arrived-btn"
-            onClick={handleArrived}
-            aria-label={`Confirm you have arrived at ${nextTarget.name}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="4 12 10 18 20 6" />
-            </svg>
-            <span>I am here</span>
-          </button>
-        </div>
+      {/* ── "Start exploring · N" floating CTA — appears once the user has
+           saved at least one place via the conversation pill. Mirrors the
+           same button on home: clicking flips exploration mode off, which
+           lets nextTarget compute, the OSRM route render, and the widget
+           transition into walk mode. ── */}
+      {showVoice && isExplorationMode && confirmedStops.length > 0 && (
+        <button
+          type="button"
+          className="fab-circle start-walk-pill nav-start-walk-pill"
+          style={{ bottom: `${widgetHeight + 32}px` }}
+          onClick={() => {
+            setIsExplorationMode(false);
+            setLocateTrigger((t) => t + 1);
+          }}
+        >
+          {`Start exploring · ${confirmedStops.length}`}
+        </button>
       )}
+
+      {/* The standalone "I am here" green bar was removed — the widget's
+          own skip button now flips to "I'm here" via the `atTarget` prop
+          when the user is within 300 ft of the next stop. */}
 
       {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
       {showVoice && voiceMode !== "full" && (() => {
@@ -652,14 +767,18 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         }
         return (
           <WalkCompanionWidget
+            ref={widgetRef}
             destination={nextWaypoint}
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
             eta={isEmpty ? "—" : eta}
             canSkip={confirmedStops.length > 1}
+            atTarget={isAtTarget}
             progress={progress}
             narration={aiNarration}
             suggestion={aiSuggestion}
+            onArrived={handleArrived}
+            onEnd={onGoBack}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;
               // Drop the current (next) confirmed stop from both the journey
@@ -674,26 +793,76 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 });
               }
             }}
-            onEnd={onEndWalk || onGoBack}
-            onExpand={() => setVoiceMode("full")}
+            // End walk → return home, which clears walk state via onGoBack
+            // and lets HomeScreen's mount-time GPS request re-run cleanly.
+            // onExpand removed: full-screen voice overlay was deleted.
+            // Strollo Conversation (empty-state) integration
+            userLocation={userLocation}
+            vibePreferences={vibePreferences}
+            preferences={preferences}
+            trip={journeyItems}
+            onAddByName={async (name) => {
+              if (!name || !onJourneyChange) return;
+              const existing = (journeyItems || []).find(
+                (j) => j.name && j.name.toLowerCase() === name.toLowerCase()
+              );
+              if (existing) {
+                if (setAddedIds) setAddedIds((p) => {
+                  if (p.has(existing.id)) return p;
+                  const n = new Set(p); n.add(existing.id); return n;
+                });
+                return;
+              }
+              // Fast path: if we already have the AI sparkle pin's coords for
+              // this name, use them — appending immediately so the pill flips
+              // to "saved" without waiting for Nominatim. Background-geocode
+              // only when we don't have coords on hand.
+              const cachedPin = aiSuggestedPin && aiSuggestedPin.name &&
+                aiSuggestedPin.name.toLowerCase() === name.toLowerCase()
+                ? aiSuggestedPin
+                : null;
+              const id = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+              const initialItem = {
+                id,
+                name,
+                desc: "AI",
+                lat: cachedPin?.lat ?? null,
+                lng: cachedPin?.lng ?? null,
+              };
+              // Optimistic append + addedIds flip → pill flips instantly.
+              onJourneyChange([...(journeyItems || []), initialItem]);
+              if (setAddedIds) setAddedIds((p) => {
+                const n = new Set(p); n.add(id); return n;
+              });
+              // Backfill coords in the background if we didn't have them.
+              if (!cachedPin) {
+                try {
+                  const geo = await geocodePlace(name, userLocation?.[0], userLocation?.[1]);
+                  if (geo?.lat && geo?.lng) {
+                    onJourneyChange((prev) => (prev || []).map((it) =>
+                      it.id === id ? { ...it, lat: geo.lat, lng: geo.lng } : it
+                    ));
+                  }
+                } catch (e) { /* keep null coords */ }
+              }
+            }}
+            onRemoveByName={(name) => {
+              if (!name || !onJourneyChange) return;
+              const target = (journeyItems || []).find(
+                (j) => j.name && j.name.toLowerCase() === name.toLowerCase()
+              );
+              if (!target) return;
+              onJourneyChange(journeyItems.filter((j) => j.id !== target.id));
+              if (setAddedIds) setAddedIds((p) => {
+                if (!p.has(target.id)) return p;
+                const n = new Set(p); n.delete(target.id); return n;
+              });
+            }}
+            onAiSuggestPlace={(pin) => { console.log("[Pin] NavigationMapScreen received pin:", pin); setAiSuggestedPin(pin); }}
           />
         );
       })()}
 
-      {voiceMode === "full" && (
-        <VoiceFullScreen
-          listening={false}
-          locked={false}
-          muted={false}
-          messages={[]}
-          onMuteToggle={() => {}}
-          onListenStart={() => {}}
-          onListenEnd={() => {}}
-          onDragLock={() => {}}
-          onUnlock={() => {}}
-          onMinimize={() => setVoiceMode(null)}
-        />
-      )}
-    </>
+    </div>
   );
 }

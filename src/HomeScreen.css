@@ -1312,6 +1312,26 @@
   font-family: var(--font-brand); font-size: 14px; font-weight: 500;
   letter-spacing: -0.02em; color: var(--chat-ink); margin-top: 2px;
 }
+/* Close button — pinned top-right of the chat overlay header. Absolutely
+   positioned so it doesn't shift the centered title group. */
+.chat-header-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 32px; height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 35, 62, 0.10);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--chat-ink);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px);
+  transition: background 160ms, transform 100ms;
+  z-index: 5;
+}
+.chat-header-close:hover { background: rgba(255, 255, 255, 1); }
+.chat-header-close:active { transform: scale(0.94); }
+.chat-header { position: relative; }
 
 /* SCREEN 1 — Empty */
 .chat-empty {
