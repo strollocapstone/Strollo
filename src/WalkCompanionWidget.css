@@ -480,6 +480,22 @@
 .wcw-speak--locked {
   box-shadow: 0 0 0 2px rgba(255, 213, 1, 0.55);
 }
+.wcw-speak--pending {
+  cursor: progress;
+  opacity: 0.85;
+}
+.wcw-speak-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: wcw-speak-spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes wcw-speak-spin {
+  to { transform: rotate(360deg); }
+}
 /* Lock badge appears in the top-right of the speak button while latched. */
 .wcw-speak-lock {
   position: absolute;

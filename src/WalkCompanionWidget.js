@@ -417,6 +417,7 @@ function WalkCompanionWidgetInner({
   // commit the transcript to Gemini.
   const askAiRef = useRef(null);
   const [interim, setInterim] = useState("");
+  const [aiPending, setAiPending] = useState(false);
   const recogRef = useRef(null);
   const lastResultAtRef = useRef(0);
   const sessionStartedAtRef = useRef(0);
@@ -624,6 +625,8 @@ function WalkCompanionWidgetInner({
     // user (or a developer) can read it instead of seeing a silent blank.
     const delays = [0, 1500, 4000];
     let lastError = null;
+    setAiPending(true);
+    try {
     for (let attempt = 0; attempt < delays.length; attempt++) {
       if (delays[attempt] > 0) {
         await new Promise((r) => setTimeout(r, delays[attempt]));
@@ -688,6 +691,9 @@ function WalkCompanionWidgetInner({
       ? (lastError.stack || `${lastError.name || "Error"}: ${lastError.message || String(lastError)}`)
       : "Gemini did not return a response after 3 attempts.";
     pushMessage("ai", `[Gemini error]\n${errBody}`);
+    } finally {
+      setAiPending(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, currentLocationName, geoArea, vibePreferences, preferences, pushMessage, onAiSuggestPlace]);
 
@@ -943,13 +949,17 @@ function WalkCompanionWidgetInner({
               <div className="wcw-bottom-right">
                 <button
                   type="button"
-                  className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}`}
+                  className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${aiPending ? " wcw-speak--pending" : ""}`}
                   onClick={onSpeakToggle}
-                  aria-label={speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops"}
+                  disabled={aiPending}
+                  aria-label={aiPending ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
                   aria-pressed={speakActive}
+                  aria-busy={aiPending}
                 >
-                  <SoundBars active={speakActive} color="currentColor" />
-                  <span className="wcw-speak-label">{speakActive ? "Listening" : "Say anything"}</span>
+                  {aiPending
+                    ? <span className="wcw-speak-spinner" aria-hidden="true" />
+                    : <SoundBars active={speakActive} color="currentColor" />}
+                  <span className="wcw-speak-label">{aiPending ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
                 </button>
               </div>
             </div>
@@ -1252,13 +1262,17 @@ function WalkCompanionWidgetInner({
           )}
           <button
             type="button"
-            className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}`}
+            className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${aiPending ? " wcw-speak--pending" : ""}`}
             onClick={onSpeakToggle}
-            aria-label={speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops"}
+            disabled={aiPending}
+            aria-label={aiPending ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
             aria-pressed={speakActive}
+            aria-busy={aiPending}
           >
-            <SoundBars active={speakActive} color="currentColor" />
-            <span className="wcw-speak-label">{speakActive ? "Listening" : "Say anything"}</span>
+            {aiPending
+              ? <span className="wcw-speak-spinner" aria-hidden="true" />
+              : <SoundBars active={speakActive} color="currentColor" />}
+            <span className="wcw-speak-label">{aiPending ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
           </button>
         </div>
       </div>
