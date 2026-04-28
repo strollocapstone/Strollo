@@ -407,8 +407,12 @@ export function useTtsSpeak({ enabled, rate = 0.88, pitch = 1.05 }) {
     try {
       window.speechSynthesis.resume();
       if (!primedRef.current) {
+        // iOS WebKit ignores volume=0 utterances and never grants audio
+        // activation, so subsequent speak() calls go silent. Use volume=1
+        // on a single-space utterance fired at high rate — nearly
+        // inaudible in practice but registers as a real audio request.
         const u = new SpeechSynthesisUtterance(" ");
-        u.volume = 0;
+        u.volume = 1;
         u.rate = 10;
         window.speechSynthesis.speak(u);
         primedRef.current = true;
