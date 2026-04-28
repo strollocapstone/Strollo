@@ -743,15 +743,28 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         </div>
       )}
 
-      {/* ── BOTTOM-RIGHT STACK: just Locate (map is always north-up).
+      {/* ── BOTTOM-RIGHT STACK: Journey flag (timeline) above Locate.
            Hidden when this screen is rendered as the Timeline backdrop
-           (showVoice=false), so the locate FAB doesn't sit on top of
-           the Timeline overlay. ── */}
+           (showVoice=false), so the FABs don't sit on top of the
+           Timeline overlay. ── */}
       {showVoice && (
         <div
           className="bottom-right-stack bottom-right-stack--nav"
           style={{ bottom: `${widgetHeight + 32}px` }}
         >
+          {onOpenTimeline && (
+            <button
+              className="fab-circle bottom-right-btn bottom-right-btn--journey"
+              onClick={onOpenTimeline}
+              aria-label="Open journey timeline"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+                <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M8 3 L18 6 L8 10 Z"/>
+                <circle cx="8" cy="21" r="2"/>
+              </svg>
+            </button>
+          )}
           <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
@@ -863,7 +876,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             narration={aiNarration}
             suggestion={aiSuggestion}
             onArrived={handleArrived}
-            onEnd={onGoBack}
+            onEnd={onEndWalk || onGoBack}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;
               // Drop the current (next) confirmed stop from both the journey
