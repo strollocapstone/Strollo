@@ -383,19 +383,29 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
 
   const handleArrived = () => {
     if (!nextTarget || !setVisitedIds) return;
+    // Was this the last unvisited stop? If so, the walk is complete —
+    // arriving here should return to the homepage instead of falling
+    // through into the empty-destination "Start exploring" state, which
+    // would happen automatically once nextTarget becomes null.
+    const remainingAfter = confirmedStops.filter(
+      (s) => !visitedIds?.has(s.id) && s.id !== nextTarget.id
+    ).length;
     setVisitedIds((prev) => {
       const out = new Set(prev);
       out.add(nextTarget.id);
       return out;
     });
-    // Stamp the arrival time so the Reward screen can compute real per-stop
-    // dwell minutes (next stop's arrival - this stop's arrival).
     if (setVisitedAt) {
       setVisitedAt((prev) => {
         const out = new Map(prev);
         out.set(nextTarget.id, Date.now());
         return out;
       });
+    }
+    if (remainingAfter === 0 && onGoBack) {
+      // Defer one tick so the visitedIds update flushes before the
+      // parent unmounts this screen.
+      setTimeout(() => onGoBack(), 0);
     }
   };
 
@@ -847,7 +857,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
             eta={isEmpty ? "—" : eta}
-            canSkip={confirmedStops.length > 1}
+            canSkip={confirmedStops.filter((s) => !visitedIds?.has(s.id)).length > 1}
             atTarget={isAtTarget}
             progress={progress}
             narration={aiNarration}
