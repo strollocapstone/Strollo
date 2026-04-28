@@ -1411,7 +1411,7 @@ export default function HomeScreen({
                   </svg>
                 </button>
               ) : (
-                <button className="mic-btn" aria-label="Voice input" onClick={toggleVoice}>
+                <button className="mic-btn" aria-label="Start exploring" onClick={handleStartWalk}>
                   <SoundWaveSvg active={false} />
                 </button>
               )}
