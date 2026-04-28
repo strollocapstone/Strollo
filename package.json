@@ -2,6 +2,7 @@
   "name": "strollo",
   "version": "0.1.0",
   "private": true,
+  "proxy": "https://strollo-ten.vercel.app",
   "dependencies": {
     "leaflet": "^1.9.4",
     "react": "^18.2.0",

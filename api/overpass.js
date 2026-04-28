@@ -4,11 +4,15 @@
 // even when the server processes the query. Server-to-server has no CORS,
 // and racing multiple mirrors here cushions against any one being down.
 
+// NOTE: overpass.osm.ch is intentionally excluded — its dataset is
+// limited to Switzerland, so it answers fast with `elements: []` for
+// queries outside CH. With Promise.any picking the first FULFILLED
+// (not first non-empty) response, that empty-but-successful reply
+// always beats the real mirrors and the map ends up with zero POIs.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
-  "https://overpass.osm.ch/api/interpreter",
 ];
 
 export default async function handler(req, res) {
