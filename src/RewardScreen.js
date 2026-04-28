@@ -924,7 +924,7 @@ export default function RewardScreen({
             </div>
             <h1 className="reward-empty-title">You've explored: absolutely nothing.</h1>
             <p className="reward-empty-body">
-              The city's still out there. Start exploring, pocket your phone and let your feet do the rest — even 5 minutes counts.
+              The city's still out there. Start exploring — even 5 minutes counts.
             </p>
             <div className="reward-actions">
               <button
