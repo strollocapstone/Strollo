@@ -403,11 +403,38 @@ export async function getWalkingRoute(points) {
   return null;
 }
 
-// Fetch nearby places via the /api/overpass server-side proxy. We can't
-// hit Overpass directly from the browser: kumi.systems is offline and
-// overpass-api.de doesn't set CORS headers, so the request is blocked
-// before a response can be read. The proxy fans out to multiple mirrors
-// server-side and returns the first that succeeds.
+// Fetch nearby places. Prefers the /api/overpass server-side proxy (used
+// in production via Vercel) but falls back to direct Overpass mirrors
+// when the proxy is unavailable — which happens locally because CRA's
+// webpack-dev-server doesn't run Vercel functions, so /api/overpass
+// 404s. Direct mirrors mostly work in dev because some mirrors do set
+// permissive CORS, even though kumi.systems is offline.
+const OVERPASS_DIRECT_MIRRORS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.osm.ch/api/interpreter",
+];
+
+async function fetchOverpassDirect(query, signal) {
+  let lastErr = null;
+  for (const url of OVERPASS_DIRECT_MIRRORS) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `data=${encodeURIComponent(query)}`,
+        signal,
+      });
+      if (res.ok) return await res.json();
+      lastErr = new Error(`mirror ${url} responded ${res.status}`);
+    } catch (err) {
+      if (signal?.aborted || err?.name === "AbortError") throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("All Overpass endpoints unavailable");
+}
+
 export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal } = {}) {
   const query = `[out:json][timeout:6];(node["amenity"~"cafe|restaurant|bar|ice_cream|bakery|library|theatre"](around:${radiusMeters},${lat},${lon});node["tourism"~"museum|gallery|attraction|viewpoint"](around:${radiusMeters},${lat},${lon});node["leisure"~"park|garden"](around:${radiusMeters},${lat},${lon});node["shop"~"books|florist"](around:${radiusMeters},${lat},${lon}););out body 40;`;
 
@@ -420,25 +447,32 @@ export async function fetchNearbyPlaces(lat, lon, radiusMeters = 800, { signal }
     arts_centre: "Arts", park: "Park", garden: "Garden",
   };
 
-  let res;
+  // Try the Vercel proxy first.
+  let data = null;
   try {
-    res = await fetch("/api/overpass", {
+    const res = await fetch("/api/overpass", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query }),
       signal,
     });
+    if (res.ok) {
+      data = await res.json();
+    }
+    // If 404 (dev / no Vercel runtime) or any other non-OK, fall through
+    // to direct mirrors below.
   } catch (err) {
     if (signal?.aborted || err?.name === "AbortError") {
       const e = new Error("Aborted");
       e.name = "AbortError";
       throw e;
     }
-    throw new Error("All Overpass endpoints unavailable");
+    // Network error — fall through to direct.
   }
 
-  if (!res.ok) throw new Error("All Overpass endpoints unavailable");
-  const data = await res.json();
+  if (!data) {
+    data = await fetchOverpassDirect(query, signal);
+  }
   return data.elements
     .filter((el) => el.tags?.name)
     .map((el) => {
