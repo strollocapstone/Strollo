@@ -159,6 +159,96 @@
   font-weight: 500;
   font-style: italic;
 }
+
+/* "You are at" inline editor: pencil button + input form. */
+.wcw-loc-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(247, 243, 245, 0.7);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.wcw-loc-edit-btn:hover {
+  color: #FFD501;
+  background: rgba(255, 255, 255, 0.06);
+}
+.wcw-loc-edit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wcw-loc-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFD501;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+.wcw-loc-input::placeholder {
+  color: rgba(247, 243, 245, 0.4);
+  font-weight: 500;
+  font-style: italic;
+}
+.wcw-loc-input:focus {
+  border-color: #FFD501;
+  background: rgba(255, 255, 255, 0.12);
+}
+.wcw-loc-go {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #FFD501;
+  color: #1f1530;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.wcw-loc-go:disabled {
+  background: rgba(255, 213, 1, 0.45);
+  color: rgba(31, 21, 48, 0.55);
+  cursor: not-allowed;
+}
+.wcw-loc-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: rgba(247, 243, 245, 0.6);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.wcw-loc-cancel:hover {
+  color: #fff;
+}
+.wcw-loc-error {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #ff8a8a;
+  font-style: italic;
+}
 .wcw-paused-msg {
   flex: 1;
   min-width: 0;

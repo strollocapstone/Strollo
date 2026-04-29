@@ -31,6 +31,7 @@ import {
   geocodePlace,
 } from "./geminiService";
 import { cancelCloudTts, isMobile } from "./cloudTtsService";
+import { geocodeAddress } from "./mapUtils";
 
 // Progress strip that replaces the divider above the buttons section.
 // Renders boots → dotted curve → flag, where the boots position scales
@@ -152,6 +153,7 @@ function WalkCompanionWidgetInner({
   onAddByName,                 // (name) => void; geocodes + appends to journey
   onRemoveByName,              // (name) => void
   onAiSuggestPlace,            // ({name, lat, lng, desc}) => void; AI-suggested pin
+  onLocationOverride,          // ({lat, lng, label}) => void; manual location entry from "You are at" pencil
   onSkip,
   onArrived,
   onEnd,                       // eslint-disable-line no-unused-vars
@@ -206,6 +208,12 @@ function WalkCompanionWidgetInner({
   const [tripToast, setTripToast] = useState(null);
   const idRef = useRef(0);
   const tripToastTimerRef = useRef(null);
+
+  // "You are at" inline editor (pencil → input + Go).
+  const [editingLoc, setEditingLoc] = useState(false);
+  const [locInput, setLocInput] = useState("");
+  const [locSearching, setLocSearching] = useState(false);
+  const [locError, setLocError] = useState("");
 
   // Reverse-geocode the user's GPS once for the "You are at X" header. Falls
   // back to the prop if the parent already supplied a name.
@@ -1047,7 +1055,75 @@ function WalkCompanionWidgetInner({
           ) : (
             <>
               <span className="wcw-heading-label">You are at</span>
-              <span className="wcw-destination">{headerLabel || "Locating…"}</span>
+              {editingLoc ? (
+                <form
+                  className="wcw-loc-edit"
+                  data-no-drag
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const q = locInput.trim();
+                    if (!q || locSearching) return;
+                    setLocSearching(true);
+                    setLocError("");
+                    const hit = await geocodeAddress(q);
+                    setLocSearching(false);
+                    if (!hit) {
+                      setLocError("Couldn't find that place.");
+                      return;
+                    }
+                    if (onLocationOverride) onLocationOverride(hit);
+                    setLocInput("");
+                    setEditingLoc(false);
+                  }}
+                >
+                  <input
+                    className="wcw-loc-input"
+                    type="text"
+                    placeholder="Enter a location"
+                    value={locInput}
+                    onChange={(e) => setLocInput(e.target.value)}
+                    disabled={locSearching}
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="wcw-loc-go"
+                    disabled={!locInput.trim() || locSearching}
+                  >
+                    {locSearching ? "…" : "Go"}
+                  </button>
+                  <button
+                    type="button"
+                    className="wcw-loc-cancel"
+                    onClick={() => { setEditingLoc(false); setLocError(""); setLocInput(""); }}
+                    aria-label="Cancel"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span className="wcw-destination">{headerLabel || "Locating…"}</span>
+                  {onLocationOverride && (
+                    <button
+                      type="button"
+                      className="wcw-loc-edit-btn"
+                      onClick={() => setEditingLoc(true)}
+                      aria-label="Edit location"
+                      title="Edit location"
+                      data-no-drag
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
+              {locError && <span className="wcw-loc-error">{locError}</span>}
             </>
           )
         ) : (

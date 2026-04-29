@@ -1080,6 +1080,10 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             // onExpand removed: full-screen voice overlay was deleted.
             // Strollo Conversation (empty-state) integration
             userLocation={userLocation}
+            onLocationOverride={({ lat, lng }) => {
+              setUserLocation([lat, lng]);
+              setLocateTrigger((t) => t + 1);
+            }}
             vibePreferences={vibePreferences}
             preferences={preferences}
             trip={journeyItems}
