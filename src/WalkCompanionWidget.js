@@ -850,6 +850,13 @@ function WalkCompanionWidgetInner({
   // the user can keep talking without tapping. Only fires when the AI
   // pushed the message (restartSttAfterTtsRef set) and the user hasn't
   // already started listening or cancelled.
+  //
+  // Mobile timing: iOS won't deliver mic input to SpeechRecognition until
+  // the playback audio session has fully released. The 180ms inside
+  // startConvListening is enough for a manual tap (human reaction time
+  // adds buffer), but auto-restart fires on the audio.ended event, which
+  // beats iOS's session swap. Add ~600ms here so the mobile path lands
+  // safely.
   useEffect(() => {
     const wasSpeaking = prevTtsSpeakingRef.current;
     prevTtsSpeakingRef.current = ttsSpeaking;
@@ -859,7 +866,16 @@ function WalkCompanionWidgetInner({
     if (speakActive) return;
     if (activeVoice !== "conv") return;
     if (!(convOpen || isEmpty)) return;
-    startSpeak();
+    const delay = isMobile() ? 600 : 0;
+    const t = setTimeout(() => {
+      // Re-check guards at fire time — user may have tapped/cancelled
+      // during the delay.
+      if (speakActive) return;
+      if (activeVoice !== "conv") return;
+      if (!(convOpen || isEmpty)) return;
+      startSpeak();
+    }, delay);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ttsSpeaking]);
 
