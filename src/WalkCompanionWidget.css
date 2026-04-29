@@ -184,9 +184,11 @@
   border: none;
   background: rgba(0, 0, 0, 0.32);
   color: rgba(247, 243, 245, 0.85);
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
+  font-family: "Satoshi", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -197,14 +199,8 @@
 /* "I am here" mode — same shell, dot icon instead of skip arrows. The dot
    matches the timeline's added-stop rail node so it reads as "this is your
    confirmed stop". */
-.wcw-skip-btn--arrived { color: #F7F3F5; }
+.wcw-skip-btn--arrived { color: rgba(247, 243, 245, 0.85); }
 
-/* "Add stop" — same chrome / size as the default skip pill, just
-   swapped to Satoshi typography. Lives next to "You are at <location>"
-   when no stops are on the trip yet. */
-.wcw-add-stop-btn {
-  font-family: "Satoshi", sans-serif;
-}
 .wcw-skip-dot {
   width: 8px;
   height: 8px;
@@ -212,11 +208,12 @@
   background: #8851D4;
   box-shadow: 0 0 0 2px rgba(136, 81, 212, 0.25);
   flex-shrink: 0;
+  margin-right: 4px;
 }
 
 /* ── Dominant TURN line ──────────────────────────────────────────────── */
 .wcw-turn {
-  margin: 12px 0 12px;
+  margin: 36px 0 52px;
   font-family: var(--font-brand, var(--font-ui));
   font-size: 20px;
   font-weight: 800;
@@ -538,7 +535,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 2px 4px;
+  padding: 18px 2px 18px;
 }
 .strollo-tips-tip {
   margin: 0;
@@ -563,7 +560,7 @@
 .strollo-tips-loading {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 22px;
   padding-top: 0;
   animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
 }
@@ -588,7 +585,7 @@
 .strollo-tips-hint {
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 16px;
   margin: 0;
   padding: 10px 12px;
   border-radius: 14px;
@@ -605,7 +602,7 @@
   margin: 0;
   font-family: "Unbounded", sans-serif;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.005em;
   color: #F7F3F5;

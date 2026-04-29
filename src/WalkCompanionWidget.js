@@ -137,6 +137,10 @@ function WalkCompanionWidgetInner({
   // is hidden when false (i.e. the immediate next stop is the only / final
   // one) so the user doesn't accidentally drop their last destination.
   canSkip = true,
+  // True when the current target is the LAST confirmed stop in the trip.
+  // Drives the at-target glyph: purple destination-pin for the final
+  // stop, purple dot for any earlier stop.
+  isLastStop = false,
   // Shown in the empty state ("You are at <currentLocationName>") when the
   // user hasn't planned any stops yet. Reverse-geocoded by the widget itself
   // when not provided.
@@ -1049,30 +1053,11 @@ function WalkCompanionWidgetInner({
             <>
               <span className="wcw-heading-label">You are at</span>
               <span className="wcw-destination">{headerLabel || "Locating…"}</span>
-              {/* "Add stop" — opens the Timeline so the user can build
-                  a route from saved suggestions. Mirrors the skip-pill
-                  shell used during a walk; yellow flag glyph on the
-                  left signals "add a destination". */}
-              {onOpenTimeline && !(trip && trip.length > 0) && (
-                <button
-                  type="button"
-                  className="wcw-skip-btn wcw-add-stop-btn"
-                  onClick={onOpenTimeline}
-                  aria-label="Add a stop"
-                >
-                  <svg width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
-                    <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2.4" strokeLinecap="round"/>
-                    <path d="M8 3 L18 6 L8 10 Z"/>
-                    <circle cx="8" cy="21" r="2"/>
-                  </svg>
-                  <span>Add stop</span>
-                </button>
-              )}
             </>
           )
         ) : (
           <>
-            <span className="wcw-heading-label">Heading to</span>
+            <span className="wcw-heading-label">{atTarget ? "You are at" : "Heading to"}</span>
             <span className="wcw-destination">{destination}</span>
             {atTarget ? (
               <button
@@ -1081,12 +1066,17 @@ function WalkCompanionWidgetInner({
                 onClick={onArrived}
                 aria-label={`Confirm you have arrived at ${destination}`}
               >
-                <svg className="wcw-skip-flag" width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
-                  <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M8 3 L18 6 L8 10 Z"/>
-                  <circle cx="8" cy="21" r="2"/>
-                </svg>
-                <span>I'm here</span>
+                {isLastStop ? (
+                  /* Destination pin for the final stop. */
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#8851D4" stroke="none" aria-hidden="true">
+                    <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z"/>
+                    <circle cx="12" cy="10" r="2.6" fill="#FFFFFF"/>
+                  </svg>
+                ) : (
+                  /* Solid purple dot for any earlier stop. */
+                  <span className="wcw-skip-dot" />
+                )}
+                <span>I am here</span>
               </button>
             ) : canSkip ? (
               <button
@@ -1099,7 +1089,7 @@ function WalkCompanionWidgetInner({
                   <polygon points="4 5 13 12 4 19 4 5" />
                   <polygon points="13 5 22 12 13 19 13 5" />
                 </svg>
-                <span>Skip</span>
+                <span>Skip stop</span>
               </button>
             ) : null}
           </>
@@ -1144,7 +1134,7 @@ function WalkCompanionWidgetInner({
                 )}
                 <p className="strollo-tips-loading-text">
                   {trip && trip.length > 0
-                    ? "Your route is set."
+                    ? "Your stops are added. Ready when you are."
                     : "Strollo is looking for things you might like nearby."}
                 </p>
                 <button
@@ -1172,7 +1162,7 @@ function WalkCompanionWidgetInner({
               {!(trip && trip.length > 0) && (
                 <div className="wcw-suggestion strollo-tips-hint">
                   <span className="wcw-suggestion-text">
-                    Speak to Strollo to discover what you might like.
+                    Speak to Strollo to find spots to explore too.
                   </span>
                   <PromptPills onTap={handlePromptTap} />
                 </div>
@@ -1181,12 +1171,15 @@ function WalkCompanionWidgetInner({
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
           )}
-          {/* Outside the dotted box: only render the pills here when the
-              user already has saved stops (otherwise they're inside the
-              suggestion box above). */}
-          {!tipsLoading || (trip && trip.length > 0) ? (
+          {/* Prompt pills only show in the no-stops state (inside the
+              dotted suggestion box above) and in the tip-loaded fallback.
+              Once the user has saved one or more stops the widget
+              switches to the "Your stops are added." headline and the
+              tags are intentionally hidden so the user focuses on
+              tapping Start exploring. */}
+          {!tipsLoading && !(trip && trip.length > 0) && (
             <PromptPills onTap={handlePromptTap} />
-          ) : null}
+          )}
         </div>
       )}
 
@@ -1234,7 +1227,7 @@ function WalkCompanionWidgetInner({
           <p className="wcw-narration">{narration}</p>
         ) : (
           <div className="wcw-turn-row">
-            <h2 className="wcw-turn">{instruction}</h2>
+            <h2 className="wcw-turn">{atTarget ? "You're at your stop. Take it in." : instruction}</h2>
             {/* Mute / speaker toggle moved up next to the turn instruction
                 so the secondary controls don't crowd the bottom row. Lower
                 hierarchy than the SAY ANYTHING bar — compact, subtle. */}
@@ -1259,20 +1252,47 @@ function WalkCompanionWidgetInner({
         )
       )}
 
-      {!navListening && !isEmpty && (
-        <div className="wcw-stats">
-          <div className="wcw-stat">
-            <span className="wcw-stat-label">DIST</span>
-            <span className="wcw-stat-value">{paused ? "—" : distance}</span>
+      {!navListening && !isEmpty && (() => {
+        // Parse the next maneuver direction from the instruction text.
+        // "left" / "right" / "arriving" stay as words; "straight" is
+        // shown as an upward arrow glyph instead so the cell has a
+        // strong directional anchor at a glance.
+        const ins = (instruction || "").toLowerCase();
+        let turnDir = "straight";
+        if (ins.includes("arriv")) turnDir = "arriving";
+        else if (ins.includes("left")) turnDir = "left";
+        else if (ins.includes("right")) turnDir = "right";
+        const goValue = paused ? "—" : (
+          turnDir === "straight" ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label="straight ahead">
+              <line x1="12" y1="20" x2="12" y2="6"/>
+              <polyline points="6 11 12 6 18 11"/>
+            </svg>
+          ) : turnDir
+        );
+        return (
+          <div className="wcw-stats">
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">DIST</span>
+              <span className="wcw-stat-value">{paused ? "—" : distance}</span>
+            </div>
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">ETA</span>
+              <span className="wcw-stat-value">{paused ? "—" : eta}</span>
+            </div>
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">GO</span>
+              <span className="wcw-stat-value">{goValue}</span>
+            </div>
           </div>
-          <div className="wcw-stat">
-            <span className="wcw-stat-label">ETA</span>
-            <span className="wcw-stat-value">{paused ? "—" : eta}</span>
-          </div>
-        </div>
+        );
+      })()}
+      {/* Progress strip — dotted curve with the user's boots walking
+          toward the destination flag. Sits between the stats row and
+          the bottom buttons during a walk OR a stops-added preview. */}
+      {!isEmpty && (
+        <ProgressStrip progress={progress} />
       )}
-      {/* ProgressStrip removed per design — the dotted boots→flag strip
-          was redundant with the route line + DIST/ETA stats. */}
 
       {!(convOpen && !isEmpty) && (
       <div className="wcw-bottom">
