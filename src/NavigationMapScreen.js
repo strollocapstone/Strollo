@@ -1047,6 +1047,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             narration={aiNarration}
             suggestion={aiSuggestion}
             onArrived={handleArrived}
+            onOpenTimeline={onOpenTimeline}
             onEnd={onEndWalk || onGoBack}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;

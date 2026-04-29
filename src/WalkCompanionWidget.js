@@ -157,6 +157,7 @@ function WalkCompanionWidgetInner({
   onEnd,                       // eslint-disable-line no-unused-vars
   onExpand,
   onChat,
+  onOpenTimeline,
   onSpeakStart,
   onSpeakEnd,
 }, forwardedRef) {
@@ -1048,6 +1049,25 @@ function WalkCompanionWidgetInner({
             <>
               <span className="wcw-heading-label">You are at</span>
               <span className="wcw-destination">{headerLabel || "Locating…"}</span>
+              {/* "Add stop" — opens the Timeline so the user can build
+                  a route from saved suggestions. Mirrors the skip-pill
+                  shell used during a walk; yellow flag glyph on the
+                  left signals "add a destination". */}
+              {onOpenTimeline && !(trip && trip.length > 0) && (
+                <button
+                  type="button"
+                  className="wcw-skip-btn wcw-add-stop-btn"
+                  onClick={onOpenTimeline}
+                  aria-label="Add a stop"
+                >
+                  <svg width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+                    <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2.4" strokeLinecap="round"/>
+                    <path d="M8 3 L18 6 L8 10 Z"/>
+                    <circle cx="8" cy="21" r="2"/>
+                  </svg>
+                  <span>Add stop</span>
+                </button>
+              )}
             </>
           )
         ) : (
@@ -1092,10 +1112,40 @@ function WalkCompanionWidgetInner({
           {tipsLoading ? (
             <div className="strollo-tips-loading" role="status" aria-live="polite">
               <div className="strollo-tips-loading-head">
+                {!(trip && trip.length > 0) && (
+                  <span className="strollo-tips-trail" aria-hidden="true">
+                    {/* Two prints, both facing UPWARD with a slight stride
+                        tilt. They're not symmetric — the left foot sits
+                        a bit higher than the right so the pair reads as
+                        a casual mid-stride pose rather than a centered
+                        glyph. */}
+                    {[
+                      { tx: -8, ty: -7, rot: -10 },
+                      { tx: 7,  ty:  4, rot:  10 },
+                    ].map((p, i) => (
+                      <svg
+                        key={i}
+                        className="strollo-tips-print"
+                        style={{
+                          transform: `translate(${p.tx}px, ${p.ty}px) rotate(${p.rot}deg)`,
+                          animationDelay: `${i * 1.2}s`,
+                        }}
+                        width="13"
+                        height="18"
+                        viewBox="0 0 14 22"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M3 2.6 Q7 0.6 11 2.6 Q12.4 5 12 8.5 Q11.4 12 10 13.4 L4 13.4 Q2.6 12 2 8.5 Q1.6 5 3 2.6 Z" fill="currentColor" />
+                        <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="currentColor" />
+                      </svg>
+                    ))}
+                  </span>
+                )}
                 <p className="strollo-tips-loading-text">
                   {trip && trip.length > 0
-                    ? "Your route is set. Ready when you are."
-                    : "Looking around nearby. Speak to Strollo to discover what you might like."}
+                    ? "Your route is set."
+                    : "Strollo is looking for things you might like nearby."}
                 </p>
                 <button
                   type="button"
@@ -1116,11 +1166,27 @@ function WalkCompanionWidgetInner({
                   </svg>
                 </button>
               </div>
+              {/* Secondary prompt copy + prompt pills live together
+                  inside the dotted suggestion box, only when the user
+                  hasn't saved any stops. */}
+              {!(trip && trip.length > 0) && (
+                <div className="wcw-suggestion strollo-tips-hint">
+                  <span className="wcw-suggestion-text">
+                    Speak to Strollo to discover what you might like.
+                  </span>
+                  <PromptPills onTap={handlePromptTap} />
+                </div>
+              )}
             </div>
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
           )}
-          <PromptPills onTap={handlePromptTap} />
+          {/* Outside the dotted box: only render the pills here when the
+              user already has saved stops (otherwise they're inside the
+              suggestion box above). */}
+          {!tipsLoading || (trip && trip.length > 0) ? (
+            <PromptPills onTap={handlePromptTap} />
+          ) : null}
         </div>
       )}
 

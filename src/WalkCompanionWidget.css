@@ -198,6 +198,13 @@
    matches the timeline's added-stop rail node so it reads as "this is your
    confirmed stop". */
 .wcw-skip-btn--arrived { color: #F7F3F5; }
+
+/* "Add stop" — same chrome / size as the default skip pill, just
+   swapped to Satoshi typography. Lives next to "You are at <location>"
+   when no stops are on the trip yet. */
+.wcw-add-stop-btn {
+  font-family: "Satoshi", sans-serif;
+}
 .wcw-skip-dot {
   width: 8px;
   height: 8px;
@@ -458,12 +465,12 @@
    down to match the row's pill chrome so it doesn't dwarf the heading. */
 .wcw-status-mute {
   margin-left: auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
-.wcw-status-mute svg { width: 16px; height: 16px; }
+.wcw-status-mute svg { width: 18px; height: 18px; }
 
 /* Speak: pulses while held; locked state shows a steady accent ring. The
    button stretches to fill the right slot of the bottom row, overriding the
@@ -531,7 +538,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 4px 2px 8px;
+  padding: 16px 2px 4px;
 }
 .strollo-tips-tip {
   margin: 0;
@@ -556,8 +563,8 @@
 .strollo-tips-loading {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 2px;
+  gap: 16px;
+  padding-top: 0;
   animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
 }
 /* Header row holds the body copy on the left and the conv-mute pill
@@ -573,39 +580,73 @@
   margin-left: auto;
   margin-top: -2px; /* nudge into optical alignment with the first line */
 }
+/* Dotted suggestion box — holds the secondary "Speak to Strollo..."
+   hint AND the prompt-pill row beneath it. Stacks them vertically so
+   the box reads as one combined "ask Strollo" affordance. Inherits
+   the default `.wcw-suggestion` chrome (translucent white fill +
+   dashed light border). */
+.strollo-tips-hint {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+.strollo-tips-hint .wcw-suggestion-text {
+  font-family: "Satoshi", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  font-style: normal;
+  color: rgba(247, 243, 245, 0.92);
+}
 .strollo-tips-loading-text {
   flex: 1;
   margin: 0;
-  /* Match the dominant turn-line typography (`.wcw-turn`) so the empty-state
-     copy reads with the same authority as walk-mode instructions. */
-  font-family: var(--font-brand, var(--font-ui));
-  font-size: 20px;
+  font-family: "Unbounded", sans-serif;
+  font-size: 18px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.2;
   letter-spacing: -0.005em;
   color: #F7F3F5;
   text-wrap: pretty;
 }
-.strollo-tips-loading-dots {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 14px;
+/* Marauder's-Map footprint loader — six shoe-sole prints arranged
+   around a small circle to the LEFT of the body text. Each print
+   fades in/out in sequence so a single "active" footprint walks
+   clockwise around the circle, reading as Strollo pacing in place
+   while it hunts for nearby places. */
+.strollo-tips-trail {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  margin-right: 2px;
+  flex-shrink: 0;
+  color: #E0CFF5;
+  align-self: center;
 }
-.strollo-tips-loading-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #C5AEED;
-  opacity: 0.4;
-  box-shadow: 0 0 6px rgba(197, 174, 237, 0.55);
-  animation: strollo-tips-bounce 1.05s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+.strollo-tips-print {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* Center the SVG (13×18) on the trail origin before the inline
+     transform offsets it. */
+  margin: -9px 0 0 -6.5px;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 1px 2px rgba(30, 21, 65, 0.25));
+  animation: strollo-tips-print 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
-.strollo-tips-loading-dot:nth-child(2) { animation-delay: 0.14s; }
-.strollo-tips-loading-dot:nth-child(3) { animation-delay: 0.28s; }
-@keyframes strollo-tips-bounce {
-  0%, 100% { transform: translateY(0)    scale(0.85); opacity: 0.4; }
-  50%      { transform: translateY(-6px) scale(1.05); opacity: 1;   }
+/* Each foot fades in fast, holds, then dims gradually before
+   disappearing. The long fade-out overlaps with the partner foot's
+   fade-in so two prints linger on screen during the handoff —
+   reads as a softer "the other foot is just lifting" walk rhythm. */
+@keyframes strollo-tips-print {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  55%  { opacity: 0.85; }
+  85%  { opacity: 0.25; }
+  100% { opacity: 0; }
 }
 .strollo-skel {
   height: 18px;
@@ -657,14 +698,15 @@
 .strollo-prompt-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
+  gap: 5px;
+  padding: 4px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.10);
+  border: none;
   background: rgba(255,255,255,0.08);
   color: #fff;
+  font-family: "Satoshi", sans-serif;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.005em;
   cursor: pointer;
   transition: background 180ms;
