@@ -3,7 +3,7 @@
 // UPDATE DATE: 2026-04-28
 // BUILD: f718df0
 // DEPENDS ON: leaf
-// CONSUMED BY: ./NavigationMapScreen
+// CONSUMED BY: leaf  (design-preview component; not currently mounted by NavigationMapScreen)
 //
 // Journey-edit modal for during-walk: lets the user reorder/remove upcoming
 // stops without leaving the walk. See Design.md "Journey Edit Screen

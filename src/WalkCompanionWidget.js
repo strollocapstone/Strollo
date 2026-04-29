@@ -3,7 +3,7 @@
 // UPDATE DATE: 2026-04-28
 // BUILD: f718df0
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
-// CONSUMED BY: ./NavigationMapScreen, ./LockScreen, ./HomeScreen (chat-overlay mode)
+// CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
 // Bottom-pinned dynamic-island walk widget. Currently mixes: nav chrome
 // (turn line, DIST/ETA, skip/end buttons), nav-maneuver TTS, STT-polling

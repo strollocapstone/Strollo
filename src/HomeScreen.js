@@ -2,7 +2,7 @@
 // LAST UPDATED BY: Eric Tsai
 // UPDATE DATE: 2026-04-28
 // BUILD: f718df0
-// DEPENDS ON: ./geminiService, ./mapUtils, ./useSpeechRecognition, ./WalkCompanionWidget (chat-overlay mode), various CSS
+// DEPENDS ON: ./geminiService, ./mapUtils, ./useSpeechRecognition, various CSS
 // CONSUMED BY: ./App.js
 //
 // Home hub. Currently mixes (1) nearby-places fetch via Overpass, (2) the AI

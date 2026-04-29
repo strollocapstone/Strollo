@@ -2,7 +2,7 @@
 // LAST UPDATED BY: Eric Tsai
 // UPDATE DATE: 2026-04-28
 // BUILD: f718df0
-// DEPENDS ON: leaf
+// DEPENDS ON: ./geminiService (fetchNearbyPlaces)
 // CONSUMED BY: ./App.js
 //
 // Post-walk reflection screen. Renders distance/duration stats, per-stop

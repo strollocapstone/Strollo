@@ -3,7 +3,7 @@
 // UPDATE DATE: 2026-04-28
 // BUILD: f718df0
 // DEPENDS ON: ./WalkCompanionWidget
-// CONSUMED BY: ./App.js (when device-locked-during-walk mode is on)
+// CONSUMED BY: leaf  (design-preview component; not currently mounted by App.js)
 //
 // Mock of the OS lock screen during an active walk: dark backdrop with
 // WalkCompanionWidget mounted as a notification-like overlay. Used as a
