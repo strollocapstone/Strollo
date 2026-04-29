@@ -453,6 +453,18 @@
   background: rgba(255, 213, 1, 0.26);
 }
 
+/* Compact variant for the conv-mute button when it lives inline in the
+   status row (empty / Tips state) — pushed to the right edge and sized
+   down to match the row's pill chrome so it doesn't dwarf the heading. */
+.wcw-status-mute {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.wcw-status-mute svg { width: 16px; height: 16px; }
+
 /* Speak: pulses while held; locked state shows a steady accent ring. The
    button stretches to fill the right slot of the bottom row, overriding the
    square footprint of the base .wcw-icon-btn. */
@@ -537,9 +549,10 @@
   gap: 8px;
 }
 
-/* "Looking around" loading state — friendly copy + three bouncing yellow
-   dots so the user knows Strollo is hunting nearby places (replaces the
-   anonymous skeleton shimmer the empty-state used to render). */
+/* "Looking around" loading state — friendly copy + three bouncing
+   light-purple dots so the user knows Strollo is hunting nearby places
+   (replaces the anonymous skeleton shimmer the empty-state used to
+   render). */
 .strollo-tips-loading {
   display: flex;
   flex-direction: column;
@@ -547,14 +560,30 @@
   padding-top: 2px;
   animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
 }
+/* Header row holds the body copy on the left and the conv-mute pill
+   on the right, aligned to the FIRST line of the text (align-items:
+   flex-start) so the button stays beside the opening line even when
+   the copy wraps. */
+.strollo-tips-loading-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.strollo-tips-loading-head .wcw-status-mute {
+  margin-left: auto;
+  margin-top: -2px; /* nudge into optical alignment with the first line */
+}
 .strollo-tips-loading-text {
+  flex: 1;
   margin: 0;
-  font-family: "Unbounded", sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.4;
+  /* Match the dominant turn-line typography (`.wcw-turn`) so the empty-state
+     copy reads with the same authority as walk-mode instructions. */
+  font-family: var(--font-brand, var(--font-ui));
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.1;
   letter-spacing: -0.005em;
-  color: rgba(247, 243, 245, 0.92);
+  color: #F7F3F5;
   text-wrap: pretty;
 }
 .strollo-tips-loading-dots {

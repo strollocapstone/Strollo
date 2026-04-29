@@ -1091,14 +1091,31 @@ function WalkCompanionWidgetInner({
         <div className="strollo-tips-body">
           {tipsLoading ? (
             <div className="strollo-tips-loading" role="status" aria-live="polite">
-              <p className="strollo-tips-loading-text">
-                Looking around nearby. Speak to Strollo to discover what you might like.
-              </p>
-              <span className="strollo-tips-loading-dots" aria-hidden="true">
-                <span className="strollo-tips-loading-dot" />
-                <span className="strollo-tips-loading-dot" />
-                <span className="strollo-tips-loading-dot" />
-              </span>
+              <div className="strollo-tips-loading-head">
+                <p className="strollo-tips-loading-text">
+                  {trip && trip.length > 0
+                    ? "Your route is set. Ready when you are."
+                    : "Looking around nearby. Speak to Strollo to discover what you might like."}
+                </p>
+                <button
+                  type="button"
+                  className={`wcw-icon-btn wcw-status-mute${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                  onClick={toggleConvVoice}
+                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                  aria-pressed={activeVoice === "conv"}
+                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "conv" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "conv" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+              </div>
             </div>
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
@@ -1233,30 +1250,9 @@ function WalkCompanionWidgetInner({
             </>
           ) : (
             <>
-              {/* In the empty / Tips state there is no `.wcw-turn-speaker`
-                  mute (no nav destination), so surface the conv-mute
-                  button here too. Defaults to "off" / unselected like
-                  every other entry into the widget. */}
-              {isEmpty && (
-                <button
-                  type="button"
-                  className={`wcw-icon-btn${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
-                  onClick={toggleConvVoice}
-                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
-                  aria-pressed={activeVoice === "conv"}
-                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
-                    {activeVoice === "conv" && (
-                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    )}
-                    {activeVoice !== "conv" && (
-                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    )}
-                  </svg>
-                </button>
-              )}
+              {/* Mute lives next to the "You are at <location>" heading
+                  in the empty / Tips state status row, so this cluster
+                  only carries the chat shortcut here. */}
               {onChat && (
                 <button
                   type="button"
