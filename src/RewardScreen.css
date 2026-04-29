@@ -78,12 +78,153 @@
 /* ── Header ───────────────────────────────────────────────────────────── */
 
 .reward-date-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  /* Frosted-glass chrome that matches the homescreen FAB family — lighter
+     fill than the previous opaque pill so the date stamp recedes a bit. */
+  background: rgba(255, 255, 255, 0.42);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  backdrop-filter: blur(14px) saturate(1.25);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  margin-bottom: 18px;
   font-family: "Unbounded", sans-serif;
   font-size: 12px;
   letter-spacing: 0.02em;
   color: #8851D4;
   font-weight: 600;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.15s ease, transform 0.06s ease, box-shadow 0.15s ease;
   animation: reward-fade-up 500ms ease-out 80ms backwards;
+}
+.reward-date-stamp:hover {
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 2px 12px rgba(136, 81, 212, 0.14);
+}
+.reward-date-stamp:active {
+  transform: translateY(0.5px);
+}
+.reward-date-chevron {
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+/* Calendar overlay — softly dimmed backdrop + frosted-glass card. */
+.reward-cal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(30, 21, 65, 0.34);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: reward-cal-fade 180ms ease-out;
+}
+@keyframes reward-cal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.reward-cal {
+  width: min(320px, 100%);
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  padding: 14px 14px 16px;
+  box-shadow: 0 12px 36px rgba(30, 21, 65, 0.24);
+  font-family: var(--font-ui, "Satoshi", sans-serif);
+  color: #34233E;
+  animation: reward-cal-pop 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes reward-cal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.reward-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.reward-cal-title {
+  font-family: "Unbounded", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #34233E;
+}
+.reward-cal-nav {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(136, 81, 212, 0.10);
+  color: #8851D4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.reward-cal-nav:hover {
+  background: rgba(136, 81, 212, 0.18);
+}
+.reward-cal-dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(52, 35, 62, 0.55);
+  margin-bottom: 4px;
+}
+.reward-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.reward-cal-cell {
+  aspect-ratio: 1 / 1;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  font-family: var(--font-ui, "Satoshi", sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+  color: #34233E;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.reward-cal-cell--blank {
+  visibility: hidden;
+  cursor: default;
+}
+.reward-cal-cell:hover:not(.reward-cal-cell--blank):not(.reward-cal-cell--selected) {
+  background: rgba(136, 81, 212, 0.12);
+}
+.reward-cal-cell--today:not(.reward-cal-cell--selected) {
+  color: #8851D4;
+  font-weight: 700;
+}
+.reward-cal-cell--selected {
+  background: #8851D4;
+  color: #FFFFFF;
+  font-weight: 700;
+}
+.reward-cal-cell--future {
+  opacity: 0.32;
+  cursor: not-allowed;
 }
 
 .reward-headline {
@@ -113,8 +254,6 @@
   border-radius: 6px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  animation: reward-hl-sway 5.2s ease-in-out 1.3s infinite;
-  transform-origin: center;
 }
 
 .reward-subheader {
@@ -347,7 +486,7 @@
 /* ── Revisit ──────────────────────────────────────────────────────────── */
 
 .reward-revisit {
-  margin-top: 8px;
+  margin-top: 36px;
   animation: reward-fade-up 500ms ease-out 900ms backwards;
 }
 
@@ -581,7 +720,9 @@
 
 /* ── Empty state — ended a walk with nothing logged ───────────────────── */
 .reward-screen--empty {
-  background: linear-gradient(180deg, #FAF6FF 0%, #EAE0FA 100%);
+  /* Match LoadingScreen's chat-bg so the empty-walk reflection feels
+     continuous with the rest of the onboarding/loading family. */
+  background: var(--chat-bg, #FBF8F3);
 }
 .reward-bg-frost--solid {
   background: rgba(255, 255, 255, 0.55);
@@ -720,7 +861,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
-  margin-top: 40px;
+  margin-top: 60px;
   animation: reward-fade-up 500ms ease-out 1100ms backwards;
 }
 
@@ -758,7 +899,7 @@
   justify-content: center;
   gap: 8px;
   padding: 0 18px;
-  height: 44px; /* matches .reward-undo-pill so the two stacked CTAs align */
+  height: 44px; /* matches .reward-undo-pill */
   border: none;
   border-radius: 999px;
   background: #FFD501;

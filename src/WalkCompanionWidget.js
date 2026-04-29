@@ -194,9 +194,10 @@ function WalkCompanionWidgetInner({
   // is closed (so the CTA only nags about *unconfirmed* additions).
   const [convAddedCount, setConvAddedCount] = useState(0);
   const [messages, setMessages] = useState([]);
-  // TTS on by default — every Gemini reply is spoken via the browser's
-  // SpeechSynthesis. User can mute via the speaker icon in the bottom row.
-  const [activeVoice, setActiveVoice] = useState(() => destination ? "nav" : "conv");
+  // TTS muted by default. The widget always loads in the "off" voice
+  // surface; the user has to explicitly tap a speaker icon to opt into
+  // hearing nav prompts or AI replies.
+  const [activeVoice, setActiveVoice] = useState("off");
   const [tipNonce, setTipNonce] = useState(0);
   // Rotating angle injected into the tip prompt while idling on Tips mode, so
   // the auto-narration feels varied across the 60s rotation cycle.
@@ -227,10 +228,15 @@ function WalkCompanionWidgetInner({
   const { speak: ttsSpeak, cancel: ttsCancel, prime: ttsPrime } = useTtsSpeak({ enabled: activeVoice !== "off" });
 
   // Auto-flip when the conv overlay opens / closes during a walk. Empty
-  // state (no destination) keeps whatever the user last chose.
+  // state (no destination) keeps whatever the user last chose. If the user
+  // has muted (activeVoice === "off") we preserve that across surface
+  // flips — opening a chat shouldn't silently re-enable TTS.
   useEffect(() => {
     if (isEmpty) return;
-    setActiveVoice(convOpen ? "conv" : "nav");
+    setActiveVoice((prev) => {
+      if (prev === "off") return "off";
+      return convOpen ? "conv" : "nav";
+    });
   }, [convOpen, isEmpty]);
 
   // Cancel any in-flight utterance ONLY on a real flip — never on the

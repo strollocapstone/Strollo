@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./HomeScreen.css";
@@ -28,6 +28,22 @@ const CATEGORY_ICONS = {
   "Park":       "park",
   "Garden":     "yard",
 };
+
+// Floating destination-pin marker — sits ABOVE the final stop's pill (rendered
+// as its own Leaflet Marker so the glyph lives outside the pill chrome).
+// Mirrors TimelineScreen's FinalStopPin so all surfaces share one
+// "this is your end" cue.
+const finalDestPinIcon = () => L.divIcon({
+  className: "",
+  html: `<div class="sugg-pin-final-marker" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="#8851D4" stroke="none">
+      <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z"/>
+      <circle cx="12" cy="10" r="2.6" fill="white"/>
+    </svg>
+  </div>`,
+  iconSize: [0, 0],
+  iconAnchor: [0, 0],
+});
 
 const makePinIcon = (name, desc, added, expanded, sequence, mode = 'dot') => {
   const icon = CATEGORY_ICONS[desc] || "location_on";
@@ -969,6 +985,31 @@ export default function HomeScreen({
     return m;
   }, [addedIds]);
 
+  // Last id in the user's added itinerary — gets the destination-pin glyph
+  // on its pill. Set preserves insertion order, so iterating to the last
+  // value matches "most recently added stop".
+  const finalAddedId = useMemo(() => {
+    let last = null;
+    for (const id of addedIds) last = id;
+    return last;
+  }, [addedIds]);
+
+  // Coords of every added nearby stop — drives the purple route-dot marks
+  // beneath each added pill (mirrors NavigationMapScreen's CircleMarkers).
+  const addedStopPositions = useMemo(() => {
+    return nearbyPlaces
+      .filter((p) => p.lat && p.lng && addedIds.has(p.id))
+      .map((p) => ({ id: p.id, pos: [p.lat, p.lng] }));
+  }, [nearbyPlaces, addedIds]);
+
+  // Coords of the user's last/only added stop — drives the floating
+  // destination-pin marker above its pill.
+  const finalAddedPosition = useMemo(() => {
+    if (!finalAddedId) return null;
+    const place = nearbyPlaces.find((p) => p.id === finalAddedId && p.lat && p.lng);
+    return place ? [place.lat, place.lng] : null;
+  }, [nearbyPlaces, finalAddedId]);
+
   // Distance rank (0 = closest to user) — used for z-stacking so nearer pins appear on top
   const distanceRankMap = useMemo(() => {
     const m = new Map();
@@ -1095,6 +1136,33 @@ export default function HomeScreen({
               />
             );
           })}
+
+          {/* Solid purple route-dot beneath each added stop's pill — mirrors
+              NavigationMapScreen's waypoint dots so home and nav share one
+              visual cue for "this is on your itinerary". Rendered in the
+              path overlay pane so existing pill markers sit on top. */}
+          {!chatSplitActive && addedStopPositions.map(({ id, pos }) => (
+            <CircleMarker
+              key={`added-dot-${id}`}
+              center={pos}
+              pathOptions={{ color: "#8851D4", weight: 0, fillColor: "#8851D4", fillOpacity: 1 }}
+              radius={5.5}
+              interactive={false}
+            />
+          ))}
+
+          {/* Floating destination-pin glyph above the final/only added stop's
+              pill — separate Marker so the SVG sits OUTSIDE the pill chrome. */}
+          {!chatSplitActive && finalAddedPosition && (
+            <Marker
+              key="added-final-dest-pin"
+              position={finalAddedPosition}
+              icon={finalDestPinIcon()}
+              interactive={false}
+              zIndexOffset={4000}
+            />
+          )}
+
           {geocodedSuggestions.map((s) => {
             const isExpanded = selectedPoi === s.id;
             const isCurrent = s.id.startsWith(`ai-${currentGeocodeReqId}-`);
@@ -1144,6 +1212,17 @@ export default function HomeScreen({
             );
           })()}
         </MapContainer>
+      </div>
+
+      {/* ── TOP BAR: profile FAB (right) ── */}
+      <div className="top-bar">
+        <button
+          type="button"
+          className="fab-circle top-right-btn"
+          aria-label="Profile"
+        >
+          <span className="top-right-initials">ST</span>
+        </button>
       </div>
 
       {/* ── RADIAL GRADIENT on user ── */}

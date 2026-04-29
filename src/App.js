@@ -15,6 +15,10 @@ function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
   const [screen, setScreen] = useState('devSwitch');
+  // Tracks when the quiz is being opened straight after the intro screen so
+  // QuizScreen can use a soft fade-in instead of the slide-up sheet entry —
+  // matches how IntroScreen reveals after the loading screen fades.
+  const [quizFromIntro, setQuizFromIntro] = useState(false);
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
   const [lastKnownLocation, setLastKnownLocation] = useState(null);
@@ -126,7 +130,7 @@ function App() {
           <LoadingScreen onComplete={() => setScreen('intro')} />
         )}
         {screen === 'intro' && (
-          <IntroScreen onContinue={() => setScreen('quiz')} />
+          <IntroScreen onContinue={() => { setQuizFromIntro(true); setScreen('quiz'); }} />
         )}
         {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
             close animation reveals Home instead of a flash of white phone
@@ -181,6 +185,7 @@ function App() {
         )}
         {screen === 'quiz' && (
           <QuizScreen
+            entryMode={quizFromIntro ? 'fade' : 'slide'}
             initialPreferences={quizPreferences}
             onComplete={(prefs) => {
               setQuizPreferences(prefs);
@@ -203,12 +208,13 @@ function App() {
                 });
               }
               setScreen('home');
+              setQuizFromIntro(false);
               setSettingsHighlight(true);
               setTimeout(() => setSettingsHighlight(false), 4200);
               setQuizPending(false);
             }}
-            onClose={quizPreferences ? () => setScreen('home') : null}
-            onSkip={() => { setScreen('home'); setQuizPending(true); }}
+            onClose={quizPreferences ? () => { setQuizFromIntro(false); setScreen('home'); } : null}
+            onSkip={() => { setQuizFromIntro(false); setScreen('home'); setQuizPending(true); }}
           />
         )}
         {(screen === 'navigation' || screen === 'timeline') && (

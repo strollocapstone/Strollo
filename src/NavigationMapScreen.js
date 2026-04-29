@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
@@ -33,6 +33,22 @@ const REMOVE_BTN_HTML = `<div class="sugg-pin-extra">
 // `sequence` (when provided) puts the number inside the yellow circle in
 // place of the category icon. `muted` is purely a visual variant for the
 // non-active stops (faded purple-dot version of mini).
+// Floating destination-pin marker — sits ABOVE the final stop's pill as its
+// own Leaflet Marker (rendered separately from the pill icon so the SVG
+// lives outside the pill chrome). Mirrors TimelineScreen's FinalStopPin so
+// all surfaces share one "this is your end" cue.
+const finalDestPinIcon = () => L.divIcon({
+  className: "",
+  html: `<div class="sugg-pin-final-marker" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="#8851D4" stroke="none">
+      <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z"/>
+      <circle cx="12" cy="10" r="2.6" fill="white"/>
+    </svg>
+  </div>`,
+  iconSize: [0, 0],
+  iconAnchor: [0, 0],
+});
+
 const stopLabelIcon = (name, desc, sequence, mode = 'pill', removable = false, muted = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
   if (mode === 'mini') {
@@ -121,9 +137,24 @@ function PanAboveWidget({ target, widgetHeight }) {
 
 function NavFitRoute({ userLocation, destination, trigger }) {
   const map = useMap();
+  // Fit once when both coords first arrive, then only when the user explicitly
+  // bumps `trigger` (locate FAB). Without this guard, every GPS tick re-fit
+  // the map and stomped on any user pan/drag.
+  const fittedRef = useRef(false);
+  const lastTriggerRef = useRef(trigger);
+  const userLocationRef = useRef(userLocation);
+  const destinationRef = useRef(destination);
+  userLocationRef.current = userLocation;
+  destinationRef.current = destination;
   useEffect(() => {
-    if (!userLocation || !destination) return;
-    const bounds = L.latLngBounds([userLocation, destination]);
+    const ul = userLocationRef.current;
+    const dest = destinationRef.current;
+    if (!ul || !dest) return;
+    const triggerBumped = trigger !== lastTriggerRef.current;
+    lastTriggerRef.current = trigger;
+    if (fittedRef.current && !triggerBumped) return;
+    fittedRef.current = true;
+    const bounds = L.latLngBounds([ul, dest]);
     map.fitBounds(bounds, {
       paddingTopLeft: [50, 60],
       paddingBottomRight: [50, 260],
@@ -131,7 +162,7 @@ function NavFitRoute({ userLocation, destination, trigger }) {
       animate: true,
       duration: 0.6,
     });
-  }, [userLocation, destination, trigger, map]);
+  }, [trigger, userLocation, destination, map]);
   return null;
 }
 
@@ -142,17 +173,24 @@ function NavFitRoute({ userLocation, destination, trigger }) {
 function LocateMeOnTrigger({ userLocation, trigger, widgetHeight }) {
   const map = useMap();
   const firstRef = useRef(true);
+  // Refs so a GPS tick or widget-height tweak doesn't re-fly the map and
+  // fight the user's drag. Only the manual `trigger` bump should refire.
+  const userLocationRef = useRef(userLocation);
+  const widgetHeightRef = useRef(widgetHeight);
+  userLocationRef.current = userLocation;
+  widgetHeightRef.current = widgetHeight;
   useEffect(() => {
     if (firstRef.current) { firstRef.current = false; return; }
-    if (!userLocation || !map) return;
+    const ul = userLocationRef.current;
+    if (!ul || !map) return;
     try {
       const z = 17;
-      const pt = map.project(userLocation, z);
-      const offsetY = (widgetHeight + 16) / 2;
+      const pt = map.project(ul, z);
+      const offsetY = (widgetHeightRef.current + 16) / 2;
       const newCenter = map.unproject([pt.x, pt.y + offsetY], z);
       map.flyTo(newCenter, z, { duration: 0.6 });
     } catch (e) { /* ignore */ }
-  }, [trigger, userLocation, widgetHeight, map]);
+  }, [trigger, map]);
   return null;
 }
 
@@ -195,6 +233,11 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     () => isExplorationMode ? null : (confirmedStops.find((s) => !visitedIds?.has(s.id)) || null),
     [confirmedStops, visitedIds, isExplorationMode]
   );
+  // The user's last stop in the trip — pin glyph appears on this stop's
+  // pill (also covers the only-stop case, where final == nextTarget).
+  const finalStopId = confirmedStops.length > 0
+    ? confirmedStops[confirmedStops.length - 1].id
+    : null;
 
   // Dev-only diagnostic: log the journey state every time it changes so
   // we can see whether saved stops actually land in confirmedStops in
@@ -204,6 +247,43 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     console.log("[Nav] confirmedStops=", confirmedStops.map((s) => s.name));
     console.log("[Nav] nextTarget=", nextTarget?.name || "(none)");
   }, [journeyItems, confirmedStops, nextTarget]);
+  // Stable per-stop icon cache. Without this, every render generates a
+  // fresh L.divIcon for each marker, react-leaflet calls marker.setIcon()
+  // and replaces the underlying DOM. If the user happens to start a drag
+  // mid-render Leaflet's drag handler walks a now-detached parent chain
+  // and throws "Cannot read properties of null (reading 'offsetWidth')".
+  const stopIconCacheRef = useRef(new Map());
+  const getStopIcon = useCallback((name, desc, sequence, mode, removable, muted) => {
+    const key = `${name}|${desc}|${sequence ?? ''}|${mode}|${removable ? 'r' : ''}|${muted ? 'm' : ''}`;
+    const cache = stopIconCacheRef.current;
+    let icon = cache.get(key);
+    if (!icon) {
+      icon = stopLabelIcon(name, desc, sequence, mode, removable, muted);
+      cache.set(key, icon);
+    }
+    return icon;
+  }, []);
+
+  // Final-destination pin and AI-suggestion pin are both static glyphs —
+  // memoise their L.divIcon instances so react-leaflet never feels the
+  // need to swap their DOM nodes on render (same drag-crash mitigation
+  // as the per-stop cache above).
+  const finalDestIconRef = useRef(null);
+  const getFinalDestIcon = useCallback(() => {
+    if (!finalDestIconRef.current) finalDestIconRef.current = finalDestPinIcon();
+    return finalDestIconRef.current;
+  }, []);
+  const aiPinIconCacheRef = useRef(new Map());
+  const getAiPinIcon = useCallback((name) => {
+    const cache = aiPinIconCacheRef.current;
+    let icon = cache.get(name);
+    if (!icon) {
+      icon = aiPinIcon(name);
+      cache.set(name, icon);
+    }
+    return icon;
+  }, []);
+
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
@@ -608,6 +688,46 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
           )}
 
+          {/* Route waypoint dots — solid purple discs at the spot the user
+              pressed "Start exploring" and at every confirmed stop. Mirrors
+              TimelineScreen's vertical-rail nodes. Only rendered at zooms
+              where the stop pins are showing as pills/labeled-dots
+              (mapZoom >= 14); below that, pins demote to bare mini-dots
+              and an extra route-dot would orphan itself with no pill to
+              anchor to. */}
+          {!isExplorationMode && userLocation && confirmedStops.length > 0 && mapZoom >= 14 && (
+            <>
+              {(() => {
+                // Snap the start dot to the first vertex of the OSRM route
+                // when one is loaded — the route is snapped to the road
+                // network, so anchoring the dot at the raw GPS coords would
+                // float it a few metres off the purple line.
+                const startCenter = (walkingRoute && walkingRoute.length > 0)
+                  ? walkingRoute[0]
+                  : startLocation;
+                if (!startCenter) return null;
+                return (
+                  <CircleMarker
+                    key="route-dot-start"
+                    center={startCenter}
+                    pathOptions={{ color: "#8851D4", weight: 0, fillColor: "#8851D4", fillOpacity: 1 }}
+                    radius={5.5}
+                    interactive={false}
+                  />
+                );
+              })()}
+              {confirmedStops.map((s) => (
+                <CircleMarker
+                  key={`route-dot-${s.id}`}
+                  center={[s.lat, s.lng]}
+                  pathOptions={{ color: "#8851D4", weight: 0, fillColor: "#8851D4", fillOpacity: 1 }}
+                  radius={5.5}
+                  interactive={false}
+                />
+              ))}
+            </>
+          )}
+
           {/* Muted pins for every other confirmed stop (visited + future).
               Faded and label-less — they hint at the broader plan without
               competing with the next target. Tapping one expands it into a
@@ -629,7 +749,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 <Marker
                   key={`stop-muted-${s.id}`}
                   position={[s.lat, s.lng]}
-                  icon={stopLabelIcon(s.name, s.desc, null, mode, !isVisited, true)}
+                  icon={getStopIcon(s.name, s.desc, null, mode, !isVisited, true)}
                   eventHandlers={{
                     click: (e) => {
                       const target = e.originalEvent?.target;
@@ -661,7 +781,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               <Marker
                 key={`stop-${nextTarget.id}`}
                 position={[nextTarget.lat, nextTarget.lng]}
-                icon={stopLabelIcon(nextTarget.name, nextTarget.desc, 1, mode, !isVisited, false)}
+                icon={getStopIcon(nextTarget.name, nextTarget.desc, 1, mode, !isVisited, false)}
                 eventHandlers={{
                   click: (e) => {
                     const target = e.originalEvent?.target;
@@ -672,6 +792,25 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                     setExpandedStopId(expanded ? null : nextTarget.id);
                   },
                 }}
+              />
+            );
+          })()}
+
+          {/* Floating destination-pin glyph above the final/only confirmed
+              stop's pill — separate Marker so the SVG sits OUTSIDE the
+              pill chrome. Always rendered when a final stop exists; pairs
+              with whichever pin marker (active or muted) is currently
+              showing for that stop. */}
+          {(() => {
+            const finalStop = confirmedStops.find((s) => s.id === finalStopId);
+            if (!finalStop || !finalStop.lat || !finalStop.lng) return null;
+            return (
+              <Marker
+                key={`final-dest-pin-${finalStop.id}`}
+                position={[finalStop.lat, finalStop.lng]}
+                icon={getFinalDestIcon()}
+                interactive={false}
+                zIndexOffset={4000}
               />
             );
           })()}
@@ -690,7 +829,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               <Marker
                 key={`ai-pin-${aiSuggestedPin.lat}-${aiSuggestedPin.lng}`}
                 position={[aiSuggestedPin.lat, aiSuggestedPin.lng]}
-                icon={aiPinIcon(aiSuggestedPin.name)}
+                icon={getAiPinIcon(aiSuggestedPin.name)}
               />
               <PanAboveWidget target={aiSuggestedPin} widgetHeight={widgetHeight} />
             </>
@@ -762,6 +901,23 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
                 <path d="M8 3 L18 6 L8 10 Z"/>
                 <circle cx="8" cy="21" r="2"/>
+              </svg>
+            </button>
+          )}
+          {onSetConstraints && (
+            <button
+              type="button"
+              className="fab-circle bottom-right-btn"
+              aria-label="Preferences"
+              onClick={onSetConstraints}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+                <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+                <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+                <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
               </svg>
             </button>
           )}

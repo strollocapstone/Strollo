@@ -155,17 +155,20 @@ function warningTagsForItem(item) {
 // nothing is confirmed yet).
 function RailPin() {
   return (
-    <span className="tl-rail-boots" aria-label="You are here" role="img">
-      <svg className="tl-rail-foot tl-rail-foot--left" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#1E1541"/>
-        <line x1="6" y1="14" x2="17" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
-        <line x1="6" y1="19" x2="17" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
-      </svg>
-      <svg className="tl-rail-foot tl-rail-foot--right" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 2 C23 2 25 5 25 10 L25 32 C25 38 23 44 18 44 L11 44 C8 44 6 42 5 38 L4 32 C4 28 6 26 9 26 L10 26 L10 10 C10 5 12 2 15 2 Z" fill="#1E1541"/>
-        <line x1="11" y1="14" x2="22" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
-        <line x1="11" y1="19" x2="22" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
-      </svg>
+    <span className="tl-rail-here" aria-label="You are here" role="img">
+      <span className="tl-rail-boots">
+        <svg className="tl-rail-foot tl-rail-foot--left" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#1E1541"/>
+          <line x1="6" y1="14" x2="17" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+          <line x1="6" y1="19" x2="17" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+        </svg>
+        <svg className="tl-rail-foot tl-rail-foot--right" width="14" height="22" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 2 C23 2 25 5 25 10 L25 32 C25 38 23 44 18 44 L11 44 C8 44 6 42 5 38 L4 32 C4 28 6 26 9 26 L10 26 L10 10 C10 5 12 2 15 2 Z" fill="#1E1541"/>
+          <line x1="11" y1="14" x2="22" y2="14" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+          <line x1="11" y1="19" x2="22" y2="19" stroke="#fff" strokeWidth="1.5" opacity="0.5"/>
+        </svg>
+      </span>
+      <span className="tl-rail-node" aria-hidden="true" />
     </span>
   );
 }
@@ -730,8 +733,15 @@ export default function TimelineScreen({
   }, [showSwipeHint, revealedId, expandedId, draggingId]);
 
   const rows = [];
-  // Show the boots+address row at the top whenever the user hasn't walked to
-  // a stop yet (regardless of whether stops are queued up below).
+  // Boots ("pin" row) represent the user's CURRENT position on the trail.
+  //   • No visits yet → boots sit at the top of the rail (above the first
+  //     queued stop), and there's no separate "start" dot since the boots
+  //     ARE at the start.
+  //   • As stops get visited → boots slide DOWN to just before the next
+  //     non-visited stop (i.e. above the card the user is currently
+  //     walking toward). A small "start-dot" row stays anchored at the
+  //     very top of the rail to mark where the walk began.
+  //   • All stops visited → boots end up below every card.
   if (!hasVisited && (confirmedItems.length > 0 || suggestionItems.length > 0)) {
     rows.push({ kind: "pin", key: "pin-top" });
   }
@@ -740,7 +750,17 @@ export default function TimelineScreen({
       rows.push({ kind: "card", item: it, isFirst: false, key: `card-${it.id}` });
     });
   } else {
+    if (hasVisited) {
+      rows.push({ kind: "start-dot", key: "start-dot" });
+    }
+    let pinInserted = !hasVisited; // already pushed above when nothing visited
     confirmedItems.forEach((item, i) => {
+      // Drop the boots row right ABOVE the first non-visited stop the
+      // user is currently walking toward.
+      if (!pinInserted && !visitedIds?.has(item.id)) {
+        rows.push({ kind: "pin", key: "pin-here" });
+        pinInserted = true;
+      }
       rows.push({ kind: "card", item, isFirst: i === 0, key: `card-${item.id}` });
       (suggestionsByConfirmed.get(item.id) || []).forEach(({ s }) => {
         rows.push({ kind: "card", item: s, isFirst: false, key: `card-${s.id}` });
@@ -757,6 +777,10 @@ export default function TimelineScreen({
         });
       }
     });
+    // All confirmed stops visited — boots sit at the bottom of the trail.
+    if (!pinInserted) {
+      rows.push({ kind: "pin", key: "pin-end" });
+    }
   }
 
   const firstCardItemId = rows.find((r) => r.kind === "card")?.item?.id ?? null;
@@ -819,7 +843,7 @@ export default function TimelineScreen({
           <div className="tl-empty">
             <p className="tl-empty-title">No stops added to your exploration!</p>
             <p className="tl-empty-body">
-              Add suggested stops from the map or ask Strollo for some suggestions.
+              Add suggested stops or ask Strollo — it'll find something you'll actually like.
             </p>
           </div>
         )}
@@ -836,6 +860,21 @@ export default function TimelineScreen({
                   <span className="tl-you-are-here">
                     {userLocationLabel || "You are here"}
                   </span>
+                </div>
+              </div>
+            );
+          }
+          if (row.kind === "start-dot") {
+            // Marks where the walk began. Sits at the very top of the rail
+            // once the user has visited at least one stop, so the boots can
+            // slide down without losing the "I started here" anchor.
+            return (
+              <div className="tl-row tl-row--start-dot" key={row.key}>
+                <div className="tl-rail-cell">
+                  <span className="tl-rail-node" aria-hidden="true" />
+                </div>
+                <div className="tl-content-cell">
+                  <span className="tl-start-label">Started here</span>
                 </div>
               </div>
             );

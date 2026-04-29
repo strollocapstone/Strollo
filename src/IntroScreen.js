@@ -26,10 +26,10 @@ export default function IntroScreen({ onContinue }) {
   const handleContinue = () => {
     if (leaving) return;
     setLeaving(true);
-    // Trigger the next screen immediately. The IntroScreen plays its fade/lift
-    // out via the `--leaving` class while QuizScreen slides up from below over
-    // it — the two animations overlap so there's no blank gap between them.
-    onContinue?.();
+    // Hold the screen swap until the fade-out has mostly played; without
+    // the delay, IntroScreen unmounts synchronously and the leaving
+    // animation is never seen — the cut to QuizScreen feels abrupt.
+    setTimeout(() => onContinue?.(), 320);
   };
 
   return (
@@ -53,7 +53,7 @@ export default function IntroScreen({ onContinue }) {
       </div>
 
       <h1 className="intro-headline">
-        See something<br />new today.
+        Explore somewhere<br />new today.
       </h1>
 
       <p className="intro-body">
