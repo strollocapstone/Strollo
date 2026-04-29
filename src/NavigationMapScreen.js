@@ -904,6 +904,23 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               </svg>
             </button>
           )}
+          {onSetConstraints && (
+            <button
+              type="button"
+              className="fab-circle bottom-right-btn"
+              aria-label="Preferences"
+              onClick={onSetConstraints}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+                <circle cx="9"  cy="6"  r="2" fill="#8851D4"/>
+                <circle cx="15" cy="12" r="2" fill="#8851D4"/>
+                <circle cx="8"  cy="18" r="2" fill="#8851D4"/>
+              </svg>
+            </button>
+          )}
           <button className="fab-circle bottom-right-btn" onClick={() => setLocateTrigger((t) => t + 1)} aria-label="Focus on my location">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
