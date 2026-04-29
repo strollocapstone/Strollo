@@ -1089,7 +1089,7 @@ function WalkCompanionWidgetInner({
                   <polygon points="4 5 13 12 4 19 4 5" />
                   <polygon points="13 5 22 12 13 19 13 5" />
                 </svg>
-                <span>Skip stop</span>
+                <span>Skip</span>
               </button>
             ) : null}
           </>
@@ -1227,7 +1227,7 @@ function WalkCompanionWidgetInner({
           <p className="wcw-narration">{narration}</p>
         ) : (
           <div className="wcw-turn-row">
-            <h2 className="wcw-turn">{atTarget ? "You're at your stop. Take it in." : instruction}</h2>
+            <h2 className="wcw-turn">{atTarget ? "You made it to your stop. Now enjoy it." : instruction}</h2>
             {/* Mute / speaker toggle moved up next to the turn instruction
                 so the secondary controls don't crowd the bottom row. Lower
                 hierarchy than the SAY ANYTHING bar — compact, subtle. */}

@@ -1053,6 +1053,12 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         let instruction;
         if (isEmpty) {
           instruction = "—";
+        } else if (previewStop && nextStop === previewStop) {
+          // Preview state — user has saved stops but hasn't pressed
+          // Start exploring yet. Override the directions headline with
+          // a calm "ready when you are" line so the widget doesn't fake
+          // a live walk.
+          instruction = "your stops are added. ready when you are.";
         } else if (!userLocation || liveDistToStopM === null) {
           instruction = "head out";
         } else if (distToTurnM !== null && distToTurnM <= 15) {

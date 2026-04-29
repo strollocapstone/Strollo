@@ -1076,7 +1076,7 @@ export default function TimelineScreen({
                             <polygon points="4 5 13 12 4 19 4 5" />
                             <polygon points="13 5 22 12 13 19 13 5" />
                           </svg>
-                          <span className="tl-card-action-label">Skip stop</span>
+                          <span className="tl-card-action-label">Skip</span>
                         </button>
                       )}
                     </div>

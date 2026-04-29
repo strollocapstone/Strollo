@@ -179,16 +179,15 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 10px;
   border: none;
   background: rgba(0, 0, 0, 0.32);
   color: rgba(247, 243, 245, 0.85);
   font-family: "Satoshi", sans-serif;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -200,6 +199,7 @@
    matches the timeline's added-stop rail node so it reads as "this is your
    confirmed stop". */
 .wcw-skip-btn--arrived { color: rgba(247, 243, 245, 0.85); }
+
 
 .wcw-skip-dot {
   width: 8px;
@@ -213,18 +213,18 @@
 
 /* ── Dominant TURN line ──────────────────────────────────────────────── */
 .wcw-turn {
-  margin: 36px 0 52px;
+  margin: 48px 0 84px;
   font-family: var(--font-brand, var(--font-ui));
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.1;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.005em;
   text-transform: lowercase;
   color: #F7F3F5;
 }
 /* While listening, the turn line shows the live transcription quoted. */
 .wcw--listening .wcw-turn {
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.2;
   text-transform: none;
   color: #F7F3F5;
@@ -314,7 +314,7 @@
   display: flex;
   gap: 28px;
   padding: 0 0 14px;
-  margin-top: 14px;
+  margin-top: 24px;
 }
 .wcw-stat {
   display: flex;
@@ -535,7 +535,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px 2px 18px;
+  padding: 16px 2px 22px;
 }
 .strollo-tips-tip {
   margin: 0;
@@ -560,7 +560,7 @@
 .strollo-tips-loading {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 32px;
   padding-top: 0;
   animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
 }
