@@ -776,43 +776,67 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  /* Match PreferencesScreen's .pwc-bottom (16px top / 28px bottom) so the
-     Back to map button has the same breathing room across screens. */
-  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
-  background: rgba(247, 244, 250, 0.50);
-  backdrop-filter: blur(14px) saturate(1.25);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  /* Symmetric vertical padding so the bar feels balanced (top == bottom),
+     plus the safe-area inset on phones with home indicators. */
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  /* Mirror PreferencesScreen's .pwc-bottom — same fade-up gradient and
+     blur so the two sticky footers read as one design family. */
+  background: linear-gradient(
+    180deg,
+    rgba(247, 244, 250, 0)    0%,
+    rgba(247, 244, 250, 0.6) 40%,
+    rgba(247, 244, 250, 0.82) 100%
+  );
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
   transition: box-shadow 0.2s ease;
 }
+/* Scroll-shadow removed so the bar reads as the same transparent fade
+   whether the timeline overflows or not — matches PreferencesScreen,
+   which never adds a divider shadow. */
 .tl-bottom-bar--scrollable {
-  box-shadow: 0 -4px 16px rgba(30, 21, 65, 0.10);
+  box-shadow: none;
 }
 
-/* Map — primary yellow pill: fills the bar, icon + label */
-.tl-back-btn {
-  min-width: 0;
+/* Back to map — SECONDARY frosted-glass pill on the LEFT. Mirrors
+   PreferencesScreen's .pwc-back-btn so the two sticky footers share one
+   visual vocabulary. */
+.tl-back-btn,
+.tl-save-btn {
+  flex: 1;
   height: 44px;
-  padding: 0 16px;
   border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary);
-  color: var(--color-accent);
+  border-radius: 18px;
+  padding: 0 16px;
   font-family: var(--font-ui);
-  font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0.01em;
+  font-weight: 700;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: filter 0.15s ease, transform 0.15s ease;
+  transition: transform 0.15s ease-out, filter 0.2s ease, background 0.15s ease;
 }
-.tl-back-btn:hover { filter: brightness(1.04); }
-.tl-back-btn:active { transform: scale(0.985); }
+.tl-back-btn svg { display: block; }
+.tl-back-btn {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: 0 2px 10px rgba(62, 42, 18, 0.12);
+  color: #1E1541;
+}
+.tl-back-btn:hover  { background: rgba(255, 255, 255, 0.55); }
+.tl-back-btn:active { transform: scale(0.97); }
+
+/* Save changes — PRIMARY Strollo-yellow pill on the RIGHT. */
+.tl-save-btn {
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  box-shadow: 0 2px 10px rgba(255, 213, 1, 0.35);
+}
+.tl-save-btn:hover  { filter: brightness(1.05); }
+.tl-save-btn:active { transform: scale(0.97); }
 
 /* Skip {current destination} — secondary outline, compact */
 .tl-skip-btn {
