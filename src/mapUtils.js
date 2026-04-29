@@ -278,6 +278,53 @@ export function isWithinWalkingRadius(origin, point, radiusKm = WALKING_RADIUS_K
   return haversineKm([oLat, oLng], [pLat, pLng]) <= radiusKm;
 }
 
+// ── Split a route polyline at the user's projected position ─────────────
+// Returns { walked, remaining } as two [lat,lng][] arrays. The seam is the
+// perpendicular projection of `userLocation` onto the closest segment of
+// `route`, inserted as a shared vertex so the two polylines meet exactly.
+// Either array may be empty if the user is at/before the start or past the
+// end. Returns { walked: [], remaining: route } if inputs are invalid.
+export function splitRouteAtUser(route, userLocation) {
+  if (!Array.isArray(route) || route.length < 2 || !Array.isArray(userLocation)) {
+    return { walked: [], remaining: route || [] };
+  }
+  const [uLat, uLng] = userLocation;
+  // Local equirectangular projection: meters per degree, scaled around the
+  // user's latitude. Accurate to <1 m within a few km.
+  const mPerDegLat = 111_320;
+  const mPerDegLng = 111_320 * Math.cos((uLat * Math.PI) / 180);
+  const toXY = ([lat, lng]) => [(lng - uLng) * mPerDegLng, (lat - uLat) * mPerDegLat];
+
+  let bestIdx = 0;
+  let bestT = 0;
+  let bestDistSq = Infinity;
+  for (let i = 0; i < route.length - 1; i++) {
+    const [ax, ay] = toXY(route[i]);
+    const [bx, by] = toXY(route[i + 1]);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : -(ax * dx + ay * dy) / lenSq;
+    if (t < 0) t = 0;
+    else if (t > 1) t = 1;
+    const px = ax + t * dx;
+    const py = ay + t * dy;
+    const distSq = px * px + py * py;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestIdx = i;
+      bestT = t;
+    }
+  }
+
+  const a = route[bestIdx];
+  const b = route[bestIdx + 1];
+  const seam = [a[0] + bestT * (b[0] - a[0]), a[1] + bestT * (b[1] - a[1])];
+  const walked = [...route.slice(0, bestIdx + 1), seam];
+  const remaining = [seam, ...route.slice(bestIdx + 1)];
+  return { walked, remaining };
+}
+
 // ── Fit map bounds to a set of points ────────────────────────────────────
 export function FitBounds({ points }) {
   const map = useMap();

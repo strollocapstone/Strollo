@@ -6,7 +6,7 @@ import "./NavigationMapScreen.css";
 import WalkCompanionWidget from "./WalkCompanionWidget";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
-import { youIcon, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
+import { youIcon, WatchLocation, haversineKm, ZoomTracker, splitRouteAtUser } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
 // Category → Material Symbol glyph (mirrors the one used on HomeScreen for added pins).
@@ -411,6 +411,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     if (!nextTarget || !userLocation) return null;
     return haversineKm(userLocation, [nextTarget.lat, nextTarget.lng]) * 1000;
   }, [nextTarget, userLocation]);
+
+  // Split the active route at the user's projected position so the walked
+  // half can render in grey and the remaining half in purple.
+  const splitRoute = React.useMemo(() => {
+    if (!walkingRoute || walkingRoute.length < 2 || !userLocation) return null;
+    return splitRouteAtUser(walkingRoute, userLocation);
+  }, [walkingRoute, userLocation]);
   // Show the "I'm here" affordance once the user is within ~300 ft (≈91 m)
   // of the next confirmed stop. Below that threshold the widget's Skip
   // button flips to a confirm-arrival button.
@@ -688,7 +695,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
 
           {/* Walking route along streets (from OSRM) — salient leg from
               user to next target. */}
-          {walkingRoute && (
+          {walkingRoute && splitRoute && splitRoute.walked.length >= 2 && (
+            <Polyline positions={splitRoute.walked} pathOptions={{ color: "#adacac", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
+          )}
+          {walkingRoute && splitRoute && splitRoute.remaining.length >= 2 && (
+            <Polyline positions={splitRoute.remaining} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
+          )}
+          {walkingRoute && !splitRoute && (
             <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
           )}
           {/* Fallback dashed line while route loads */}
