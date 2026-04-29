@@ -1,3 +1,11 @@
+// FEATURE: intro
+// OWNER: shared
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// Boot/loading animation. Pure presentational. Calls onComplete after its
+// timed sequence so App.js advances to the IntroScreen.
+
 // Loading Screen — playful, Marauder's-Map-style boot trail that walks the
 // Strollo wordmark into being. Two boot SVGs (the "ll" of strollo) come
 // striding in along curved paths from opposite corners; small footprint marks

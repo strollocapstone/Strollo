@@ -1,3 +1,15 @@
+// FEATURE: walk-nav
+// OWNER: shared
+// DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
+// CONSUMED BY: ./App.js
+//
+// Active-walk screen. Renders the Leaflet map with the route polyline, the
+// next-stop pin and arrival geofence, the journey-flag and locate FABs, and
+// mounts WalkCompanionWidget along the bottom for nav chrome. Owns the GPS
+// watch + arrival detection + AI-narration trigger. OUT OF SCOPE: nav TTS
+// (handled inside WalkCompanionWidget), conversation reel (also inside
+// WalkCompanionWidget), home-discovery state.
+
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";

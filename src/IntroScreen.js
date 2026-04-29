@@ -1,3 +1,11 @@
+// FEATURE: intro
+// OWNER: shared
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// Intro animation shown once after the loading screen. Pure presentational —
+// no state beyond a "Continue" callback handed up to App.js.
+
 // Intro Screen — shown once after the launch loading animation. Frames the
 // Strollo value prop ("see something new today") with a looping animation of
 // walk-themed emojis bubbling up like rising thoughts.

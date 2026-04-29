@@ -1,3 +1,12 @@
+// FEATURE: timeline
+// OWNER: shared
+// DEPENDS ON: ./NavigationMapScreen (renders behind as backdrop)
+// CONSUMED BY: ./App.js
+//
+// Journey timeline overlay. Mounts on top of NavigationMapScreen as a sheet
+// listing the user's added stops, their visited/skipped state, and per-stop
+// dwell time. Edit interactions delegate back up to App.js via callbacks.
+
 import React, { useState, useEffect } from "react";
 import "./TimelineScreen.css";
 

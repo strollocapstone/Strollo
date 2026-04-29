@@ -1,3 +1,15 @@
+// FEATURE: shared-service
+// OWNER: shared
+// DEPENDS ON: env REACT_APP_GOOGLE_TTS_API_KEY
+// CONSUMED BY: ./strollowConversation (useTtsSpeak), ./WalkCompanionWidget, ./App.js (global click cancel)
+//
+// Mobile-only Cloud TTS path. Synthesizes MP3 via Google Cloud TTS REST and
+// plays through a single persistent <audio> element to bypass the iPhone
+// silent-switch issue with window.speechSynthesis. Exports isMobile,
+// isCloudTtsConfigured, unlockMobileAudio (call inside a user gesture once),
+// speakViaCloud, cancelCloudTts (also releases iOS audio session),
+// isCloudTtsPlaying.
+
 // Cloud TTS audio path. iOS Safari / iOS Chrome route window.speechSynthesis
 // through the system speech audio session, which is muted by the iPhone's
 // silent switch. HTML5 <audio> uses the media session, which ignores the

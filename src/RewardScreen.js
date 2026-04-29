@@ -1,3 +1,15 @@
+// FEATURE: reward
+// OWNER: shared
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// Post-walk reflection screen. Renders distance/duration stats, per-stop
+// linger time (computed from `visitedAt` and `stopDwellMs` Maps that App.js
+// owns), and the empty-state copy when the user ended without confirming any
+// stops. PHASE 6 of the refactor splits this into a folder with StatsBlock /
+// StopList / EmptyState components and pulls the linger-time math into
+// `walkStats.js` so it's testable without React.
+
 // Reward Screen — post-walk reflection.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./RewardScreen.css";

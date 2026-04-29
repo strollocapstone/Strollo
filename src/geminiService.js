@@ -1,3 +1,15 @@
+// FEATURE: shared-service  (multi — phase 3 splits)
+// OWNER: shared
+// DEPENDS ON: env REACT_APP_GEMINI_API_KEY
+// CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./WalkCompanionWidget, ./useJourneyVoice, ./strollowConversation (useTipFetch)
+//
+// Currently mixes: Gemini REST client (sendMessage), prompt builders
+// (buildSystemPrompt, buildConversationPrompt), response parsing
+// (extractPlaces, extractActions, cleanResponseText), Nominatim geocoding
+// (geocodePlace), Overpass nearby-places (fetchNearbyPlaces), and walking
+// route (getWalkingRoute). PHASE 3 of the refactor splits this into
+// services/{geminiClient, geminiResponseParser, geocoding, overpass, routing}.
+
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODELS = ["gemini-2.5-flash-lite"];

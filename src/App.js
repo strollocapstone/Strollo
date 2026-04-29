@@ -1,3 +1,14 @@
+// FEATURE: shell
+// OWNER: shared
+// DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./IntroScreen, ./DevSwitch, ./cloudTtsService
+// CONSUMED BY: ./index.js (root mount)
+//
+// Top-level screen router. Owns the shared cross-screen state (journeyItems,
+// addedIds, visitedIds, preferences, quizPreferences, etc.) and routes between
+// named screens via the `screen` state. Mounts the global click-cancel for
+// in-flight TTS. OUT OF SCOPE: per-screen logic, network calls, anything
+// beyond "which screen is active and what state passes through props."
+
 import { useState, useRef, useEffect } from 'react';
 import HomeScreen from './HomeScreen';
 import NavigationMapScreen from './NavigationMapScreen';

@@ -5,6 +5,38 @@ This repo is worked on by multiple people, all using Claude Code with GitHub for
 ## Team
 Evelyn Wong, Eric Tsai, Amber Jian, Seemin Masood, Kenny Ly.
 
+## Code map
+
+The repo is mid-refactor (see plan in `~/.claude/plans/`). Target layout — phases 1–6 will move files into these folders. Until then, new code should still go in the right *target* spot.
+
+| Folder | What lives here | Examples |
+|---|---|---|
+| `src/screens/` | Top-level routes mounted from `App.js`. One file = one screen. | HomeScreen, NavigationMapScreen, RewardScreen, QuizScreen |
+| `src/widgets/` | Stateful UI mounted *inside* screens; reusable across screens. | WalkCompanionWidget, ChatSheet, JourneySheet |
+| `src/components/` | Leaf, presentational components. No app state, no I/O. | ConversationReel, LocationPill, PromptPills, SkeletonLine |
+| `src/hooks/` | Custom React hooks. No JSX. | useGeminiPlaces, useTtsSpeak, useSpeechRecognition |
+| `src/services/` | External I/O wrappers. No React. | geminiClient, geocoding, overpass, cloudTtsService |
+| `src/utils/` | Pure helpers. No I/O, no React state. | geoMath, leafletHelpers, icons |
+
+### Per-file header convention
+
+Every `.js` file in `src/` (except CRA boilerplate `index.js`, `setupTests.js`, `reportWebVitals.js`, `App.test.js`) should start with this comment block before any code or imports:
+
+```js
+// FEATURE: <slug — see list below>
+// OWNER: <Eric | Evelyn | Amber | Seemin | Kenny | shared>
+// DEPENDS ON: <internal modules this file imports, comma-separated>
+// CONSUMED BY: <internal modules that import this; or "leaf">
+//
+// <one-paragraph description: what's IN scope and what's OUT of scope>
+```
+
+**FEATURE slugs** (pick the closest one; create new only with team agreement):
+
+`home-discovery` (nearby places + map pins) · `home-chat` (AI chat sheet) · `home-voice` (voice listen card) · `home-journey` (added stops + favorites) · `walk-nav` (turn-by-turn nav chrome) · `walk-conv` (in-walk conversation overlay) · `walk-tts` (nav-maneuver TTS) · `quiz` · `preferences` · `reward` · `timeline` · `intro` (incl. DevSwitch + LoadingScreen) · `shell` (App.js routing) · `shared-ui` (cross-feature presentational components) · `shared-hook` (cross-feature hooks) · `shared-service` (external I/O) · `shared-util` (pure helpers).
+
+When you open a feature folder (e.g. `src/widgets/ChatSheet/`) you should be able to read just that folder + its declared imports and understand the entire feature without scanning the rest of the repo.
+
 ## Golden rules
 
 1. **Never commit or push directly to `main`.** All changes go through a pull request, even one-line edits. `main` is the shared source of truth — broken `main` blocks the whole team.

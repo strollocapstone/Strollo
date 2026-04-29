@@ -1,3 +1,12 @@
+// FEATURE: intro
+// OWNER: shared
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// First-launch toggle to skip the loading + intro + quiz flow during
+// development. Production users go through "Normal user". Not user-facing on
+// the deployed build (App.js could gate by env var if needed).
+
 // Dev Switch — first screen shown on launch. Lets the engineer skip the
 // loading + intro + quiz flow during development. Picking "Normal user"
 // proceeds with the real flow; "Dev" jumps straight to home with all quiz

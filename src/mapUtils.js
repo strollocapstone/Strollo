@@ -1,3 +1,15 @@
+// FEATURE: shared-util  (multi — phase 3 splits)
+// OWNER: shared
+// DEPENDS ON: react-leaflet, leaflet
+// CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./strollowConversation (reverseGeocode)
+//
+// Currently mixes: Leaflet helper components (WatchLocation, LocateMe, FlyTo,
+// TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker,
+// MapClickListener), Leaflet icons (youIcon), pure geo math (haversineKm,
+// isWithinWalkingRadius, MOCK_LOCATION, WALKING_RADIUS_KM), and Nominatim
+// reverse geocoding. PHASE 3 splits into utils/leafletHelpers, utils/geoMath,
+// utils/icons, services/geocoding (reverseGeocode).
+
 import React, { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";

@@ -1,3 +1,17 @@
+// FEATURE: home-discovery + home-chat + home-voice + home-journey  (multi — phase 5 splits)
+// OWNER: shared
+// DEPENDS ON: ./geminiService, ./mapUtils, ./useSpeechRecognition, ./WalkCompanionWidget (chat-overlay mode), various CSS
+// CONSUMED BY: ./App.js
+//
+// Home hub. Currently mixes (1) nearby-places fetch via Overpass, (2) the AI
+// chat sheet that geocodes Gemini's place suggestions into map pins, (3) a
+// voice listen card driven by useSpeechRecognition, (4) the added-stops
+// journey list and favorites, and (5) chrome FABs (locate, settings, quiz
+// gateway). PHASE 5 of the refactor splits this into widgets/NearbyPlacesSheet,
+// widgets/ChatSheet, widgets/VoiceListenCard, widgets/JourneySheet — leaving
+// HomeScreen.js as a ~300-line layout shell. Don't add new features in here;
+// add them to (or create) one of the target widget folders.
+
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";

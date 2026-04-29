@@ -1,3 +1,12 @@
+// FEATURE: shared-hook
+// OWNER: shared
+// DEPENDS ON: window.SpeechRecognition / window.webkitSpeechRecognition
+// CONSUMED BY: ./HomeScreen, ./useJourneyVoice
+//
+// Browser STT wrapper. Returns { start, stop, reset, getTranscript, supported }
+// + an `onAutoStop` callback fired after 1s of silence following speech.
+// Stable / single-purpose — phase plan keeps this file as-is.
+
 import { useState, useRef, useCallback } from "react";
 
 const SILENCE_AFTER_SPEECH_MS = 1000;  // 1s silence after last words → auto-stop

@@ -1,3 +1,12 @@
+// FEATURE: walk-nav
+// OWNER: shared
+// DEPENDS ON: leaf
+// CONSUMED BY: ./NavigationMapScreen
+//
+// Journey-edit modal for during-walk: lets the user reorder/remove upcoming
+// stops without leaving the walk. See Design.md "Journey Edit Screen
+// (During-Walk)" for the spec.
+
 // Opens from the flag icon on NavigationMapScreen.
 // See Design.md "Journey Edit Screen (During-Walk)" for the full spec.
 import React, { useState } from "react";

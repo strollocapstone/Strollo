@@ -1,3 +1,15 @@
+// FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
+// OWNER: shared
+// DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
+// CONSUMED BY: ./NavigationMapScreen, ./LockScreen, ./HomeScreen (chat-overlay mode)
+//
+// Bottom-pinned dynamic-island walk widget. Currently mixes: nav chrome
+// (turn line, DIST/ETA, skip/end buttons), nav-maneuver TTS, STT-polling
+// conversation session, in-walk conversation overlay, tip card, drag gesture.
+// PHASE 4 of the refactor splits this into widgets/WalkCompanionWidget/{NavChrome,
+// ConvOverlay, SpeakButton, ProgressStrip, SoundBars} + hooks/useConvSession +
+// hooks/useNavTts. Don't add features inline — extract to one of those targets.
+
 // Walk Companion minimized widget (bottom-pinned, during-walk).
 //
 // CANONICAL NAVIGATION MODULE — this is the single shared component for

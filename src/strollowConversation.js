@@ -1,3 +1,15 @@
+// FEATURE: shared-hook + shared-ui  (multi — phase 2 splits)
+// OWNER: shared
+// DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService
+// CONSUMED BY: ./WalkCompanionWidget
+//
+// Currently mixes: useTtsSpeak (browser + Cloud TTS bridge), useTipFetch
+// (Gemini-grounded prose tip), useReverseGeocodeOnce (throttled Nominatim),
+// ConversationReel (UI), PromptPills (UI), LocationPill (UI), SkeletonLine
+// (UI). PHASE 2 splits into hooks/{useTtsSpeak, useTipFetch,
+// useReverseGeocodeOnce} + components/{ConversationReel, PromptPills,
+// LocationPill, SkeletonLine}.
+
 // Strollo Conversation — bottom-card sub-views ported from the Claude Design
 // "Strollow Conversation" prototype. All LLM calls go through Gemini
 // (`sendMessage` / `buildSystemPrompt` from ./geminiService); the prototype's

@@ -1,3 +1,13 @@
+// FEATURE: quiz
+// OWNER: shared
+// DEPENDS ON: leaf (exports QUIZ_DECK + buildMergedPreset for App.js dev-mode)
+// CONSUMED BY: ./App.js
+//
+// Vibe-preference Polaroid swipe quiz. Each card has a set of vibes; swiping
+// up = "yes" tallies the vibes; swiping down = "no". On completion, App.js
+// reads the resulting `vibeScores` + `mergedPreset` and uses them as the seed
+// for HomeScreen's preferences and any later AI prompts.
+
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import "./QuizScreen.css";
 

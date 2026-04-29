@@ -1,3 +1,12 @@
+// FEATURE: walk-nav
+// OWNER: shared
+// DEPENDS ON: ./WalkCompanionWidget
+// CONSUMED BY: ./App.js (when device-locked-during-walk mode is on)
+//
+// Mock of the OS lock screen during an active walk: dark backdrop with
+// WalkCompanionWidget mounted as a notification-like overlay. Used as a
+// design preview surface; not invoked by the production flow.
+
 // LockScreen represents the phone's lock screen state during a walk —
 // it is NOT an in-app screen. When the user locks their phone mid-walk,
 // the OS shows this: a dark backdrop with the Walk Companion widget

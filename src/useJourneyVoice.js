@@ -1,3 +1,13 @@
+// FEATURE: shared-hook
+// OWNER: shared
+// DEPENDS ON: ./useSpeechRecognition, ./geminiService
+// CONSUMED BY: ./NavigationMapScreen
+//
+// Pre-walk and during-walk voice flow: STT → Gemini → action callbacks
+// (suggest place, add stop, etc.). PHASE 1 of the refactor will route the
+// Gemini call through the new shared useGeminiPlaces hook so the chat loop
+// stops being duplicated across this file, HomeScreen, and WalkCompanionWidget.
+
 import { useState, useRef, useCallback } from "react";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import {
