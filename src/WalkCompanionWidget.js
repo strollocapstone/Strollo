@@ -1066,7 +1066,7 @@ function WalkCompanionWidgetInner({
                   <path d="M8 3 L18 6 L8 10 Z"/>
                   <circle cx="8" cy="21" r="2"/>
                 </svg>
-                <span>I'm here</span>
+                <span>I've arrived</span>
               </button>
             ) : canSkip ? (
               <button
