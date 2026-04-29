@@ -7,7 +7,7 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm } from "./mapUtils";
+import { youIcon, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm, geocodeAddress } from "./mapUtils";
 
 const CATEGORY_ICONS = {
   "Coffee":     "local_cafe",
@@ -319,6 +319,8 @@ export default function HomeScreen({
   const [showLocatePrompt, setShowLocatePrompt] = useState(false);
   const [locateError, setLocateError]           = useState("");
   const [locateActive, setLocateActive]         = useState(false);
+  const [manualQuery, setManualQuery]           = useState("");
+  const [manualSearching, setManualSearching]   = useState(false);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
   const [sheetOpen, setSheetOpen]         = useState(Boolean(initialSheetOpen));
 
@@ -1310,6 +1312,44 @@ export default function HomeScreen({
               <button className="locate-popover-btn locate-popover-btn--cancel" onClick={() => setShowLocatePrompt(false)}>Not now</button>
               <button className="locate-popover-btn locate-popover-btn--allow" onClick={() => setLocateTrigger((t) => t + 1)}>Allow</button>
             </div>
+            <div className="locate-popover-divider"><span>or enter a location</span></div>
+            <form
+              className="locate-popover-manual"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const q = manualQuery.trim();
+                if (!q || manualSearching) return;
+                setManualSearching(true);
+                setLocateError("");
+                const hit = await geocodeAddress(q);
+                setManualSearching(false);
+                if (!hit) {
+                  setLocateError("Couldn't find that place. Try a different name or address.");
+                  return;
+                }
+                setUserLocation([hit.lat, hit.lng]);
+                setFlyToTarget({ lat: hit.lat, lng: hit.lng, ts: Date.now() });
+                setManualQuery("");
+                setShowLocatePrompt(false);
+              }}
+            >
+              <input
+                className="locate-popover-input"
+                type="text"
+                placeholder="e.g. Berkeley, CA"
+                value={manualQuery}
+                onChange={(e) => setManualQuery(e.target.value)}
+                disabled={manualSearching}
+                autoFocus={false}
+              />
+              <button
+                type="submit"
+                className="locate-popover-go"
+                disabled={!manualQuery.trim() || manualSearching}
+              >
+                {manualSearching ? "…" : "Go"}
+              </button>
+            </form>
           </div>
         </>
       )}

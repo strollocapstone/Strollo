@@ -621,6 +621,59 @@
   margin: 0 0 14px;
   line-height: 1.4;
 }
+.locate-popover-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 10px;
+  color: #999;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.locate-popover-divider::before,
+.locate-popover-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e5e5;
+}
+.locate-popover-manual {
+  display: flex;
+  gap: 8px;
+}
+.locate-popover-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--color-body);
+  background: #fafafa;
+  outline: none;
+}
+.locate-popover-input:focus {
+  border-color: #8851D4;
+  background: #fff;
+}
+.locate-popover-go {
+  padding: 9px 16px;
+  border: none;
+  border-radius: 10px;
+  background: #8851D4;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.locate-popover-go:disabled {
+  background: #cdb8ec;
+  cursor: not-allowed;
+}
 
 /* ── Timeline FAB (floating action button) ── */
 .timeline-fab {

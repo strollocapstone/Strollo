@@ -252,6 +252,30 @@ export async function reverseGeocode(lat, lng) {
   }
 }
 
+// ── Forward geocode (free OpenStreetMap Nominatim — no API key) ──────────
+// Resolves a free-text place name to { lat, lng, label }. Returns null on
+// any failure or if there are no results. Same usage policy as reverseGeocode.
+export async function geocodeAddress(query) {
+  const q = (query || "").trim();
+  if (!q) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&limit=1&addressdetails=1`;
+    const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const top = data[0];
+    const lat = parseFloat(top.lat);
+    const lng = parseFloat(top.lon);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+    const label = top.display_name ? top.display_name.split(",")[0] : q;
+    return { lat, lng, label };
+  } catch (e) {
+    console.warn("geocodeAddress failed:", e);
+    return null;
+  }
+}
+
 // ── Distance helpers ─────────────────────────────────────────────────────
 const EARTH_RADIUS_KM = 6371;
 
