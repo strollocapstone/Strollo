@@ -83,19 +83,6 @@ export async function speakViaCloud(text, opts = {}) {
   if (myReq !== currentRequestId) return;
   a.src = `data:audio/mp3;base64,${data.audioContent}`;
   await a.play();
-  // Resolve only when the clip actually finishes (or is paused / errors),
-  // so callers using `await speakViaCloud()` can react at end-of-speech.
-  await new Promise((resolve) => {
-    const done = () => {
-      a.removeEventListener("ended", done);
-      a.removeEventListener("pause", done);
-      a.removeEventListener("error", done);
-      resolve();
-    };
-    a.addEventListener("ended", done);
-    a.addEventListener("pause", done);
-    a.addEventListener("error", done);
-  });
 }
 
 export function cancelCloudTts() {
