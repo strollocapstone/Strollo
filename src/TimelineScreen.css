@@ -244,39 +244,6 @@
   color: #8851D4;
   letter-spacing: 0.01em;
 }
-/* Lay the pin row's content cell out as a flex row so the
-   "Remove all stops" button can sit flush on the right edge while
-   "You are here" stays anchored next to the boots. */
-.tl-row--pin-only .tl-content-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* Frosted-glass chrome that matches the RewardScreen date pill so the two
-   surfaces share one secondary-pill vocabulary. */
-.tl-remove-all-btn {
-  margin-left: auto;
-  padding: 6px 12px;
-  border: none;
-  background: rgba(255, 255, 255, 0.42);
-  -webkit-backdrop-filter: blur(14px) saturate(1.25);
-  backdrop-filter: blur(14px) saturate(1.25);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-body, #34233E);
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s ease, transform 0.06s ease, box-shadow 0.15s ease;
-}
-.tl-remove-all-btn:hover {
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: 0 2px 12px rgba(136, 81, 212, 0.14);
-}
-.tl-remove-all-btn:active { transform: translateY(0.5px); }
 /* Anchor row at the top of the rail showing where the user began the walk.
    Mirrors .tl-row--pin-only's spacing so the rail stays evenly distributed. */
 .tl-row--start-dot {

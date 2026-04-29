@@ -876,7 +876,6 @@ export default function TimelineScreen({
 
         {rows.map((row) => {
           if (row.kind === "pin") {
-            const hasAddedStops = (addedIds?.size ?? 0) > 0;
             return (
               <div className="tl-row tl-row--pin-only" key={row.key}>
                 <div className="tl-rail-cell"><RailPin /></div>
@@ -884,19 +883,6 @@ export default function TimelineScreen({
                   <span className="tl-you-are-here">
                     {userLocationLabel || "You are here"}
                   </span>
-                  {hasAddedStops && (
-                    <button
-                      type="button"
-                      className="tl-remove-all-btn"
-                      onClick={() => {
-                        if (onJourneyChange) onJourneyChange([]);
-                        if (setAddedIds) setAddedIds(new Set());
-                      }}
-                      aria-label="Remove all stops from this exploration"
-                    >
-                      Remove all stops
-                    </button>
-                  )}
                 </div>
               </div>
             );
