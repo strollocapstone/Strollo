@@ -364,6 +364,19 @@ export default function TimelineScreen({
   const screenRef = React.useRef(null);
   const [isScrollable, setIsScrollable] = useState(false);
   const [userLocationLabel, setUserLocationLabel] = useState("");
+  // Snapshot the journey + addedIds when Timeline mounts so "Back to map"
+  // can revert any reorder / skip / remove / add the user did this session
+  // (Preferences-style cancel). "Save changes" just closes — edits are
+  // already applied in real time as the user interacts.
+  const originalStateRef = React.useRef({
+    journeyItems,
+    addedIds: addedIds ? new Set(addedIds) : new Set(),
+  });
+  const revertToSnapshot = React.useCallback(() => {
+    const orig = originalStateRef.current;
+    if (orig.journeyItems && onJourneyChange) onJourneyChange(orig.journeyItems);
+    if (setAddedIds) setAddedIds(new Set(orig.addedIds));
+  }, [onJourneyChange, setAddedIds]);
   useEffect(() => {
     if (!userLocation) return;
     let cancelled = false;
@@ -390,8 +403,17 @@ export default function TimelineScreen({
   }, [userLocation]);
   const handleClose = () => {
     if (closing || !onGoBack) return;
+    // Back to map = secondary "cancel" — toss any timeline edits before
+    // the parent unmounts, mirroring Preferences' Back-to-map semantics.
+    revertToSnapshot();
     setClosing(true);
-    // Let the shrink animation play before the parent unmounts the component
+    setTimeout(() => onGoBack(), 280);
+  };
+  const handleSaveChanges = () => {
+    if (closing || !onGoBack) return;
+    // Save changes = primary commit — edits are already applied in state,
+    // so just play the close animation and bounce back to the map.
+    setClosing(true);
     setTimeout(() => onGoBack(), 280);
   };
   const [expandedId, setExpandedId] = useState(null);
@@ -1058,15 +1080,29 @@ export default function TimelineScreen({
         })}
       </div>
 
-      {/* ── Sticky bottom bar: Map (primary) ── */}
+      {/* ── Sticky bottom bar: Back to map (secondary) + Save changes
+           (primary) — mirrors PreferencesScreen's footer pattern. ── */}
       <div className={`tl-bottom-bar${isScrollable ? " tl-bottom-bar--scrollable" : ""}`}>
-        <button className="tl-back-btn" onClick={handleClose} aria-label="Back to map">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <button
+          type="button"
+          className="tl-back-btn"
+          onClick={handleClose}
+          aria-label="Back to map"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21" />
             <line x1="8" y1="3" x2="8" y2="18" />
             <line x1="16" y1="6" x2="16" y2="21" />
           </svg>
           <span>Back to map</span>
+        </button>
+        <button
+          type="button"
+          className="tl-save-btn"
+          onClick={handleSaveChanges}
+          aria-label="Save stops"
+        >
+          <span>Save stops</span>
         </button>
       </div>
     </div>
