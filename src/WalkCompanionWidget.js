@@ -1,5 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen, ./HomeScreen (chat-overlay mode)
 //

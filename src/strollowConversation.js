@@ -1,5 +1,7 @@
 // FEATURE: shared-hook + shared-ui  (multi — phase 2 splits)
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService
 // CONSUMED BY: ./WalkCompanionWidget
 //

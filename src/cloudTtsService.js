@@ -1,5 +1,7 @@
 // FEATURE: shared-service
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: env REACT_APP_GOOGLE_TTS_API_KEY
 // CONSUMED BY: ./strollowConversation (useTtsSpeak), ./WalkCompanionWidget, ./App.js (global click cancel)
 //

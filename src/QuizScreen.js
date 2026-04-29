@@ -1,5 +1,7 @@
 // FEATURE: quiz
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: leaf (exports QUIZ_DECK + buildMergedPreset for App.js dev-mode)
 // CONSUMED BY: ./App.js
 //

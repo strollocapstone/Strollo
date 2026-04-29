@@ -1,5 +1,7 @@
 // FEATURE: shared-service  (multi — phase 3 splits)
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: env REACT_APP_GEMINI_API_KEY
 // CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./WalkCompanionWidget, ./useJourneyVoice, ./strollowConversation (useTipFetch)
 //

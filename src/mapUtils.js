@@ -1,5 +1,7 @@
 // FEATURE: shared-util  (multi — phase 3 splits)
-// OWNER: shared
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
 // DEPENDS ON: react-leaflet, leaflet
 // CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./strollowConversation (reverseGeocode)
 //

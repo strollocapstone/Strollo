@@ -20,11 +20,13 @@ The repo is mid-refactor (see plan in `~/.claude/plans/`). Target layout — pha
 
 ### Per-file header convention
 
-Every `.js` file in `src/` (except CRA boilerplate `index.js`, `setupTests.js`, `reportWebVitals.js`, `App.test.js`) should start with this comment block before any code or imports:
+Every `.js` file in `src/` (except CRA boilerplate `index.js`, `setupTests.js`, `reportWebVitals.js`, `App.test.js`) starts with this comment block before any code or imports:
 
 ```js
 // FEATURE: <slug — see list below>
-// OWNER: <Eric | Evelyn | Amber | Seemin | Kenny | shared>
+// LAST UPDATED BY: <your name>
+// UPDATE DATE: <YYYY-MM-DD>
+// BUILD: <merge-commit short SHA OR Vercel deployment ID>
 // DEPENDS ON: <internal modules this file imports, comma-separated>
 // CONSUMED BY: <internal modules that import this; or "leaf">
 //
@@ -36,6 +38,20 @@ Every `.js` file in `src/` (except CRA boilerplate `index.js`, `setupTests.js`, 
 `home-discovery` (nearby places + map pins) · `home-chat` (AI chat sheet) · `home-voice` (voice listen card) · `home-journey` (added stops + favorites) · `walk-nav` (turn-by-turn nav chrome) · `walk-conv` (in-walk conversation overlay) · `walk-tts` (nav-maneuver TTS) · `quiz` · `preferences` · `reward` · `timeline` · `intro` (incl. DevSwitch + LoadingScreen) · `shell` (App.js routing) · `shared-ui` (cross-feature presentational components) · `shared-hook` (cross-feature hooks) · `shared-service` (external I/O) · `shared-util` (pure helpers).
 
 When you open a feature folder (e.g. `src/widgets/ChatSheet/`) you should be able to read just that folder + its declared imports and understand the entire feature without scanning the rest of the repo.
+
+### Header maintenance — required on every PR merge
+
+**Every time you merge a PR, the Claude Code session that worked on the PR MUST update the header of every file the PR touched.** Specifically:
+
+1. `LAST UPDATED BY:` → your name (the person who merged).
+2. `UPDATE DATE:` → today's date in `YYYY-MM-DD`. Use the actual current date, not the date your branch was opened.
+3. `BUILD:` → the merge commit's short SHA (e.g. `f718df0`). Find it with `git rev-parse --short HEAD` after merging, or copy from the GitHub PR's "Merged" notice. If your PR was deployed before the next teammate edits the file, you may instead use the Vercel deployment ID shown in the dashboard (e.g. `AXJ3e5M62`).
+4. `DEPENDS ON:` and `CONSUMED BY:` → re-check accuracy if your PR added/removed imports. Don't update these if your PR didn't change the import graph.
+5. The description paragraph → only rewrite if the file's responsibility actually changed; preserve existing wording otherwise.
+
+If your PR adds a new file, give it a fresh header with `LAST UPDATED BY:` = you, `UPDATE DATE:` = today, `BUILD:` = the merge SHA. Mark `CONSUMED BY:` as `leaf` if nothing imports it yet, or list every file that does.
+
+**Why this matters for your Claude Code session:** When a teammate's Claude Code opens a file three weeks from now, the header tells it whether it's reading current state. Stale headers ("LAST UPDATED BY: Eric / 2026-04-28") next to a file that was last touched in a different PR by someone else are a lie that compounds — Claude will trust them and skip re-reading nearby files. Keep them honest.
 
 ## Golden rules
 
