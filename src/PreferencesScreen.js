@@ -109,7 +109,7 @@ export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, 
   const handleClose = () => {
     if (closing) return;
     setClosing(true);
-    setTimeout(() => onGoBack?.(), 380);
+    setTimeout(() => onGoBack?.(), 280);
   };
   const [expandedCards, setExpandedCards] = useState(new Set(["destination"]));
   const [destination, setDestination] = useState(seed?.destination ?? null);
@@ -504,7 +504,7 @@ export default function PreWalkConstraintsScreen({ onGoBack, onSavePreferences, 
                 // Same slide-down as Back to map — feels symmetric and gives
                 // the user visual confirmation that the sheet is leaving.
                 setClosing(true);
-                setTimeout(() => onSavePreferences?.(payload), 380);
+                setTimeout(() => onSavePreferences?.(payload), 280);
               }}
             >
               Save preferences

@@ -861,6 +861,7 @@ export default function TimelineScreen({
 
       {/* ── Timeline ── */}
       <div className="tl-timeline">
+        <div className="tl-timeline-inner">
         {rows.length === 0 && (
           <div className="tl-empty">
             <p className="tl-empty-title">No stops added to your exploration!</p>
@@ -1078,6 +1079,7 @@ export default function TimelineScreen({
             </div>
           );
         })}
+        </div>
       </div>
 
       {/* ── Sticky bottom bar: Back to map (secondary) + Save changes

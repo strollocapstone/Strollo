@@ -258,7 +258,7 @@ function App() {
             vibePreferences={quizPreferences}
             preferences={preferences}
             nearbyPlaces={nearbyPlaces}
-            showVoice={screen === 'navigation' || (screen === 'constraints' && constraintsReturnScreen === 'navigation')}
+            showVoice={screen === 'navigation'}
           />
         )}
         {screen === 'reward' && (
