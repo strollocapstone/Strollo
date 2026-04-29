@@ -1090,15 +1090,20 @@ function WalkCompanionWidgetInner({
       {isEmpty && convMode === "tips" && (
         <div className="strollo-tips-body">
           {tipsLoading ? (
-            <div className="strollo-tips-skel">
-              <SkeletonLine width="92%" />
-              <SkeletonLine width="76%" />
-              <SkeletonLine width="58%" />
+            <div className="strollo-tips-loading" role="status" aria-live="polite">
+              <p className="strollo-tips-loading-text">
+                Looking around nearby. Speak to Strollo to discover what you might like.
+              </p>
+              <span className="strollo-tips-loading-dots" aria-hidden="true">
+                <span className="strollo-tips-loading-dot" />
+                <span className="strollo-tips-loading-dot" />
+                <span className="strollo-tips-loading-dot" />
+              </span>
             </div>
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
           )}
-          <PromptPills disabled={tipsLoading} onTap={handlePromptTap} />
+          <PromptPills onTap={handlePromptTap} />
         </div>
       )}
 
@@ -1228,6 +1233,30 @@ function WalkCompanionWidgetInner({
             </>
           ) : (
             <>
+              {/* In the empty / Tips state there is no `.wcw-turn-speaker`
+                  mute (no nav destination), so surface the conv-mute
+                  button here too. Defaults to "off" / unselected like
+                  every other entry into the widget. */}
+              {isEmpty && (
+                <button
+                  type="button"
+                  className={`wcw-icon-btn${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                  onClick={toggleConvVoice}
+                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                  aria-pressed={activeVoice === "conv"}
+                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "conv" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "conv" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+              )}
               {onChat && (
                 <button
                   type="button"
@@ -1241,9 +1270,9 @@ function WalkCompanionWidgetInner({
                   </svg>
                 </button>
               )}
-              {/* Mute/speaker icon lives next to the turn instruction
-                  (`.wcw-turn-speaker`) — fully removed from this row so
-                  the End walk button can sit flush against the left
+              {/* During an active walk the mute icon lives next to the turn
+                  instruction (`.wcw-turn-speaker`) — kept out of this row
+                  so the End walk button can sit flush against the left
                   inner padding. */}
             </>
           )}

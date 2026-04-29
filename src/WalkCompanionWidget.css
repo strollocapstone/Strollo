@@ -536,6 +536,48 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* "Looking around" loading state — friendly copy + three bouncing yellow
+   dots so the user knows Strollo is hunting nearby places (replaces the
+   anonymous skeleton shimmer the empty-state used to render). */
+.strollo-tips-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+  animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
+}
+.strollo-tips-loading-text {
+  margin: 0;
+  font-family: "Unbounded", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+  color: rgba(247, 243, 245, 0.92);
+  text-wrap: pretty;
+}
+.strollo-tips-loading-dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 14px;
+}
+.strollo-tips-loading-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #C5AEED;
+  opacity: 0.4;
+  box-shadow: 0 0 6px rgba(197, 174, 237, 0.55);
+  animation: strollo-tips-bounce 1.05s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.strollo-tips-loading-dot:nth-child(2) { animation-delay: 0.14s; }
+.strollo-tips-loading-dot:nth-child(3) { animation-delay: 0.28s; }
+@keyframes strollo-tips-bounce {
+  0%, 100% { transform: translateY(0)    scale(0.85); opacity: 0.4; }
+  50%      { transform: translateY(-6px) scale(1.05); opacity: 1;   }
+}
 .strollo-skel {
   height: 18px;
   border-radius: 6px;
