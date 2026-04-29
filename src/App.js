@@ -217,7 +217,11 @@ function App() {
             onSkip={() => { setQuizFromIntro(false); setScreen('home'); setQuizPending(true); }}
           />
         )}
-        {(screen === 'navigation' || screen === 'timeline') && (
+        {/* Keep NavigationMapScreen mounted while the prefs sheet is open
+            from the nav flow — that way the prefs slide-down close
+            animation reveals the live map + walk widget underneath
+            instead of a flash of home/white. */}
+        {(screen === 'navigation' || screen === 'timeline' || (screen === 'constraints' && constraintsReturnScreen === 'navigation')) && (
           <NavigationMapScreen
             onGoBack={() => {
               // Back arrow = abandon the walk → wipe all walk state so the
@@ -254,7 +258,7 @@ function App() {
             vibePreferences={quizPreferences}
             preferences={preferences}
             nearbyPlaces={nearbyPlaces}
-            showVoice={screen === 'navigation'}
+            showVoice={screen === 'navigation' || (screen === 'constraints' && constraintsReturnScreen === 'navigation')}
           />
         )}
         {screen === 'reward' && (
