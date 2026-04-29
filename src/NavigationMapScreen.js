@@ -309,7 +309,15 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   useLayoutEffect(() => {
     const el = widgetRef.current;
     if (!el) return;
-    const apply = () => setWidgetHeight(el.offsetHeight);
+    // Keep the last non-zero height when the widget gets hidden (e.g. by a
+    // visibility:hidden parent during Timeline / Preferences). Otherwise the
+    // FABs and Start-exploring CTA — which are positioned relative to
+    // `widgetHeight` — would jump to bottom: 32px while the sheet is open
+    // and snap back when it closes.
+    const apply = () => {
+      const h = el.offsetHeight;
+      if (h > 0) setWidgetHeight(h);
+    };
     apply();
     let ro;
     if (typeof ResizeObserver !== "undefined") {
@@ -883,13 +891,14 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       )}
 
       {/* ── BOTTOM-RIGHT STACK: Journey flag (timeline) above Locate.
-           Hidden when this screen is rendered as the Timeline backdrop
-           (showVoice=false), so the FABs don't sit on top of the
-           Timeline overlay. ── */}
-      {showVoice && (
+           Hidden via visibility (NOT unmounted) when the Timeline /
+           Preferences sheet is on top, so the FABs don't reflow when
+           those screens close — they stay anchored to the same widget
+           offset across the whole walk session. */}
+      {(
         <div
           className="bottom-right-stack bottom-right-stack--nav"
-          style={{ bottom: `${widgetHeight + 32}px` }}
+          style={{ bottom: `${widgetHeight + 32}px`, visibility: showVoice ? undefined : 'hidden' }}
         >
           {onOpenTimeline && (
             <button
@@ -939,11 +948,11 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
            same button on home: clicking flips exploration mode off, which
            lets nextTarget compute, the OSRM route render, and the widget
            transition into walk mode. ── */}
-      {showVoice && isExplorationMode && confirmedStops.length > 0 && (
+      {isExplorationMode && confirmedStops.length > 0 && (
         <button
           type="button"
           className="fab-circle start-walk-pill nav-start-walk-pill"
-          style={{ bottom: `${widgetHeight + 32}px` }}
+          style={{ bottom: `${widgetHeight + 32}px`, visibility: showVoice ? undefined : 'hidden' }}
           onClick={() => {
             setIsExplorationMode(false);
             setLocateTrigger((t) => t + 1);
@@ -957,8 +966,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           own skip button now flips to "I'm here" via the `atTarget` prop
           when the user is within 300 ft of the next stop. */}
 
-      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ── */}
-      {showVoice && voiceMode !== "full" && (() => {
+      {/* ── WALK COMPANION WIDGET (top-pinned, voice + nav context) ──
+           Always rendered while NavigationMapScreen is mounted so the
+           widget's TTS/conversation/tip state survives detours into the
+           Timeline or Preferences sheets. CSS visibility is driven by
+           `showVoice` — when the user opens Timeline or Prefs from nav,
+           we just hide the widget instead of unmounting it. */}
+      {voiceMode !== "full" && (() => {
         // The "next stop" being routed to == first non-visited confirmed
         // Timeline item. When nothing is confirmed/all visited, the widget
         // shows an empty state and the CTA flips to "See suggestions".
@@ -1020,6 +1034,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           instruction = `walk forward ${fmtDist(liveDistToStopM)}`;
         }
         return (
+          <div className="wcw-host" style={{ visibility: showVoice ? undefined : 'hidden' }}>
           <WalkCompanionWidget
             ref={widgetRef}
             destination={nextWaypoint}
@@ -1122,6 +1137,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             }}
             onAiSuggestPlace={(pin) => { console.log("[Pin] NavigationMapScreen received pin:", pin); setAiSuggestedPin(pin); }}
           />
+          </div>
         );
       })()}
 

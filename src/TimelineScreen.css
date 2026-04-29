@@ -2,7 +2,10 @@
 .tl-screen {
   position: absolute;
   inset: 0;
-  overflow-y: auto;
+  /* Scroll context lives on `.tl-timeline` (mirrors PreferencesScreen's
+     `.pwc-scroll`), so the screen itself doesn't scroll — the topbar
+     and bottom-bar stay docked while the rail content scrolls between
+     them. */
   background: rgba(247, 244, 250, 0.22);
   backdrop-filter: blur(20px) saturate(1.25);
   -webkit-backdrop-filter: blur(20px) saturate(1.25);
@@ -49,21 +52,30 @@
 .tl-close:hover { background: rgba(255, 255, 255, 0.3); }
 .tl-close:active { transform: scale(0.92); }
 
-/* ── Top bar: title + lightbulb toggle ── */
+/* ── Top bar: title + lightbulb toggle ──
+   Mirrors PreferencesScreen's .pwc-header — transparent flex item at
+   the top, outside the scroll container, so it stays put while the
+   rail content scrolls underneath without needing its own background
+   wash. */
 .tl-topbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 40px 20px 14px 20px;
+  padding: 32px 16px 14px;
+  background: transparent;
+  flex-shrink: 0;
+  z-index: 2;
 }
 
+/* Title typography matches PreferencesScreen's .pwc-title — same brand
+   font, weight, size, color, and 4px left padding. */
 .tl-suggestions-title {
   flex: 1;
   font-family: var(--font-brand);
   font-size: 16px;
   font-weight: 800;
-  letter-spacing: 0.01em;
   color: #34233E;
+  padding-left: 4px;
 }
 
 .tl-bulb-btn {
@@ -93,10 +105,23 @@
 }
 
 /* ── Timeline layout ── */
+/* Mirrors PreferencesScreen's `.pwc-scroll` — this is where overflow
+   lives, so the topbar above and bottom-bar below can stay docked. */
 .tl-timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Inner wrapper holds the rail + rows. It's the positioning context
+   for `.tl-rail` so the rail spans the full SCROLL CONTENT height
+   instead of just the visible viewport — fixes the truncated-rail bug
+   that appears once the timeline overflows. */
+.tl-timeline-inner {
   position: relative;
   padding: 8px 20px 16px 20px;
-  flex: 1;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 /* ── Empty state — matches the RewardScreen empty-state typography ── */
@@ -766,12 +791,11 @@
 
 /* ── Bottom bar — Back (icon) · Skip (primary) ── */
 .tl-bottom-bar {
-  position: -webkit-sticky;
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
+  /* Sits as a flex-end sibling of `.tl-timeline` (now the scroll
+     container), so it stays anchored at the bottom of the screen
+     without needing sticky positioning. */
+  flex-shrink: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;

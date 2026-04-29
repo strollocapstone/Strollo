@@ -1,7 +1,14 @@
 /* ── Pre-Walk Constraints Screen ── */
-@keyframes pwc-slide-up {
-  from { transform: translateY(100%); opacity: 0.4; }
-  to   { transform: translateY(0);    opacity: 1; }
+/* Expand-from-bottom-card entrance — mirrors TimelineScreen's
+   `tl-expand-in` so opening prefs from the nav widget feels like the
+   same gesture as opening the timeline. */
+@keyframes pwc-expand-in {
+  from { opacity: 0; transform: translateY(30px) scale(0.88); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+@keyframes pwc-shrink-out {
+  from { opacity: 1; transform: translateY(0)    scale(1);    }
+  to   { opacity: 0; transform: translateY(30px) scale(0.88); }
 }
 .pwc-screen {
   position: absolute;
@@ -15,15 +22,14 @@
   /* Sit above the nav screen's stack: walk widget (z-30), bottom-right
      FABs (z-31), and the floating CTAs / I-am-here bar (z-40). */
   z-index: 50;
-  animation: pwc-slide-up 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.38s ease-out;
+  transform-origin: 50% 100%;
+  animation: pwc-expand-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
 }
-/* Closing — slide back down + fade. The handler waits ~380ms before
-   calling onGoBack so this transition can finish before the home page
-   replaces the screen. */
+/* Closing — shrink + fade back into the bottom-card origin. JS waits
+   ~380ms before calling onGoBack so this animation can finish. */
 .pwc-screen--closing {
-  transform: translateY(100%);
-  opacity: 0;
+  animation: pwc-shrink-out 0.28s cubic-bezier(0.4, 0, 0.6, 1) forwards;
   pointer-events: none;
 }
 
@@ -100,7 +106,7 @@
 }
 .pwc-card-label {
   font-family: "Satoshi", sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #34233E;
 }
