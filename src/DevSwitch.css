@@ -22,15 +22,16 @@
 
 .dev-switch__title {
   margin: 0 0 4px;
+  font-family: "Unbounded", sans-serif;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
 .dev-switch__subtitle {
-  margin: 0 0 20px;
+  margin: 0 0 32px;
   font-size: 14px;
-  opacity: 0.7;
+  opacity: 0.95;
 }
 
 .dev-switch__buttons {
@@ -73,8 +74,9 @@
 }
 
 .dev-switch__hint {
-  margin: 0;
+  margin: 12px 0 0;
   font-size: 12px;
-  opacity: 0.55;
-  line-height: 1.4;
+  font-weight: 500;
+  opacity: 0.9;
+  line-height: 1.45;
 }

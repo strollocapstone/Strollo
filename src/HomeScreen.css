@@ -80,20 +80,23 @@
   border: 1.5px solid transparent;
 }
 
-/* Final-stop flag — sits inline on the LEFT of the number badge inside the
-   pill when this is the user's last stop on the navigation map. Mirrors
-   TimelineScreen's FinalStopPin glyph so the two screens share one
-   "this is your end" cue. */
-.sugg-pin-final-pin {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
+/* Destination-pin marker — floats ABOVE the final stop's pill on the home
+   and navigation maps. Rendered as its own Leaflet Marker (separate from the
+   pill marker) so the glyph sits outside the pill chrome. Pill top is
+   anchored at calc(-100% - 5px) of the lat/lng, pill height ~32px, plus a
+   small breathing gap → push the pin further up so it floats above. */
+.sugg-pin-final-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 34px));
   pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(136, 81, 212, 0.32));
   line-height: 0;
 }
-.sugg-pin-final-pin svg {
-  width: 16px;
-  height: 16px;
+.sugg-pin-final-marker svg {
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
@@ -173,6 +176,16 @@
 .sugg-pin--added {
   border-color: rgba(136,81,212,0.35);
   background: #F4EEFB;
+}
+/* When an AI-suggested pill is selected as a stop, drop the lavender gradient
+   in favour of the same flat tint as a regular added pill — matches the
+   navigation map's location-pill chrome. */
+.sugg-pin--ai.sugg-pin--added,
+.sugg-pin--ai.sugg-pin--added.sugg-pin--open {
+  background: #F4EEFB;
+}
+.sugg-pin--ai.sugg-pin--added::after {
+  border-top-color: #F4EEFB;
 }
 
 /* Name */
@@ -304,7 +317,6 @@
 .sugg-pin--mini .sugg-pin-dot {
   width: 10px; height: 10px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-  border: 1.5px solid #fff;
 }
 .sugg-pin--mini .sugg-pin-dot-icon { display: none; }
 
@@ -327,7 +339,12 @@
   align-items: center;
   gap: 22px;
   z-index: 20;
+  /* Transparent to pointer events so map drags initiated near the top of
+     the screen aren't swallowed by this bar. The profile FAB re-enables
+     pointer events on itself below. */
+  pointer-events: none;
 }
+.top-bar > * { pointer-events: auto; }
 /* Profile FAB anchored to the top-right of the top bar — same frosted-glass
    look as the bottom-right icon stack and the search bar. */
 .top-right-btn {
@@ -399,11 +416,13 @@
   z-index: 60;
 }
 
-/* Stacked prefs + locate — absolute so they don't affect the centered start pill */
+/* Stacked prefs + locate — absolute so they don't affect the centered start
+   pill. Lifted above the start-walk-pill (36px tall) with a 16px gap so the
+   locate FAB clears the button instead of sharing its baseline. */
 .bottom-right-stack {
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: 52px;
   display: flex;
   flex-direction: column;
   gap: 10px;

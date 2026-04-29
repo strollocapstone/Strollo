@@ -102,7 +102,7 @@
 /* ── Empty state — matches the RewardScreen empty-state typography ── */
 .tl-empty {
   text-align: center;
-  padding: 56px 24px 24px;
+  padding: 140px 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -183,6 +183,16 @@
   filter: drop-shadow(0 1px 3px rgba(136, 81, 212, 0.30));
 }
 
+/* "You are here" cluster — boots stacked above a small purple dot, both
+   centered on the rail axis so the dot reads as the rail node for the
+   user's current position. */
+.tl-rail-here {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Boots marker on the rail at the user's current position. */
 .tl-rail-boots {
   display: inline-flex;
@@ -207,6 +217,21 @@
   font-size: 13px;
   font-weight: 600;
   color: #8851D4;
+  letter-spacing: 0.01em;
+}
+/* Anchor row at the top of the rail showing where the user began the walk.
+   Mirrors .tl-row--pin-only's spacing so the rail stays evenly distributed. */
+.tl-row--start-dot {
+  min-height: 24px;
+  padding: 4px 0 14px;
+}
+.tl-start-label {
+  display: inline-block;
+  padding-left: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(136, 81, 212, 0.72);
   letter-spacing: 0.01em;
 }
 /* Visited cards: muted treatment, no swipe-action stack, no expansion lift. */
@@ -749,8 +774,11 @@
   z-index: 9999;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  /* Match PreferencesScreen's .pwc-bottom (16px top / 28px bottom) so the
+     Back to map button has the same breathing room across screens. */
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
   background: rgba(247, 244, 250, 0.50);
   backdrop-filter: blur(14px) saturate(1.25);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
@@ -762,7 +790,6 @@
 
 /* Map — primary yellow pill: fills the bar, icon + label */
 .tl-back-btn {
-  flex: 1;
   min-width: 0;
   height: 44px;
   padding: 0 16px;
@@ -791,7 +818,7 @@
 .tl-skip-btn {
   flex-shrink: 1;
   min-width: 0;
-  height: 40px;
+  height: 44px;
   padding: 0 14px;
   border-radius: var(--radius-pill);
   border: 1px solid rgba(30, 21, 65, 0.18);

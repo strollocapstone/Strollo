@@ -9,8 +9,8 @@ export default function DevSwitch({ onDev, onNormalUser }) {
   return (
     <div className="dev-switch">
       <div className="dev-switch__card">
-        <h1 className="dev-switch__title">Strollo</h1>
-        <p className="dev-switch__subtitle">Choose launch mode</p>
+        <h1 className="dev-switch__title">strollo</h1>
+        <p className="dev-switch__subtitle">Choose a mode</p>
         <div className="dev-switch__buttons">
           <button
             type="button"
@@ -28,7 +28,7 @@ export default function DevSwitch({ onDev, onNormalUser }) {
           </button>
         </div>
         <p className="dev-switch__hint">
-          Dev skips the intro and quiz; every quiz answer is YES.
+          Dev mode skips the intro and quiz; every quiz answer is YES.
         </p>
       </div>
     </div>

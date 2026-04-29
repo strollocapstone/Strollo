@@ -55,7 +55,7 @@ function vibeFor(category, name) {
 // (parks/markets get more dwell, bookshops less).
 const DWELL_WEIGHT = { park: 1.4, market: 1.2, restaurant: 1.3, burger: 1.2, seafood: 1.3, bar: 1.1, coffee: 1.0, historic: 1.0, bookshop: 0.7, waterfront: 1.1, shop: 0.9 };
 function buildWalkData({ journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime }) {
-  if (!journeyItems?.length || !tripStartTime) return null;
+  if (!journeyItems?.length) return null;
 
   const visitedSet = visitedIds instanceof Set ? visitedIds : new Set(visitedIds || []);
   const arrivalMap = visitedAt instanceof Map ? visitedAt : new Map(Object.entries(visitedAt || {}));
@@ -67,7 +67,12 @@ function buildWalkData({ journeyItems, visitedIds, visitedAt, stopDwellMs, tripS
   const source = explored.length ? explored : journeyItems;
 
   const now = Date.now();
-  const totalMins = Math.max(1, Math.round((now - tripStartTime) / 60000));
+  // Real elapsed minutes from the moment the user pressed Start exploring.
+  // Falls back to "1 min" only when tripStartTime is unknown (legacy paths) —
+  // never the MOCK_WALK's 42 min so the headline always reflects reality.
+  const totalMins = tripStartTime
+    ? Math.max(1, Math.round((now - tripStartTime) / 60000))
+    : 1;
 
   // Per-stop time-spent, in priority order:
   //   1) Real-time dwell tracker (geolocation): exact ms accumulated while
@@ -167,8 +172,9 @@ const TONE_SUBHEADERS = {
   long:   "You're a true wanderer. Here are treasures you brought home along the way.",
 };
 function getToneByDuration(totalMins) {
-  if (totalMins >= 45) return "long";
-  if (totalMins >= 15) return "medium";
+  // > 5 min walks earn the "true wanderer" treatment — a real exploration
+  // outing rather than a quick stretch around the block.
+  if (totalMins > 5) return "long";
   return "short";
 }
 
@@ -567,6 +573,79 @@ function formatDateStamp(d = new Date()) {
   return `${DAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+// Compact month-grid calendar — the date pill on the reward header opens this
+// so the user can browse to other days. Selecting a date updates the header
+// stamp; the rest of the screen still reflects the just-finished walk
+// (no per-day history is persisted yet).
+function CalendarOverlay({ selectedDate, onSelect, onClose }) {
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = new Date(selectedDate);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  const monthLabel = `${["January","February","March","April","May","June","July","August","September","October","November","December"][viewMonth.getMonth()]} ${viewMonth.getFullYear()}`;
+  const firstDow = viewMonth.getDay();
+  const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const sel = new Date(selectedDate);
+  sel.setHours(0, 0, 0, 0);
+
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const stepMonth = (delta) => {
+    const next = new Date(viewMonth);
+    next.setMonth(next.getMonth() + delta);
+    setViewMonth(next);
+  };
+
+  return (
+    <div className="reward-cal-overlay" role="dialog" aria-label="Pick a date" onClick={onClose}>
+      <div className="reward-cal" onClick={(e) => e.stopPropagation()}>
+        <div className="reward-cal-head">
+          <button type="button" className="reward-cal-nav" onClick={() => stepMonth(-1)} aria-label="Previous month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span className="reward-cal-title">{monthLabel}</span>
+          <button type="button" className="reward-cal-nav" onClick={() => stepMonth(1)} aria-label="Next month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div className="reward-cal-dow">
+          {["S","M","T","W","T","F","S"].map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </div>
+        <div className="reward-cal-grid">
+          {cells.map((d, i) => {
+            if (d === null) return <span key={`b-${i}`} className="reward-cal-cell reward-cal-cell--blank" />;
+            const cellDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d);
+            const isToday = cellDate.getTime() === today.getTime();
+            const isSelected = cellDate.getTime() === sel.getTime();
+            // Future dates are unselectable — there's no walk to display yet.
+            const isFuture = cellDate.getTime() > today.getTime();
+            return (
+              <button
+                key={d}
+                type="button"
+                className={`reward-cal-cell${isSelected ? " reward-cal-cell--selected" : ""}${isToday ? " reward-cal-cell--today" : ""}${isFuture ? " reward-cal-cell--future" : ""}`}
+                onClick={() => { if (isFuture) return; onSelect(cellDate); onClose(); }}
+                disabled={isFuture}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function phoneWord(n) {
   if (n === 0) return "zero times";
   if (n === 1) return "once";
@@ -704,7 +783,7 @@ function RevisitCard({ id, name, category, note, delay, rating, onRate }) {
   );
 }
 
-function TrailStop({ stop, index, isHero, isStart }) {
+function TrailStop({ stop, index, isHero, isStart, isLingered }) {
   const floatDuration = 4.4 + (index % 3) * 0.6;
   const floatDelay = index * 0.45;
   return (
@@ -732,10 +811,13 @@ function TrailStop({ stop, index, isHero, isStart }) {
         >
           {COLLECTIBLES[stop.vibe]}
         </div>
-        {isStart && (
-          <span className="reward-trail-start-pill">
-            {isHero ? "LINGERED" : "START"}
-          </span>
+        {/* Tag rules: only LINGERED is shown.
+            • Single stop → tagged when lingerMins > 1.
+            • Multiple stops → tagged on the longest-dwell stop (computed
+              in the parent), again only when its lingerMins > 1.
+            START is never shown. */}
+        {isLingered && (
+          <span className="reward-trail-start-pill">LINGERED</span>
         )}
       </div>
       <div className="reward-trail-label">{stop.name}</div>
@@ -759,16 +841,50 @@ export default function RewardScreen({
   onResume,   // user changed their mind — go back to the active walk
   onShare,
 }) {
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const dateStamp = formatDateStamp(selectedDate);
+
+  // Walks are only persisted for the current session. When the user picks
+  // another date in the calendar we show a throwback view instead — past
+  // dates render a mock walk (so the surface stays expressive), future
+  // dates render the same empty state as "you haven't walked yet".
+  const dateMode = useMemo(() => {
+    const sel = new Date(selectedDate); sel.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (sel.getTime() > today.getTime()) return 'future';
+    if (sel.getTime() < today.getTime()) return 'past';
+    return 'today';
+  }, [selectedDate]);
+
   // Build real walk data from props if available; fall back to mock for preview.
+  // When the user has scrubbed to a different date, replace the live walk with
+  // the throwback mock so the rest of the screen reflects what they "did" then.
   const walkData = useMemo(() => {
     if (walkDataOverride) return walkDataOverride;
+    if (dateMode === 'past') return MOCK_WALK;
     return buildWalkData({ journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime }) || MOCK_WALK;
-  }, [walkDataOverride, journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime]);
+  }, [walkDataOverride, dateMode, journeyItems, visitedIds, visitedAt, stopDwellMs, tripStartTime]);
 
   const hero = useMemo(() => pickHero(walkData.stops), [walkData.stops]);
   // Subheader tone is now driven by walk duration so short walks read as
   // encouraging instead of accusatory.
   const tone = getToneByDuration(walkData.totalMins);
+  // Stop the user lingered at the LONGEST — earns the "LINGERED" pill on
+  // the trail. Only awarded when the dwell exceeds 1 minute (anything
+  // shorter shouldn't read as lingering). With a single stop the rule
+  // collapses to "show LINGERED if that stop has > 1 min dwell"; with
+  // multiple stops the longest-dwell wins.
+  const longestLingerStopId = useMemo(() => {
+    if (!walkData.stops || walkData.stops.length === 0) return null;
+    let best = null;
+    for (const s of walkData.stops) {
+      if (s.lingerMins <= 1) continue;
+      if (!best || s.lingerMins > best.lingerMins) best = s;
+    }
+    return best ? best.id : null;
+  }, [walkData.stops]);
+
   const topLingerStops = useMemo(
     () => [...walkData.stops].sort((a, b) => b.lingerMins - a.lingerMins).slice(0, 2),
     [walkData.stops]
@@ -876,8 +992,6 @@ export default function RewardScreen({
     return () => { cancelled = true; };
   }, [walkData.stops, fallbackBg]);
 
-  const dateStamp = formatDateStamp();
-
   // Empty state: the user ended a journey with nothing to reflect on —
   // no stops added AND no spots visited. Skip the trail/treasures UI in
   // favor of a friendly nudge to plan an actual walk.
@@ -899,6 +1013,24 @@ export default function RewardScreen({
           <span className="reward-empty-fog-puff reward-empty-fog-puff--4" />
         </div>
         <div className="reward-scroll reward-scroll--empty">
+          <button
+            type="button"
+            className="reward-date-stamp"
+            onClick={() => setCalendarOpen(true)}
+            aria-label={`Reward for ${dateStamp}. Tap to pick a different date.`}
+          >
+            {dateStamp}
+            <svg className="reward-date-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          {calendarOpen && (
+            <CalendarOverlay
+              selectedDate={selectedDate}
+              onSelect={setSelectedDate}
+              onClose={() => setCalendarOpen(false)}
+            />
+          )}
           <div className="reward-empty">
             <div className="reward-empty-art" aria-hidden="true">
               <svg viewBox="0 0 140 140" width="140" height="140">
@@ -931,9 +1063,17 @@ export default function RewardScreen({
                 className="reward-share-btn"
                 onClick={onComplete}
               >
-                Plan an exploration
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6"/>
+                  <line x1="8" y1="3" x2="8" y2="18"/>
+                  <line x1="16" y1="6" x2="16" y2="21"/>
+                </svg>
+                <span>Plan an exploration</span>
               </button>
-              {onResume && (
+              {/* Resume only makes sense for the active (today's) walk —
+                  past dates are read-only throwbacks with nothing to
+                  resume into. */}
+              {onResume && dateMode === 'today' && (
                 <button
                   className="reward-undo-pill"
                   onClick={onResume}
@@ -958,7 +1098,24 @@ export default function RewardScreen({
       <div className="reward-bg-frost" />
 
       <div className="reward-scroll">
-        <div className="reward-date-stamp">{dateStamp}</div>
+        <button
+          type="button"
+          className="reward-date-stamp"
+          onClick={() => setCalendarOpen(true)}
+          aria-label={`Reward for ${dateStamp}. Tap to pick a different date.`}
+        >
+          {dateStamp}
+          <svg className="reward-date-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        {calendarOpen && (
+          <CalendarOverlay
+            selectedDate={selectedDate}
+            onSelect={setSelectedDate}
+            onClose={() => setCalendarOpen(false)}
+          />
+        )}
 
         <h1 className="reward-headline">
           You explored <span className="reward-hl reward-hl--purple">{walkData.distanceMiles} miles</span> on foot and explored for <span className="reward-hl reward-hl--yellow">{walkData.totalMins} minutes</span>.
@@ -986,6 +1143,7 @@ export default function RewardScreen({
                 index={i}
                 isHero={stop.id === hero.id}
                 isStart={i === 0}
+                isLingered={stop.id === longestLingerStopId}
               />
             ))}
           </div>
@@ -1048,18 +1206,26 @@ export default function RewardScreen({
             className="reward-share-btn"
             onClick={onComplete}
           >
-            Plan another exploration
-          </button>
-          <button
-            className="reward-undo-pill"
-            onClick={onResume || onComplete}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M9 14L4 9l5-5" />
-              <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6"/>
+              <line x1="8" y1="3" x2="8" y2="18"/>
+              <line x1="16" y1="6" x2="16" y2="21"/>
             </svg>
-            <span>Oops, I'm not done exploring</span>
+            <span>Plan another exploration</span>
           </button>
+          {/* Hidden on past-date throwbacks — there's no walk to resume. */}
+          {dateMode === 'today' && (
+            <button
+              className="reward-undo-pill"
+              onClick={onResume || onComplete}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 14L4 9l5-5" />
+                <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+              </svg>
+              <span>Oops, I'm not done exploring</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -10,6 +10,34 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require("leaflet/dist/images/marker-shadow.png"),
 });
 
+// Defensive monkey-patch for Leaflet's drag start handler.
+// Leaflet internally calls `getSizedParentNode(first.target)` on mousedown
+// and dereferences `.offsetWidth` without checking that the parent chain is
+// still attached. When a marker icon's DOM is swapped or removed in the
+// same tick as a click (a real race during React re-renders), the chain
+// has a `null` somewhere and the call throws:
+//   "Cannot read properties of null (reading 'offsetWidth')".
+// Patching `L.DomUtil.getSizedParentNode` doesn't help because Leaflet's
+// Draggable imports the helper via module scope — the binding we'd
+// override isn't the one the handler invokes. So wrap the handler itself
+// in a try/catch and bail silently on the (harmless) crash.
+if (L.Draggable && L.Draggable.prototype && L.Draggable.prototype._onDown) {
+  const origOnDown = L.Draggable.prototype._onDown;
+  L.Draggable.prototype._onDown = function safeOnDown(e) {
+    try {
+      return origOnDown.call(this, e);
+    } catch (err) {
+      if (err && /offsetWidth|offsetHeight/.test(String(err.message || err))) {
+        // Detached parent chain — ignore so the drag attempt is just a no-op.
+        // Reset the dragging guard so subsequent mousedowns aren't blocked.
+        if (L.Draggable._dragging === this) L.Draggable._dragging = false;
+        return;
+      }
+      throw err;
+    }
+  };
+}
+
 // ── User position marker (Marauder's Map boots) ──────────────────────────
 export const youIcon = L.divIcon({
   className: "",

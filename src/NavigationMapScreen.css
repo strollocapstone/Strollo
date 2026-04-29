@@ -20,6 +20,9 @@
 .map-wrapper.heading-up .sugg-pin {
   transform: translate(-50%, calc(-100% - 5px)) rotate(var(--map-rotation, 0deg));
 }
+.map-wrapper.heading-up .sugg-pin-final-marker {
+  transform: translate(-50%, calc(-100% - 34px)) rotate(var(--map-rotation, 0deg));
+}
 
 /* Muted route pins: shown for every confirmed stop on the planned
    route EXCEPT the active next-target. They're context — the user

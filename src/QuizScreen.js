@@ -162,7 +162,7 @@ function MiniPolaroid({ item, angle, delay }) {
 }
 
 // ── Quiz Screen ───────────────────────────────────────────────────────────
-export default function QuizScreen({ initialPreferences, onComplete, onClose, onSkip }) {
+export default function QuizScreen({ initialPreferences, onComplete, onClose, onSkip, entryMode = 'slide' }) {
   const [index, setIndex] = useState(0);
   const [history, setHistory] = useState([]); // [{ polaroidId, direction }]
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
@@ -362,7 +362,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
 
   if (done) {
     return (
-      <div className={`quiz-screen quiz-done${closing ? " quiz-screen--closing" : ""}`}>
+      <div className={`quiz-screen quiz-done${entryMode === 'fade' ? " quiz-screen--enter-fade" : ""}${closing ? " quiz-screen--closing" : ""}`}>
         <div className="quiz-blobs">
           <div className="quiz-blob quiz-blob--1" />
           <div className="quiz-blob quiz-blob--2" />
@@ -386,7 +386,7 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   };
 
   return (
-    <div className={`quiz-screen${closing ? " quiz-screen--closing" : ""}`}>
+    <div className={`quiz-screen${entryMode === 'fade' ? " quiz-screen--enter-fade" : ""}${closing ? " quiz-screen--closing" : ""}`}>
       <div className={`quiz-blobs${closing ? " quiz-blobs--genie" : ""}`}>
         <div className="quiz-blob quiz-blob--1" />
         <div className="quiz-blob quiz-blob--2" />
