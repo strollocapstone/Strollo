@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
 // LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
+// UPDATE DATE: 2026-04-30
+// BUILD: a02bbfd
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
@@ -1080,7 +1080,7 @@ function WalkCompanionWidgetInner({
                   <path d="M8 3 L18 6 L8 10 Z"/>
                   <circle cx="8" cy="21" r="2"/>
                 </svg>
-                <span>I'm here</span>
+                <span>I've arrived</span>
               </button>
             ) : canSkip ? (
               <button
