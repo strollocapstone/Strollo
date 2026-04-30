@@ -1,8 +1,8 @@
 // FEATURE: shared-hook + shared-ui  (multi — phase 2 splits)
 // LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
-// DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService
+// UPDATE DATE: 2026-04-30
+// BUILD: 7152ed6
+// DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService, ./services/googleMapsService
 // CONSUMED BY: ./WalkCompanionWidget
 //
 // Currently mixes: useTtsSpeak (browser + Cloud TTS bridge), useTipFetch
@@ -29,6 +29,7 @@ import {
   speakViaCloud,
   cancelCloudTts,
 } from "./cloudTtsService";
+import { nearestNamedPlace } from "./services/googleMapsService";
 
 export const PROMPT_PILLS = [
   { glyph: "💎", label: "Hidden gems", prompt: "Any hidden gems within walking distance?" },
@@ -636,7 +637,22 @@ export function useReverseGeocodeOnce(userLocation) {
     let cancelled = false;
     setStatus("locating");
     (async () => {
-      // First pass: street-level (zoom=17) — same as the existing util.
+      // First pass: Google Places nearby — gives us the *named landmark*
+      // closest to the user (e.g. "Sather Tower") rather than a street
+      // address. Returns null when no notable POI is within ~80m, in
+      // which case we fall through to the Nominatim flow below for a
+      // street-level / neighbourhood-level label.
+      const fromGoogle = await nearestNamedPlace(lat, lng, 80);
+      if (cancelled) return;
+      if (fromGoogle?.name) {
+        setLabel(fromGoogle.name);
+        setArea(fromGoogle.displayName || fromGoogle.name);
+        setStatus("ready");
+        return;
+      }
+
+      // Fallback pass: street-level Nominatim (zoom=17) — same as the
+      // pre-Google legacy util.
       const fine = await fetchNominatim(lat, lng, 17);
       if (cancelled) return;
       let name = pickName(fine);
