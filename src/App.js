@@ -20,6 +20,7 @@ import QuizScreen, { QUIZ_DECK, buildMergedPreset } from './QuizScreen';
 import RewardScreen from './RewardScreen';
 import LoadingScreen from './LoadingScreen';
 import IntroScreen from './IntroScreen';
+import WelcomeScreen from './WelcomeScreen';
 import DevSwitch from './DevSwitch';
 import { cancelCloudTts, isCloudTtsPlaying } from './cloudTtsService';
 import './App.css';
@@ -140,7 +141,10 @@ function App() {
           />
         )}
         {screen === 'loading' && (
-          <LoadingScreen onComplete={() => setScreen('intro')} />
+          <LoadingScreen onComplete={() => setScreen('welcome')} />
+        )}
+        {screen === 'welcome' && (
+          <WelcomeScreen onContinue={() => { setQuizFromIntro(true); setScreen('quiz'); }} />
         )}
         {screen === 'intro' && (
           <IntroScreen onContinue={() => { setQuizFromIntro(true); setScreen('quiz'); }} />

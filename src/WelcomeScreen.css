@@ -1,0 +1,238 @@
+/* ── Welcome Screen ─────────────────────────────────────────────────────── */
+.welcome-screen {
+  position: absolute;
+  inset: 0;
+  background: var(--chat-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 72px 24px 32px;
+  font-family: var(--font-ui);
+  text-align: center;
+  overflow: hidden;
+  transition: opacity 420ms ease-out, transform 420ms ease-out;
+}
+.welcome-screen--leaving {
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+}
+
+/* ── Pinned header logo ─────────────────────────────────────────────────── */
+.welcome-logo {
+  height: 32px;
+  width: auto;
+  margin-bottom: 24px;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Title ──────────────────────────────────────────────────────────────── */
+.welcome-title {
+  font-family: "Satoshi", var(--font-ui);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.25;
+  color: #1E1541;
+  margin: 8px 0 24px;
+  letter-spacing: -0.3px;
+  max-width: 300px;
+}
+
+/* ── Tagline (above the CTA) ────────────────────────────────────────────── */
+/* Larger than the upper title to anchor the bottom of the screen and lead
+   the user's eye to the Get started button. `margin-top: auto` absorbs the
+   remaining flex space so the tagline + CTA stick to the bottom while the
+   globe/arc are absolutely positioned in the middle of the screen. */
+.welcome-tagline {
+  font-family: "Satoshi", var(--font-ui);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.18;
+  color: #1E1541;
+  margin: auto 0 20px;
+  letter-spacing: -0.5px;
+  max-width: 320px;
+}
+
+/* ── Arc text — sits just above the tops of the walking boots ──────────── */
+.welcome-arc {
+  position: absolute;
+  top: 22%;
+  /* Span edge-to-edge of the phone frame by escaping the welcome-screen's
+     24px horizontal padding — the wave starts at the actual left edge of
+     the screen instead of indenting. */
+  left: -24px;
+  right: -24px;
+  width: auto;
+  height: 120px;
+  overflow: visible;
+  pointer-events: none;
+}
+.welcome-arc-text {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  fill: #1E1541;
+  letter-spacing: 0.2px;
+}
+/* Globe + boots wrap — absolutely centered on the welcome screen so the
+   walking-on-globe scene sits at the visual center regardless of header /
+   tagline / CTA height. */
+.welcome-globe-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 84%;
+  max-width: 336px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.welcome-globe-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 28px rgba(30, 21, 65, 0.18));
+  /* Slow clockwise rotation so the boots above appear to be walking
+     along the surface as the world turns under them. */
+  animation: welcome-globe-spin 24s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes welcome-globe-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Boots stand at the bottom (south pole) of the globe like feet of an
+   invisible body. They share one walk-cycle keyframes track; the left boot
+   is offset by half the duration so the two feet alternate — heel strike
+   on one while the other pushes off / swings — keeping at least one foot
+   on the ground at all times. */
+.welcome-boot {
+  position: absolute;
+  width: 26%;
+  height: 26%;
+  object-fit: contain;
+  /* Boot box sits over the upper region of the globe with the sole
+     planted into the globe's surface. */
+  top: -4%;
+  z-index: 2;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 4px 8px rgba(30, 21, 65, 0.22));
+  /* Pivot at the bottom-center (sole) so the boot rocks heel-to-toe
+     during the walk cycle while staying anchored to the globe surface. */
+  transform-origin: 50% 100%;
+  /* Custom cubic-bezier reads almost like ease-in-out but with a flatter
+     middle, which helps hide the keyframe boundaries in the 9-frame walk
+     cycle below — keeps the leg motion fluid instead of visibly stepping
+     between phases. */
+  animation: welcome-walk 900ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.welcome-boot--left {
+  /* 29% on each side + 26% width per boot leaves a 10% bounding-box
+     overlap at the centerline. */
+  left: 29%;
+  /* Half-cycle offset so left foot is always on the opposite phase from
+     the right — when one heel-strikes, the other is mid-swing. */
+  animation-delay: -450ms;
+}
+.welcome-boot--right {
+  right: 29%;
+}
+
+/* 9-keyframe walk cycle for one foot. Right boot starts at Contact (0%);
+   left boot is shifted by -450ms so it starts at Push-off (50%).
+   Tuning notes:
+   - Stance X-sweep is ±3px (not ±4px) so the planted foot drifts less
+     while the body passes over it — less skid, more grip.
+   - Swing apex is deeper (-7px) and starts rising sooner (-4px at 62.5%)
+     so the lift reads as an active push-off rather than a passive hover.
+   - X positions of the intermediate frames are pulled in slightly to
+     keep the foot near-planted through heel-roll and ball-load instead
+     of sliding ahead of the rotation. */
+@keyframes welcome-walk {
+  /* Contact — heel strike, foot at front, slight backward tilt. */
+  0%, 100% {
+    transform: translate(3px, 0) rotate(-4deg);
+  }
+  /* Post-impact recoil — heel settles toward flat, foot stays nearly
+     planted at front. */
+  12.5% {
+    transform: translate(2.5px, 0) rotate(-2deg);
+  }
+  /* Stance — flat on ground, centered, weight-bearing. */
+  25% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  /* Mid-stance roll — weight rolling forward onto ball of foot. */
+  37.5% {
+    transform: translate(-1.5px, 0) rotate(4deg);
+  }
+  /* Push-off — toe-off at back, heel lifted. */
+  50% {
+    transform: translate(-3px, 0) rotate(8deg);
+  }
+  /* Toe-off lift — sole peels off, boot rises briskly. */
+  62.5% {
+    transform: translate(-2px, -4px) rotate(4deg);
+  }
+  /* Mid-Swing — apex of the arc, max clearance over the (unseen) body. */
+  75% {
+    transform: translate(0, -7px) rotate(-1deg);
+  }
+  /* Late Swing — descending toward the next heel strike. */
+  87.5% {
+    transform: translate(2px, -3px) rotate(-3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-boot,
+  .welcome-globe-image {
+    animation: none;
+  }
+}
+
+/* ── CTA — matches the homepage Strollo-yellow start-walk pill ──────────── */
+.welcome-cta {
+  width: 100%;
+  max-width: 340px;
+  height: 52px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 26px;
+  background: #FFD501;
+  color: #1E1541;
+  font-family: "Satoshi", var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(255, 213, 1, 0.40);
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  margin-top: 16px;
+}
+.welcome-cta:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(255, 213, 1, 0.45);
+}
+.welcome-cta:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(255, 213, 1, 0.35);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .welcome-title {
+    animation: none;
+  }
+}
