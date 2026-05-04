@@ -1,8 +1,8 @@
 // FEATURE: shell
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
-// DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./IntroScreen, ./DevSwitch, ./cloudTtsService
+// LAST UPDATED BY: Evelyn Wong
+// UPDATE DATE: 2026-05-04
+// BUILD: 02f1547
+// DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./WelcomeScreen, ./DevSwitch, ./cloudTtsService
 // CONSUMED BY: ./index.js (root mount)
 //
 // Top-level screen router. Owns the shared cross-screen state (journeyItems,
@@ -19,7 +19,6 @@ import TimelineScreen from './TimelineScreen';
 import QuizScreen, { QUIZ_DECK, buildMergedPreset } from './QuizScreen';
 import RewardScreen from './RewardScreen';
 import LoadingScreen from './LoadingScreen';
-import IntroScreen from './IntroScreen';
 import WelcomeScreen from './WelcomeScreen';
 import DevSwitch from './DevSwitch';
 import { cancelCloudTts, isCloudTtsPlaying } from './cloudTtsService';
@@ -29,9 +28,9 @@ function App() {
   // Preferences are session-scoped — a hard reload / cache clear resets to the quiz
   const initialQuizPrefs = null;
   const [screen, setScreen] = useState('devSwitch');
-  // Tracks when the quiz is being opened straight after the intro screen so
+  // Tracks when the quiz is being opened straight after the welcome screen so
   // QuizScreen can use a soft fade-in instead of the slide-up sheet entry —
-  // matches how IntroScreen reveals after the loading screen fades.
+  // matches how WelcomeScreen reveals after the loading screen fades.
   const [quizFromIntro, setQuizFromIntro] = useState(false);
   const [journeyItems, setJourneyItems] = useState([]);
   const [startLocation, setStartLocation] = useState(null);
@@ -145,9 +144,6 @@ function App() {
         )}
         {screen === 'welcome' && (
           <WelcomeScreen onContinue={() => { setQuizFromIntro(true); setScreen('quiz'); }} />
-        )}
-        {screen === 'intro' && (
-          <IntroScreen onContinue={() => { setQuizFromIntro(true); setScreen('quiz'); }} />
         )}
         {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
             close animation reveals Home instead of a flash of white phone

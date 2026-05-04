@@ -1,6 +1,7 @@
 // FEATURE: intro
 // LAST UPDATED BY: Evelyn Wong
-// UPDATE DATE: 2026-05-02
+// UPDATE DATE: 2026-05-04
+// BUILD: 02f1547
 // DEPENDS ON: ./assets/Strollo_logo.png, ./assets/WelcomeScreen_globe1.png, ./assets/Left_boot.png, ./assets/Right_boot.png
 // CONSUMED BY: ./App.js
 //
@@ -30,8 +31,8 @@ export default function WelcomeScreen({ onContinue }) {
   const handleContinue = () => {
     if (leaving) return;
     setLeaving(true);
-    // Match IntroScreen's 320ms hand-off so the fade-out plays before the
-    // QuizScreen mounts on top.
+    // 320ms hand-off so the fade-out plays before the QuizScreen mounts
+    // on top.
     setTimeout(() => onContinue?.(), 320);
   };
 

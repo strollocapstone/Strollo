@@ -6,7 +6,7 @@
 // CONSUMED BY: ./App.js
 //
 // Boot/loading animation. Pure presentational. Calls onComplete after its
-// timed sequence so App.js advances to the IntroScreen.
+// timed sequence so App.js advances to the WelcomeScreen.
 
 // Loading Screen — playful, Marauder's-Map-style boot trail that walks the
 // Strollo wordmark into being. Two boot SVGs (the "ll" of strollo) come
