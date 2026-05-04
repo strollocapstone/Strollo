@@ -15,9 +15,14 @@ import leftBoot from "./assets/Left_boot.png";
 import rightBoot from "./assets/Right_boot.png";
 import "./WelcomeScreen.css";
 
-const TAGLINE = "Follow your feet, land somewhere great";
-const ARC_SENTENCE =
-  "There's a bookstore one block ahead with a great rare-books section. Worth a detour? · ";
+const TAGLINE = "Follow your feet, land somewhere delightful";
+// Arc text is split so the leading "Psst" can be italicized via a <tspan>
+// while the rest of the sentence stays regular weight. The whole pair
+// repeats ARC_REPEATS times so the wave path stays full of characters
+// throughout the leftward scroll.
+const ARC_PSST = "Psst";
+const ARC_REST = ". The city is buzzing...give it a listen?  ·  ";
+const ARC_REPEATS = 6;
 
 export default function WelcomeScreen({ onContinue }) {
   const [leaving, setLeaving] = useState(false);
@@ -44,7 +49,12 @@ export default function WelcomeScreen({ onContinue }) {
         </defs>
         <text className="welcome-arc-text">
           <textPath href="#welcome-arc-path" startOffset="0%">
-            {ARC_SENTENCE.repeat(6)}
+            {Array.from({ length: ARC_REPEATS }, (_, i) => (
+              <React.Fragment key={i}>
+                <tspan fontStyle="italic">{ARC_PSST}</tspan>
+                {ARC_REST}
+              </React.Fragment>
+            ))}
             <animate
               attributeName="startOffset"
               from="0%"

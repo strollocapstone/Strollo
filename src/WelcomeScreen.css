@@ -10,7 +10,25 @@
   font-family: var(--font-ui);
   text-align: center;
   overflow: hidden;
+  /* Establish a stacking context so the negative-z-index pseudo-element
+     stays behind every welcome-screen child without leaking past the
+     parent. */
+  isolation: isolate;
   transition: opacity 420ms ease-out, transform 420ms ease-out;
+}
+/* Background image rendered via a pseudo-element so we can flip it
+   vertically with `transform: scaleY(-1)` — `background-image` itself
+   can't be transformed directly. z-index: -1 keeps it under all the
+   real children (logo, arc, globe, tagline, CTA) inside the isolated
+   stacking context above. */
+.welcome-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("./assets/WelcomeScreen_bg.png") center / cover no-repeat;
+  transform: scaleY(-1);
+  z-index: -1;
+  pointer-events: none;
 }
 .welcome-screen--leaving {
   opacity: 0;
@@ -46,9 +64,9 @@
    remaining flex space so the tagline + CTA stick to the bottom while the
    globe/arc are absolutely positioned in the middle of the screen. */
 .welcome-tagline {
-  font-family: "Satoshi", var(--font-ui);
+  font-family: "Unbounded", sans-serif;
   font-weight: 700;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.18;
   color: #1E1541;
   margin: auto 0 20px;
@@ -130,43 +148,47 @@
   /* Pivot at the bottom-center (sole) so the boot rocks heel-to-toe
      during the walk cycle while staying anchored to the globe surface. */
   transform-origin: 50% 100%;
-  /* Custom cubic-bezier reads almost like ease-in-out but with a flatter
-     middle, which helps hide the keyframe boundaries in the 9-frame walk
-     cycle below — keeps the leg motion fluid instead of visibly stepping
-     between phases. */
-  animation: welcome-walk 900ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Sinusoidal easing (close to a true sine wave) keeps the foot motion
+     flowing through the keyframes rather than accelerating-decelerating
+     into each one. Slowed to 1200ms to give each phase more breathing
+     room — at 900ms the constant ±30° rotation baselines made the
+     alternation read as a staggered skip instead of a smooth stride. */
+  animation: welcome-walk 1200ms cubic-bezier(0.445, 0.05, 0.55, 0.95) infinite;
 }
 .welcome-boot--left {
-  /* 29% on each side + 26% width per boot leaves a 10% bounding-box
-     overlap at the centerline. */
-  left: 29%;
-  /* Half-cycle offset so left foot is always on the opposite phase from
-     the right — when one heel-strikes, the other is mid-swing. */
-  animation-delay: -450ms;
+  /* Shifted slightly toward the right boot. */
+  left: 32%;
+  /* Phase offset is baked directly into welcome-walk-tilted-left below
+     (it starts at Push-off rather than Contact), so no animation-delay
+     is needed. This avoids a cascade gotcha where the `animation`
+     shorthand on .welcome-boot was resetting any delay we set here back
+     to 0, making both boots animate in lockstep. */
+  animation-name: welcome-walk-tilted-left;
 }
 .welcome-boot--right {
-  right: 29%;
+  /* Sit closer to the left boot than the symmetric layout would imply. */
+  right: 36%;
+  /* Use the +30° variant of the walk cycle so the right boot reads as
+     constantly rotated clockwise relative to the left, while still
+     sharing the same keyframe shape. */
+  animation-name: welcome-walk-tilted;
 }
 
 /* 9-keyframe walk cycle for one foot. Right boot starts at Contact (0%);
    left boot is shifted by -450ms so it starts at Push-off (50%).
-   Tuning notes:
-   - Stance X-sweep is ±3px (not ±4px) so the planted foot drifts less
-     while the body passes over it — less skid, more grip.
-   - Swing apex is deeper (-7px) and starts rising sooner (-4px at 62.5%)
-     so the lift reads as an active push-off rather than a passive hover.
-   - X positions of the intermediate frames are pulled in slightly to
-     keep the foot near-planted through heel-roll and ball-load instead
-     of sliding ahead of the rotation. */
+   Rotations are kept to ±2° max so the two boots' legs stay near-
+   parallel through the cycle (with the 50% offset, the maximum tilt
+   difference between the two legs is only ~4°). The walking illusion
+   comes mostly from the translate values; rotation is a subtle accent
+   for heel-strike / toe-off rather than a dominant motion. */
 @keyframes welcome-walk {
-  /* Contact — heel strike, foot at front, slight backward tilt. */
+  /* Contact — heel strike, foot at front, very slight backward tilt. */
   0%, 100% {
-    transform: translate(3px, 0) rotate(-4deg);
+    transform: translate(3px, 0) rotate(-1deg);
   }
-  /* Post-impact recoil — heel settles toward flat, foot stays nearly
-     planted at front. */
+  /* Post-impact recoil — heel settles toward flat. */
   12.5% {
-    transform: translate(2.5px, 0) rotate(-2deg);
+    transform: translate(2.5px, 0) rotate(-0.5deg);
   }
   /* Stance — flat on ground, centered, weight-bearing. */
   25% {
@@ -174,23 +196,98 @@
   }
   /* Mid-stance roll — weight rolling forward onto ball of foot. */
   37.5% {
-    transform: translate(-1.5px, 0) rotate(4deg);
+    transform: translate(-1.5px, 0) rotate(1deg);
   }
-  /* Push-off — toe-off at back, heel lifted. */
+  /* Push-off — toe-off at back, heel barely lifted. */
   50% {
-    transform: translate(-3px, 0) rotate(8deg);
+    transform: translate(-3px, 0) rotate(2deg);
   }
   /* Toe-off lift — sole peels off, boot rises briskly. */
   62.5% {
-    transform: translate(-2px, -4px) rotate(4deg);
+    transform: translate(-2px, -4px) rotate(1deg);
   }
   /* Mid-Swing — apex of the arc, max clearance over the (unseen) body. */
   75% {
-    transform: translate(0, -7px) rotate(-1deg);
+    transform: translate(0, -7px) rotate(0deg);
   }
   /* Late Swing — descending toward the next heel strike. */
   87.5% {
-    transform: translate(2px, -3px) rotate(-3deg);
+    transform: translate(2px, -3px) rotate(-1deg);
+  }
+}
+
+/* Same walk cycle as `welcome-walk`, but with a constant +30° rotation
+   baked into every keyframe. Used by the right boot so it reads as
+   permanently tilted clockwise relative to the left boot, while still
+   sharing the same timing and translate trajectory. CSS animations
+   override the `transform` property entirely per frame, so this is the
+   simplest way to compose a static rotation onto the animated one
+   without adding a wrapper element. */
+@keyframes welcome-walk-tilted {
+  0%, 100% {
+    transform: translate(3px, 0) rotate(29deg);
+  }
+  12.5% {
+    transform: translate(2.5px, 0) rotate(29.5deg);
+  }
+  25% {
+    transform: translate(0, 0) rotate(30deg);
+  }
+  37.5% {
+    transform: translate(-1.5px, 0) rotate(31deg);
+  }
+  50% {
+    transform: translate(-3px, 0) rotate(32deg);
+  }
+  62.5% {
+    transform: translate(-2px, -4px) rotate(31deg);
+  }
+  75% {
+    transform: translate(0, -7px) rotate(30deg);
+  }
+  87.5% {
+    transform: translate(2px, -3px) rotate(29deg);
+  }
+}
+
+/* Same walk cycle as `welcome-walk`, with the constant -10° rotation
+   baseline. The phase is shifted 50% from the right boot's cycle —
+   starting at Push-off rather than Contact — so the two boots are
+   always in opposite phases of the stride: when one is mid-swing, the
+   other is planted. Doing it via keyframes (instead of animation-delay)
+   sidesteps the shorthand-resets-delay cascade issue. */
+@keyframes welcome-walk-tilted-left {
+  /* Push-off — toe-off at back. (Right boot's 50%.) */
+  0%, 100% {
+    transform: translate(-3px, 0) rotate(-8deg);
+  }
+  /* Toe-off lift. (Right's 62.5%.) */
+  12.5% {
+    transform: translate(-2px, -4px) rotate(-9deg);
+  }
+  /* Mid-Swing — apex of the air arc. (Right's 75%.) */
+  25% {
+    transform: translate(0, -7px) rotate(-10deg);
+  }
+  /* Late Swing — descending toward heel strike. (Right's 87.5%.) */
+  37.5% {
+    transform: translate(2px, -3px) rotate(-11deg);
+  }
+  /* Contact — heel strike, foot at front. (Right's 0%/100%.) */
+  50% {
+    transform: translate(3px, 0) rotate(-11deg);
+  }
+  /* Post-impact recoil. (Right's 12.5%.) */
+  62.5% {
+    transform: translate(2.5px, 0) rotate(-10.5deg);
+  }
+  /* Stance — flat on ground, weight-bearing. (Right's 25%.) */
+  75% {
+    transform: translate(0, 0) rotate(-10deg);
+  }
+  /* Mid-stance roll — weight rolling forward. (Right's 37.5%.) */
+  87.5% {
+    transform: translate(-1.5px, 0) rotate(-9deg);
   }
 }
 
