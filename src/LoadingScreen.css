@@ -62,6 +62,13 @@
   justify-content: center;
   /* Allow trail footprints to render outside the box */
   overflow: visible;
+  /* Final-pose tilts baked into the boot artwork. The inner .ls-boot-tilt
+     img counter-rotates by these amounts during the walk-in so the boots
+     read as upright; after they land, the settle animation animates the
+     img back to rotate(0deg) (its natural artwork angle), snapping the
+     pair into the M-shaped logo silhouette. Tunable here. */
+  --tilt-left: -12deg;
+  --tilt-right: 35deg;
 }
 
 /* Final pose: upright boot anchored at the left, kicking boot anchored at the
@@ -85,6 +92,38 @@
   bottom: 0;
   z-index: 2;
   animation: ls-walk-right 3200ms cubic-bezier(0.55, 0, 0.35, 1) 550ms both;
+}
+
+/* Inner img — counter-rotates the artwork's baked-in tilt so the boot
+   reads as upright (long axis perpendicular to the ground) while the
+   wrapper span translates through the walk-in. After the wrapper's walk
+   finishes (350/550ms delay + 3200ms duration) plus a 300ms hold, the
+   settle animation rotates the img back to 0deg — i.e., the natural
+   artwork angle — so the pair locks into the logo M between "stro" and
+   "o". The settle's `forwards` fill keeps the final upright→tilted state
+   pinned for the rest of the loading sequence. */
+.ls-boot-tilt {
+  display: block;
+  transform-origin: 50% 80%;
+  will-change: transform;
+}
+.ls-boot-tilt--left {
+  transform: rotate(var(--tilt-left));
+  animation: ls-settle-left 300ms cubic-bezier(0.34, 1.56, 0.64, 1)
+             calc(550ms + 3200ms + 300ms) forwards;
+}
+.ls-boot-tilt--right {
+  transform: rotate(var(--tilt-right));
+  animation: ls-settle-right 300ms cubic-bezier(0.34, 1.56, 0.64, 1)
+             calc(550ms + 3200ms + 300ms) forwards;
+}
+@keyframes ls-settle-left {
+  from { transform: rotate(var(--tilt-left)); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes ls-settle-right {
+  from { transform: rotate(var(--tilt-right)); }
+  to   { transform: rotate(0deg); }
 }
 
 /* Walking trajectories — translate along an S-curve with a bobbing rotation
@@ -161,6 +200,12 @@
   .ls-boot--right,
   .ls-boot--left {
     animation: ls-fade-in 500ms ease-out forwards;
+  }
+  /* Skip the upright counter-rotation + settle dance — show the boots in
+     their natural artwork tilt (final logo pose) immediately. */
+  .ls-boot-tilt {
+    animation: none;
+    transform: rotate(0deg);
   }
   .ls-footprint { display: none; }
   @keyframes ls-fade-in {
