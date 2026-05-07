@@ -1,7 +1,7 @@
 // FEATURE: shell
-// LAST UPDATED BY: Evelyn Wong
-// UPDATE DATE: 2026-05-04
-// BUILD: 02f1547
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./WelcomeScreen, ./DevSwitch, ./cloudTtsService
 // CONSUMED BY: ./index.js (root mount)
 //
@@ -47,6 +47,10 @@ function App() {
   // once the chat closes. The walk state stays in App and is preserved.
   const [chatReturnScreen, setChatReturnScreen] = useState(null);
   const [constraintsReturnScreen, setConstraintsReturnScreen] = useState('home');
+  // Where to send the user when they tap Back on the Timeline. Defaults
+  // to navigation (the in-walk case), but the Home flag FAB sets it to
+  // 'home' so backing out lands them on the home map they came from.
+  const [timelineReturnScreen, setTimelineReturnScreen] = useState('navigation');
   const [settingsHighlight, setSettingsHighlight] = useState(false);
   const [quizPending, setQuizPending] = useState(false);
   const [nearbyPlaces, setNearbyPlaces] = useState([]);
@@ -63,8 +67,65 @@ function App() {
   // arrival geofence of each stop (auto-tracked via WatchLocation, no tap
   // required). The Reward screen prefers this over visitedAt timestamps.
   const [stopDwellMs, setStopDwellMs] = useState(() => new Map());
+  // Dev-mode widget preview: one of the WIDGET_PREVIEW_KEYS or null. The
+  // NavigationMapScreen profile button opens a menu that picks one of the
+  // 11 widget states; setupWidgetPreview wires up the matching journey +
+  // screen, and widget overrides flow through NavigationMapScreen down to
+  // WalkCompanionWidget so designers can preview each state in-context.
+  const [widgetPreview, setWidgetPreview] = useState(null);
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
+
+  // Mock journey used for any preview that needs visible stops.
+  const MOCK_PREVIEW_STOPS = [
+    { id: "preview-1", name: "Sightglass Coffee", desc: "Coffee Shop", lat: 37.766, lng: -122.413 },
+    { id: "preview-2", name: "Tartine Bakery",    desc: "Bakery",      lat: 37.761, lng: -122.424 },
+    { id: "preview-3", name: "Dolores Park",      desc: "Park",        lat: 37.759, lng: -122.426 },
+  ];
+  const setupWidgetPreview = (key) => {
+    if (!key) {
+      // Exit preview — wipe the dev journey so the user sees a clean slate.
+      setJourneyItems([]);
+      setAddedIds(new Set());
+      setVisitedIds(new Set());
+      setVisitedAt(new Map());
+      setStopDwellMs(new Map());
+      setStartLocation(null);
+      setTripStartTime(null);
+      setWidgetPreview(null);
+      setScreen('home');
+      return;
+    }
+    if (key === 'no-stops') {
+      // Route to navigation (not home) so the WalkCompanionWidget mounts
+      // in its empty state — that's where the marauder-loader footsteps
+      // and the "Strollo is looking for things you might like nearby."
+      // copy live. A start anchor is required for the nav map to render
+      // sensibly; fall back to a known SF coord when there's no GPS yet.
+      setJourneyItems([]);
+      setAddedIds(new Set());
+      setVisitedIds(new Set());
+      setVisitedAt(new Map());
+      setStopDwellMs(new Map());
+      setStartLocation(lastKnownLocation || [37.766, -122.413]);
+      setTripStartTime(null);
+      setScreen('navigation');
+      setWidgetPreview(key);
+      return;
+    }
+    // Every other key uses the mock journey so the timeline / map / widget
+    // have something to render. The journey is identical across keys; only
+    // the widget-side overrides differ (handled in NavigationMapScreen).
+    setJourneyItems(MOCK_PREVIEW_STOPS);
+    setAddedIds(new Set(MOCK_PREVIEW_STOPS.map((s) => s.id)));
+    setVisitedIds(new Set());
+    setVisitedAt(new Map());
+    setStopDwellMs(new Map());
+    setStartLocation(lastKnownLocation || [37.766, -122.413]);
+    setTripStartTime(Date.now());
+    setScreen(key === 'stops-added' ? 'home' : 'navigation');
+    setWidgetPreview(key);
+  };
 
   const persistQuiz = () => {
     // no-op — preferences reset on each reload by design
@@ -163,7 +224,7 @@ function App() {
         {/* HomeScreen also renders behind 'quiz' so the quiz's slide-down
             close animation reveals Home instead of a flash of white phone
             frame. QuizScreen's z-index keeps it on top while open. */}
-        {(screen === 'home' || screen === 'constraints' || screen === 'quiz') && (
+        {(screen === 'home' || screen === 'constraints' || screen === 'quiz' || (screen === 'timeline' && timelineReturnScreen === 'home')) && (
           <HomeScreen
             onStartWalk={(items, userLoc) => {
               // NavigationMapScreen treats `addedIds` as the authoritative
@@ -181,7 +242,7 @@ function App() {
               setScreen('navigation');
             }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
-            onOpenTimeline={() => setScreen('timeline')}
+            onOpenTimeline={() => { setTimelineReturnScreen('home'); setScreen('timeline'); }}
             onOpenQuiz={() => setScreen('quiz')}
             initialLocation={lastKnownLocation}
             initialSheetOpen={openSheetOnHome}
@@ -209,6 +270,8 @@ function App() {
             lastFetchTimeRef={lastFetchTimeRef}
             settingsHighlight={settingsHighlight}
             quizPending={quizPending}
+            widgetPreview={widgetPreview}
+            onSetWidgetPreview={setupWidgetPreview}
           />
         )}
         {screen === 'quiz' && (
@@ -249,7 +312,7 @@ function App() {
             from the nav flow — that way the prefs slide-down close
             animation reveals the live map + walk widget underneath
             instead of a flash of home/white. */}
-        {(screen === 'navigation' || screen === 'timeline' || (screen === 'constraints' && constraintsReturnScreen === 'navigation')) && (
+        {(screen === 'navigation' || (screen === 'timeline' && timelineReturnScreen === 'navigation') || (screen === 'constraints' && constraintsReturnScreen === 'navigation')) && (
           <NavigationMapScreen
             onGoBack={() => {
               // Back arrow = abandon the walk → wipe all walk state so the
@@ -266,7 +329,7 @@ function App() {
             }}
             onEndWalk={() => setScreen('reward')}
             onSetConstraints={() => { setConstraintsReturnScreen('navigation'); setScreen('constraints'); }}
-            onOpenTimeline={() => setScreen('timeline')}
+            onOpenTimeline={() => { setTimelineReturnScreen('navigation'); setScreen('timeline'); }}
             onOpenChat={() => {
               // Pop into home with the chat overlay open; remember to
               // return to the walk when the user closes the chat.
@@ -287,6 +350,8 @@ function App() {
             preferences={preferences}
             nearbyPlaces={nearbyPlaces}
             showVoice={screen === 'navigation'}
+            widgetPreview={widgetPreview}
+            onSetWidgetPreview={setupWidgetPreview}
           />
         )}
         {screen === 'reward' && (
@@ -346,7 +411,7 @@ function App() {
         )}
         {screen === 'timeline' && (
           <TimelineScreen
-            onGoBack={() => setScreen('navigation')}
+            onGoBack={() => setScreen(timelineReturnScreen)}
             onEndWalk={() => {
               // Same gate as navigation's End: reward only if the user
               // completed something; otherwise wipe + Home.

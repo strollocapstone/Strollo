@@ -1,7 +1,7 @@
 // FEATURE: shared-hook + shared-ui  (multi — phase 2 splits)
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-30
-// BUILD: 7152ed6
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService, ./services/googleMapsService
 // CONSUMED BY: ./WalkCompanionWidget
 //
@@ -34,8 +34,6 @@ import { nearestNamedPlace } from "./services/googleMapsService";
 export const PROMPT_PILLS = [
   { glyph: "💎", label: "Hidden gems", prompt: "Any hidden gems within walking distance?" },
   { glyph: "☕", label: "Cafes",       prompt: "What's a great café within a few minutes of here?" },
-  { glyph: "🚶", label: "Quick walk",  prompt: "Suggest a 10-minute walking loop from here." },
-  { glyph: "📜", label: "History",     prompt: "Tell me a piece of local history about this spot." },
   { glyph: "🍜", label: "Food",        prompt: "Where should I eat nearby right now?" },
 ];
 

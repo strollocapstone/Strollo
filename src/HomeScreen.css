@@ -117,7 +117,7 @@
   border-top-color: #F4EEFB;
 }
 .sugg-pin--ai::after {
-  border-top-color: #f0e4ff;
+  border-top-color: #F4EEFB;
 }
 .sugg-pin--open::after {
   display: none;
@@ -157,10 +157,13 @@
   background: var(--color-primary);
 }
 
-/* ── AI-suggested pin variant ── */
+/* ── AI-suggested pin variant ──
+   Flat lavender to match the navigation map's location-pill chrome
+   (#F4EEFB) — keeps home and nav consistent when a pin is tapped to
+   expand. */
 .sugg-pin--ai {
   border-color: rgba(136,81,212,0.45);
-  background: linear-gradient(135deg, #faf6ff 0%, #f0e4ff 100%);
+  background: #F4EEFB;
 }
 .sugg-pin-dot--ai {
   background: #8851D4;
@@ -169,7 +172,7 @@
   justify-content: center;
 }
 .sugg-pin--ai.sugg-pin--open {
-  background: linear-gradient(135deg, #faf6ff 0%, #f0e4ff 100%);
+  background: #F4EEFB;
 }
 
 /* Added border tint */
@@ -386,7 +389,13 @@
   background: var(--color-primary) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  box-shadow: 0 2px 10px rgba(255,213,1,0.35) !important;
+  /* Symmetric ambient halo — same softness above and below the pill so
+     it floats off the map without feeling weighed down. Centered yellow
+     glow keeps the brand feel. */
+  box-shadow:
+    0 -3px 10px rgba(30, 21, 65, 0.13),
+    0  3px 10px rgba(30, 21, 65, 0.13),
+    0  0 10px rgba(255, 213, 1, 0.22) !important;
 }
 .start-walk-pill:hover {
   background: var(--color-primary) !important;
@@ -446,6 +455,21 @@
 }
 .bottom-right-btn--halo {
   animation: bottom-right-btn-halo 1.4s ease-out infinite !important;
+}
+
+/* Dark-purple FAB matching the companion widget surface — same chrome as
+   the journey-flag FAB on the navigation map. Duplicated here so the rule
+   is in the document whenever HomeScreen mounts (NavigationMapScreen.css
+   isn't loaded until the user enters nav). */
+.bottom-right-btn--journey {
+  background: linear-gradient(
+    155deg,
+    rgba(30, 21, 65, 0.94) 0%,
+    rgba(52, 35, 62, 0.92) 55%,
+    rgba(84, 58, 100, 0.90) 100%
+  ) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
 }
 
 /* Quiz-gateway FAB: same size/shape as the settings button, sits above it in the
@@ -740,16 +764,28 @@
   z-index: 24;
 }
 
-/* ── Bottom search / sheet ── */
+/* ── Bottom search / sheet ──
+   Background uses the same dark-purple-to-mauve gradient as the
+   .wcw widget so the home and walk surfaces share one dark sheet
+   vocabulary. Inner search-input-row stays a translucent white pill
+   that floats on top — same "lifted pill on dark surface" pattern. */
 .bottom-search {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   z-index: 25;
-  background: rgba(247, 244, 250, 0.22);
-  backdrop-filter: blur(20px) saturate(1.25);
-  -webkit-backdrop-filter: blur(20px) saturate(1.25);
+  background: linear-gradient(
+    155deg,
+    rgba(30, 21, 65, 0.94) 0%,
+    rgba(52, 35, 62, 0.92) 55%,
+    rgba(84, 58, 100, 0.90) 100%
+  );
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  color: #F7F3F5;
   border-radius: 24px 24px 0 0;
-  box-shadow: 0 -4px 24px rgba(0,0,0,0.10);
+  box-shadow:
+    0 -4px 24px rgba(0,0,0,0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   /* Collapsed: tighter padding so the gap below the search bar matches the
      handle spacing above. Expanded: keeps the original 24px so the cards
      don't sit flush against the bottom edge. */
@@ -1013,7 +1049,9 @@
 }
 .handle-bar {
   width: 36px; height: 4px;
-  background: rgba(30,21,65,0.15);
+  /* Bumped to a light alpha so the grabber stays visible on the new
+     dark .bottom-search backdrop (matches the widget's grabber). */
+  background: rgba(247, 243, 245, 0.30);
   border-radius: var(--radius-pill);
 }
 
@@ -1022,7 +1060,10 @@
   align-items: center;
   gap: 10px;
   margin: 0 16px 14px;
-  background: rgba(255, 255, 255, 0.58);
+  /* Match the Walk Companion's "Say anything" button — same dark
+     translucent fill (.wcw-icon-btn) so the home search and the in-walk
+     speak control read as one shared control. */
+  background: rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(14px) saturate(1.25);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
   transition: opacity 0.35s ease, transform 0.35s ease;
@@ -1035,10 +1076,18 @@
   background: transparent;
   font-family: var(--font-ui);
   font-size: 14px;
-  color: var(--color-body);
+  font-weight: 600;
+  /* Match the .wcw-speak-label text colour so "I'm in the mood for…"
+     reads with the same weight as "Say anything" in the widget. */
+  color: rgba(247, 243, 245, 0.95);
   outline: none;
 }
-.search-input::placeholder { color: #7A6B82; }
+.search-input::placeholder {
+  /* Match the magnifying-glass icon stroke (#aaa) on the left of the
+     same row so the ghosted text and the search glyph share one tone. */
+  color: #aaa;
+  font-weight: 500;
+}
 .mic-btn {
   background: none; border: none; padding: 0;
   display: flex; align-items: center; justify-content: center;
@@ -2235,3 +2284,113 @@
 .nudge-btn { border:none; border-radius:var(--radius-pill); padding:7px 14px; font-family:var(--font-ui); font-size:12px; font-weight:600; cursor:pointer; }
 .nudge-btn--accept  { background:var(--color-primary); color:var(--color-accent); }
 .nudge-btn--dismiss { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.65); }
+
+/* Widget preview menu — same chrome as the nav screen menu so the
+   designer's mental model is consistent across both profile FABs.
+   Duplicated here so the rule is in the document whenever HomeScreen
+   mounts (NavigationMapScreen.css isn't loaded until the user enters
+   nav). Class names match exactly so JSX can be shared. */
+.nav-preview-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgba(10, 6, 24, 0.18);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: nav-preview-fade-in 160ms ease both;
+}
+.nav-preview-menu {
+  position: absolute;
+  top: 76px;
+  right: 16px;
+  width: 280px;
+  max-height: calc(100vh - 100px);
+  z-index: 50;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(38, 24, 70, 0.96) 0%, rgba(20, 12, 42, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42), 0 4px 14px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: nav-preview-pop-in 180ms cubic-bezier(.2,.8,.2,1) both;
+  color: #f4eeff;
+}
+.nav-preview-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.nav-preview-menu-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 238, 255, 0.7);
+}
+.nav-preview-menu-exit {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f4eeff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+.nav-preview-menu-exit:hover { background: rgba(255, 255, 255, 0.14); }
+.nav-preview-menu-exit:active { transform: scale(0.97); }
+.nav-preview-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.nav-preview-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: #f4eeff;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.nav-preview-menu-item:hover { background: rgba(255, 255, 255, 0.07); }
+.nav-preview-menu-item:active { background: rgba(255, 255, 255, 0.12); }
+.nav-preview-menu-item--active {
+  background: rgba(255, 213, 1, 0.14);
+  color: #FFD501;
+}
+.nav-preview-menu-item--active:hover { background: rgba(255, 213, 1, 0.2); }
+.nav-preview-menu-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.nav-preview-menu-item-check {
+  flex: 0 0 auto;
+  font-size: 14px;
+  color: #FFD501;
+}
+@keyframes nav-preview-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes nav-preview-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

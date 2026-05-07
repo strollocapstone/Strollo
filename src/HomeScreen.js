@@ -1,7 +1,7 @@
 // FEATURE: home-discovery + home-chat + home-voice + home-journey  (multi — phase 5 splits)
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: ./geminiService, ./mapUtils, ./useSpeechRecognition, various CSS
 // CONSUMED BY: ./App.js
 //
@@ -23,7 +23,7 @@ import { ReactComponent as RightSoleSvg } from "./assets/right-sole.svg";
 import { ReactComponent as LeftSoleSvg } from "./assets/left-sole.svg";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
-import { youIcon, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm } from "./mapUtils";
+import { youIcon, youIconBelow, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm } from "./mapUtils";
 
 const CATEGORY_ICONS = {
   "Coffee":     "local_cafe",
@@ -235,7 +235,9 @@ const VFS_STEPS = [
 
 // ── Sound wave icon (matches Walk Companion pill) ─────────────────────────
 function SoundWaveSvg({ active }) {
-  const color = active ? "#FFFFFF" : "#8851D4";
+  // Inactive bars match the widget's remaining-route dotted line (#C77DFF)
+  // so the home mic icon and the in-walk progress strip share one accent.
+  const color = active ? "#FFFFFF" : "#C77DFF";
   const cls = active ? "sw-bar sw-bar--active" : "sw-bar";
   return (
     <svg width="22" height="18" viewBox="0 0 22 18" fill={color}>
@@ -323,6 +325,12 @@ export default function HomeScreen({
   lastFetchTimeRef,
   settingsHighlight,
   quizPending,
+  // Widget state preview (dev / design only). Mirror of the menu on
+  // NavigationMapScreen — the profile FAB opens a menu of 11 widget
+  // states. App.js owns the routing/journey wiring; HomeScreen just
+  // toggles the menu and forwards the chosen key.
+  widgetPreview = null,
+  onSetWidgetPreview,
 }) {
   const [userLocation, setUserLocation]   = useState(initialLocation || null);
   // Per-mount key for MapContainer. Forces React to allocate a fresh
@@ -334,6 +342,23 @@ export default function HomeScreen({
   const [locateTrigger, setLocateTrigger] = useState(1); // trigger on mount
   const [showLocatePrompt, setShowLocatePrompt] = useState(false);
   const [locateError, setLocateError]           = useState("");
+  // Widget-state preview menu (kept in sync with NavigationMapScreen so
+  // the same 11 keys produce the same routed state regardless of which
+  // profile FAB the designer taps).
+  const [isPreviewMenuOpen, setIsPreviewMenuOpen] = useState(false);
+  const PREVIEW_STATES = [
+    { key: 'no-stops',                 label: 'No locations added' },
+    { key: 'stops-added',              label: 'Stops added (start not selected)' },
+    { key: 'walking',                  label: 'Walking to stop' },
+    { key: 'arrived',                  label: 'Arrived at a stop' },
+    { key: 'user-speaking',            label: 'User speaking' },
+    { key: 'strollo-thinking',         label: 'Strollo thinking…' },
+    { key: 'strollo-speaking',         label: 'Strollo speaking' },
+    { key: 'nudge-add-stop',           label: 'Nudge: add a stop' },
+    { key: 'nudge-tidbit',             label: 'Nudge: tidbit' },
+    { key: 'nudge-incident',           label: 'Nudge: live incident' },
+    { key: 'incident-with-suggestion', label: 'Incident + suggestion' },
+  ];
   const [locateActive, setLocateActive]         = useState(false);
   const [userScreenPos, setUserScreenPos] = useState({ x: 187, y: 406 });
   const [sheetOpen, setSheetOpen]         = useState(Boolean(initialSheetOpen));
@@ -1018,6 +1043,18 @@ export default function HomeScreen({
       .map((p) => ({ id: p.id, pos: [p.lat, p.lng] }));
   }, [nearbyPlaces, addedIds]);
 
+  // Boots flip to the "below" icon when the user is on top of any added
+  // stop's pill (≤30 m). Keeps the boots from covering the location pill.
+  const HOME_NEAR_STOP_M = 30;
+  const isNearAddedStop = useMemo(() => {
+    if (!userLocation || !addedStopPositions.length) return false;
+    for (const { pos } of addedStopPositions) {
+      const m = haversineKm(userLocation, pos) * 1000;
+      if (m <= HOME_NEAR_STOP_M) return true;
+    }
+    return false;
+  }, [userLocation, addedStopPositions]);
+
   // Coords of the user's last/only added stop — drives the floating
   // destination-pin marker above its pill.
   const finalAddedPosition = useMemo(() => {
@@ -1202,7 +1239,7 @@ export default function HomeScreen({
               />
             );
           })}
-          {userLocation && <Marker position={userLocation} icon={youIcon} />}
+          {userLocation && <Marker position={userLocation} icon={isNearAddedStop ? youIconBelow : youIcon} />}
           {userLocation && <TrackUserPosition userPos={userLocation} onScreenPos={onScreenPos} />}
           <LocateMe trigger={locateTrigger} zoom={17} onLocate={handleLocate} onError={(msg) => { setLocateError(msg); setShowLocatePrompt(true); }} />
           <WatchLocation onUpdate={setUserLocation} />
@@ -1230,16 +1267,77 @@ export default function HomeScreen({
         </MapContainer>
       </div>
 
-      {/* ── TOP BAR: profile FAB (right) ── */}
+      {/* ── TOP BAR: profile FAB (right) ──
+           Doubles as the entry point to the widget-state preview menu so
+           designers can verify all 11 states from the home map. Identical
+           menu to the one on NavigationMapScreen — App.js owns the
+           routing so picking a state takes the user to the right screen
+           with the right journey. */}
       <div className="top-bar">
         <button
           type="button"
           className="fab-circle top-right-btn"
-          aria-label="Profile"
+          aria-label="Open widget state preview menu"
+          aria-haspopup="menu"
+          aria-expanded={isPreviewMenuOpen}
+          onClick={() => setIsPreviewMenuOpen((v) => !v)}
         >
           <span className="top-right-initials">ST</span>
         </button>
       </div>
+      {isPreviewMenuOpen && (
+        <>
+          <div
+            className="nav-preview-menu-backdrop"
+            onClick={() => setIsPreviewMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="nav-preview-menu" role="menu" aria-label="Widget state preview">
+            <div className="nav-preview-menu-header">
+              <span className="nav-preview-menu-title">Widget state preview</span>
+              {widgetPreview && (
+                <button
+                  type="button"
+                  className="nav-preview-menu-exit"
+                  onClick={() => {
+                    if (onSetWidgetPreview) onSetWidgetPreview(null);
+                    setIsPreviewMenuOpen(false);
+                  }}
+                >
+                  Exit preview
+                </button>
+              )}
+            </div>
+            <ul className="nav-preview-menu-list" role="none">
+              {PREVIEW_STATES.map((opt) => {
+                const isActive = widgetPreview === opt.key;
+                return (
+                  <li key={opt.key} role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`nav-preview-menu-item${isActive ? " nav-preview-menu-item--active" : ""}`}
+                      onClick={() => {
+                        if (onSetWidgetPreview) onSetWidgetPreview(opt.key);
+                        setIsPreviewMenuOpen(false);
+                      }}
+                    >
+                      <span className="nav-preview-menu-item-label">{opt.label}</span>
+                      {isActive && (
+                        <span className="nav-preview-menu-item-check" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </>
+      )}
 
       {/* ── RADIAL GRADIENT on user ── */}
       <div className="user-gradient-overlay" style={{
@@ -1262,6 +1360,19 @@ export default function HomeScreen({
             </button>
           )}
           <div className="bottom-right-stack">
+            {!chatSplitActive && onOpenTimeline && (
+              <button
+                className="fab-circle bottom-right-btn bottom-right-btn--journey"
+                onClick={onOpenTimeline}
+                aria-label="Open journey timeline"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+                  <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3 L18 6 L8 10 Z"/>
+                  <circle cx="8" cy="21" r="2"/>
+                </svg>
+              </button>
+            )}
             {!chatSplitActive && quizPending && (
               <button
                 className="fab-circle bottom-right-btn quiz-gateway-btn"
@@ -1501,7 +1612,7 @@ export default function HomeScreen({
               />
               {query.trim() ? (
                 <button className="mic-btn" aria-label="Send" onClick={() => handleSendQuery(query)}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C77DFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                   </svg>
                 </button>

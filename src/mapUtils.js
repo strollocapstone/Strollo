@@ -1,7 +1,7 @@
 // FEATURE: shared-util  (multi — phase 3 splits)
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-30
-// BUILD: 7152ed6
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: react-leaflet, leaflet
 // CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./strollowConversation (reverseGeocode)
 //
@@ -53,9 +53,7 @@ if (L.Draggable && L.Draggable.prototype && L.Draggable.prototype._onDown) {
 }
 
 // ── User position marker (Marauder's Map boots) ──────────────────────────
-export const youIcon = L.divIcon({
-  className: "",
-  html: `<div class="marauder-marker">
+const MARAUDER_MARKER_HTML = `<div class="marauder-marker">
     <svg class="foot foot--left" width="18" height="30" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
       <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#1E1541"/>
       <line x1="6" y1="14" x2="17" y2="14" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
@@ -66,9 +64,25 @@ export const youIcon = L.divIcon({
       <line x1="11" y1="14" x2="22" y2="14" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
       <line x1="11" y1="19" x2="22" y2="19" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
     </svg>
-  </div>`,
+  </div>`;
+
+// Default: boots stand UP from the lat/lng (anchor at bottom-center).
+export const youIcon = L.divIcon({
+  className: "",
+  html: MARAUDER_MARKER_HTML,
   iconSize: [42, 32],
   iconAnchor: [21, 32],
+});
+
+// "Below" variant: boots HANG below the lat/lng (anchor at top-center,
+// pushed down 8px so the purple route-dot at the lat/lng stays clear).
+// Used when the user is near a confirmed stop so the boots never sit
+// on top of the stop's pill / purple dot.
+export const youIconBelow = L.divIcon({
+  className: "",
+  html: MARAUDER_MARKER_HTML,
+  iconSize: [42, 32],
+  iconAnchor: [21, -8],
 });
 
 // ── Fallback location if GPS is unavailable (UC Berkeley, Sproul Plaza) ──
