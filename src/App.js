@@ -22,6 +22,7 @@ import LoadingScreen from './LoadingScreen';
 import WelcomeScreen from './WelcomeScreen';
 import DevSwitch from './DevSwitch';
 import { cancelCloudTts, isCloudTtsPlaying } from './cloudTtsService';
+import { fetchIpLocation } from './mapUtils';
 import './App.css';
 
 function App() {
@@ -97,16 +98,25 @@ function App() {
   useEffect(() => {
     if (!navigator.geolocation) return;
     let cancelled = false;
+    const setFromCoords = (coords) => {
+      if (cancelled) return;
+      // Some browsers / DevTools sensor overrides hand back (0, 0) when
+      // there's no real fix. Skip those so HomeScreen doesn't initialise
+      // its map at the Atlantic.
+      if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
+      setLastKnownLocation([coords.latitude, coords.longitude]);
+    };
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      ({ coords }) => setFromCoords(coords),
+      async () => {
+        // Browser geolocation failed — try IP-based geolocation, then
+        // fall back to MOCK_LOCATION (Sproul Plaza) so the map always
+        // initialises somewhere useful.
         if (cancelled) return;
-        // Some browsers / DevTools sensor overrides hand back (0, 0) when
-        // there's no real fix. Skip those so HomeScreen doesn't initialise
-        // its map at the Atlantic.
-        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
-        setLastKnownLocation([coords.latitude, coords.longitude]);
+        const ipPos = await fetchIpLocation();
+        if (cancelled) return;
+        setLastKnownLocation(ipPos || [37.8691, -122.2596]);
       },
-      () => { /* permission denied / timeout — HomeScreen will prompt again */ },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
     );
     return () => { cancelled = true; };
