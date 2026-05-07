@@ -840,14 +840,29 @@
 }
 @keyframes qd-fade-in { to { opacity: 1; } }
 
-/* Marker stroke — draws via pathLength/dashoffset */
+/* Marker stroke — draws via pathLength/dashoffset.
+   The keyframe plateaus at each push-pin's progress along the path so
+   the route "pauses" briefly as it reaches each milestone (echoes a
+   loading bar ticking through stops). Pin bloom delays are tuned to
+   fire during these dwells. */
 .qd-route {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
   filter: drop-shadow(0 1px 0 rgba(30, 21, 65, 0.10));
   animation: qd-route-draw 2400ms cubic-bezier(0.45, 0.05, 0.55, 1) 400ms forwards;
 }
-@keyframes qd-route-draw { to { stroke-dashoffset: 0; } }
+@keyframes qd-route-draw {
+  0%    { stroke-dashoffset: 100; }
+  12.5% { stroke-dashoffset: 87.5; }
+  19.5% { stroke-dashoffset: 87.5; }   /* pause at pin 1 (~170ms) */
+  29%   { stroke-dashoffset: 71; }
+  36%   { stroke-dashoffset: 71; }      /* pause at pin 2 */
+  46%   { stroke-dashoffset: 54; }
+  53%   { stroke-dashoffset: 54; }      /* pause at pin 3 */
+  62.5% { stroke-dashoffset: 37.5; }
+  69.5% { stroke-dashoffset: 37.5; }    /* pause at pin 4 */
+  100%  { stroke-dashoffset: 0; }
+}
 
 /* Place-dot ping rings — single emanation per dot */
 .qd-poi-ring {
