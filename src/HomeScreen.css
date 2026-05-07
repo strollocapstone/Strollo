@@ -557,18 +557,24 @@
 }
 
 /* ── Location permission popover ── */
+/* Dark scrim sits behind the card to dim the map. */
 .locate-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0, 0, 0, 0.35);
   z-index: 100;
 }
+/* Solid cream card — reads as a clear, defined surface so the frosted-glass
+   "Not now" button on top has the same soft pill appearance as the
+   .reward-undo-pill ("Oops, I'm not done exploring") on the reward screen. */
 .locate-popover {
   position: absolute;
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   width: 280px;
-  background: #fff;
+  background: rgba(251, 248, 243, 0.85);
+  backdrop-filter: blur(20px) saturate(1.25);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
   border-radius: 20px;
   padding: 28px 24px 20px;
   z-index: 101;
@@ -578,46 +584,68 @@
 .locate-popover-icon {
   margin-bottom: 12px;
 }
+/* Copy follows TimelineScreen's empty-state typography — Unbounded title
+   over Satoshi body — so the prompt feels like part of the same family. */
 .locate-popover-title {
-  font-family: var(--font-brand);
+  font-family: "Unbounded", sans-serif;
   font-size: 17px;
   font-weight: 700;
-  color: var(--color-body);
-  margin: 0 0 6px;
+  color: #34233E;
+  letter-spacing: -0.2px;
+  margin: 0 0 14px;
 }
 .locate-popover-desc {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  color: #666;
-  line-height: 1.45;
-  margin: 0 0 20px;
+  font-family: "Satoshi", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #5A4B64;
+  line-height: 1.5;
+  margin: 0 0 28px;
 }
 .locate-popover-actions {
   display: flex;
   gap: 10px;
 }
+/* Buttons echo PreferencesScreen's bottom action pair, scaled down so the
+   pair fits comfortably inside the 280px card without dominating it.
+   Tighter height + horizontal padding + 13/600 type read closer to the
+   visual weight of the pwc footer in its wider container. */
 .locate-popover-btn {
   flex: 1;
-  padding: 10px 0;
+  height: 38px;
   border: none;
-  border-radius: 12px;
+  border-radius: 18px;
+  padding: 0 12px;
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease-out, filter 0.2s ease, background 0.15s ease;
 }
 .locate-popover-btn--cancel {
-  background: #f0f0f0;
-  color: #666;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: 0 2px 10px rgba(62, 42, 18, 0.12);
+  color: #1E1541;
 }
+.locate-popover-btn--cancel:hover  { background: rgba(255, 255, 255, 0.55); }
+.locate-popover-btn--cancel:active { transform: scale(0.97); }
 .locate-popover-btn--allow {
-  background: #8851D4;
-  color: #fff;
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  box-shadow: 0 2px 10px rgba(255, 213, 1, 0.35);
 }
+.locate-popover-btn--allow:hover  { filter: brightness(1.05); }
+.locate-popover-btn--allow:active { transform: scale(0.97); }
 .locate-popover-error {
   font-family: var(--font-ui);
-  font-size: 12px;
-  color: #d44;
+  font-size: 13px;
+  font-weight: 500;
+  color: #B91C1C;
   margin: 0 0 14px;
   line-height: 1.4;
 }

@@ -1293,7 +1293,11 @@ export default function HomeScreen({
             <button
               className="fab-circle bottom-right-btn"
               aria-label="Focus on my location"
-              onClick={() => { setLocateError(""); setLocateTrigger((t) => t + 1); }}
+              onClick={() => {
+                console.log("[FocusFAB] click — bumping locateTrigger");
+                setLocateError("");
+                setLocateTrigger((t) => t + 1);
+              }}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
@@ -1314,12 +1318,12 @@ export default function HomeScreen({
           <div className="locate-overlay" onClick={() => setShowLocatePrompt(false)} />
           <div className="locate-popover">
             <div className="locate-popover-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B1F6E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
                 <circle cx="12" cy="10" r="3"/>
               </svg>
             </div>
-            <p className="locate-popover-title">Use your location?</p>
+            <p className="locate-popover-title">Use Your Location?</p>
             <p className="locate-popover-desc">Strollo needs your location to center the map and show nearby suggestions.</p>
             {locateError && <p className="locate-popover-error">{locateError}</p>}
             <div className="locate-popover-actions">

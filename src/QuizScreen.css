@@ -2,11 +2,38 @@
 .quiz-screen {
   position: absolute;
   inset: 0;
-  background-color: #F4E2C4;
-  /* Warm gradient base + denser cork speckles overlaid */
+  background: var(--chat-bg);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  /* Establish a stacking context so the negative-z-index pseudo-element
+     stays behind every quiz-screen child without leaking past the parent.
+     Mirrors `.welcome-screen` so the two screens share the same backdrop. */
+  isolation: isolate;
+}
+/* Match WelcomeScreen's flipped background image so the quiz feels like a
+   continuation of the same scene. Pseudo-element so the image can be
+   transformed (background-image itself can't be); z-index: -1 keeps it
+   under all the real children inside the isolated stacking context above. */
+.quiz-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("./assets/WelcomeScreen_bg.png") center / cover no-repeat;
+  transform: scaleY(-1);
+  z-index: -1;
+  pointer-events: none;
+}
+/* Bulletin-board dotted speckles overlaid on top of the welcome backdrop —
+   ::after sits above ::before by document order, so the speckles stay on top
+   of the image while still sitting beneath every real child of the screen. */
+.quiz-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   background-image:
-    radial-gradient(circle at 15% 10%, rgba(255, 213, 1, 0.04), transparent 45%),
-    radial-gradient(circle at 85% 95%, rgba(231, 138, 104, 0.18), transparent 50%),
     /* dark speckle layer 1 — 40px tile */
     radial-gradient(1.4px 1.4px at 8px 6px,    rgba(94, 52, 18, 0.32) 50%, transparent 52%),
     radial-gradient(1px   1px   at 20px 18px,  rgba(70, 40, 12, 0.28) 50%, transparent 52%),
@@ -27,15 +54,11 @@
     radial-gradient(0.8px 0.8px at 30px 30px,  rgba(255, 236, 180, 0.45) 50%, transparent 55%),
     radial-gradient(1.2px 1.2px at 40px 4px,   rgba(255, 230, 170, 0.40) 50%, transparent 55%);
   background-size:
-    auto, auto,
     40px 40px, 40px 40px, 40px 40px, 40px 40px, 40px 40px, 40px 40px, 40px 40px, 40px 40px,
     60px 60px, 60px 60px, 60px 60px, 60px 60px, 60px 60px,
     50px 50px, 50px 50px, 50px 50px;
-  font-family: var(--font-ui);
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* ── Ambient moving blob gradient (shared aesthetic with voice modal) ───── */
@@ -134,7 +157,6 @@
   margin: 0 auto !important;
   font-size: 15px !important;
   color: #3B1F6E !important;
-  opacity: 0.85;
 }
 
 /* ── Strollo logo + close ───────────────────────────────────────────────── */
@@ -283,6 +305,11 @@
   z-index: 2;
   animation: mini-pin 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
+/* Skip the drop-in pin animation when the mini takes over directly from
+   the active card's "fly to clothesline" landing — otherwise the mini
+   visually drops in from above on top of the just-landed card. */
+.quiz-mini-wrap--no-anim,
+.quiz-mini-wrap--no-anim .quiz-pin { animation: none; }
 .quiz-pin {
   position: absolute;
   top: 2px;
@@ -404,10 +431,21 @@
 }
 
 /* ── Button-triggered exit animations (subtle wind-up, then swoosh out) ── */
+/* Up = "yes" → card flies to its clothesline slot (target dx/dy passed in
+   via inline custom properties so the keyframe can land on the actual mini
+   position regardless of how many items are already pinned). Card shrinks
+   to mini-polaroid size at the end so the hand-off to the new mini reads
+   as one continuous element. */
 @keyframes quiz-exit-up {
-  0%   { transform: translate(0, 0)      rotate(0deg); opacity: 1; }
-  14%  { transform: translate(0, 22px)   rotate(1deg); opacity: 1; }
-  100% { transform: translate(0, -820px) rotate(-2deg); opacity: 0; }
+  0%   { transform: translate(0, 0)      rotate(0deg) scale(1); opacity: 1; }
+  14%  { transform: translate(0, 22px)   rotate(1deg) scale(1); opacity: 1; }
+  100% {
+    transform:
+      translate(var(--exit-up-dx, 0px), var(--exit-up-dy, -260px))
+      rotate(-4deg)
+      scale(0.17);
+    opacity: 1;
+  }
 }
 @keyframes quiz-exit-down {
   0%   { transform: translate(0, 0)     rotate(0deg); opacity: 1; }
@@ -564,13 +602,51 @@
   -webkit-backdrop-filter: none;
   box-shadow: none;
 }
+/* ── Marker scribble overlay (rendered inside each tear half) ────────────
+   Sits inside the polaroid padding so it covers the photo only, not the
+   white frame or caption. Each stroke draws itself in via stroke-dashoffset
+   with a small per-stroke delay so the marks feel hand-laid. */
+.quiz-scribble {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  bottom: 32px;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgba(40, 22, 6, 0.18));
+}
+.quiz-scribble path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: quiz-scribble-draw 220ms cubic-bezier(0.45, 0.05, 0.55, 0.95) forwards;
+}
+@keyframes quiz-scribble-draw {
+  to { stroke-dashoffset: 0; }
+}
+/* Progress badge — pinned to the top-right of the polaroid so the user
+   always knows where they are in the deck without parsing the caption. */
 .quiz-card-index {
-  font-family: "Caveat", var(--font-brand);
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 4px 10px;
+  background: rgba(30, 21, 65, 0.88);
+  color: #FFF7E6;
+  font-family: "Satoshi", var(--font-ui);
+  font-size: 12px;
   font-weight: 700;
-  font-size: 17px;
-  color: #8A6A42;
-  margin-right: 6px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(40, 22, 6, 0.22);
+  z-index: 4;
+  margin: 0;
+  pointer-events: none;
+}
+.quiz-card-index-sep {
+  margin: 0 2px;
+  opacity: 0.55;
 }
 
 /* ── Direction stamp (peek) ─────────────────────────────────────────────── */
@@ -718,11 +794,139 @@
 .quiz-done h1 {
   font-family: var(--font-brand);
   font-weight: 700;
-  font-size: 26px;
-  line-height: 1.2;
+  font-size: 24px;
+  line-height: 1.25;
   color: #3B1F6E;
   letter-spacing: -0.3px;
-  margin: 0 0 32px;
+  margin: 0 0 22px;
+  max-width: 280px;
+}
+/* Pulsing ellipsis at the end of the title — reads as a loading indicator
+   without needing extra UI. */
+.quiz-done-ellipsis {
+  display: inline-block;
+  animation: quiz-done-ellipsis-pulse 1.6s ease-in-out infinite;
+}
+@keyframes quiz-done-ellipsis-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+
+/* ── Quiz reveal illustration ─────────────────────────────────────────────
+   A hand-drawn route blooming across a borderless canvas. Sequence:
+     0–600ms   pencil-sketch guide fades in
+     400–2800ms Strollo-purple marker stroke draws over the sketch
+     700–2300ms place dots bloom along the path; each carries a single ping
+     2400–3000ms destination pin drops in with a soft overshoot
+     2900ms+   sparkles fade in around the pin and the pin starts a slow bob
+   The reveal is borderless so the illustration reads as part of the page,
+   not a UI tile dropped onto it. */
+.quiz-done-canvas {
+  width: 320px;
+  max-width: 100%;
+  margin: 0 auto 24px;
+}
+.quiz-done-canvas-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Pencil-sketch guide path */
+.qd-guide {
+  opacity: 0;
+  animation: qd-fade-in 700ms ease-out 200ms forwards;
+}
+@keyframes qd-fade-in { to { opacity: 1; } }
+
+/* Marker stroke — draws via pathLength/dashoffset */
+.qd-route {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 1px 0 rgba(30, 21, 65, 0.10));
+  animation: qd-route-draw 2400ms cubic-bezier(0.45, 0.05, 0.55, 1) 400ms forwards;
+}
+@keyframes qd-route-draw { to { stroke-dashoffset: 0; } }
+
+/* Place-dot ping rings — single emanation per dot */
+.qd-poi-ring {
+  fill: none;
+  stroke-width: 1.5;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: qd-poi-ping 900ms ease-out var(--qd-delay) forwards;
+}
+@keyframes qd-poi-ping {
+  0%   { opacity: 0.7; transform: scale(0.5); }
+  100% { opacity: 0;   transform: scale(2.6); }
+}
+
+/* Bulletin push-pin marker — bloom in with a soft overshoot. Group scales
+   from its bounding-box center so the dome and needle pop together. */
+.qd-poi-pin {
+  opacity: 0;
+  transform: scale(0);
+  transform-box: fill-box;
+  transform-origin: center;
+  filter: drop-shadow(0 1px 1px rgba(30, 21, 65, 0.22));
+  animation: qd-poi-bloom 460ms cubic-bezier(0.34, 1.56, 0.64, 1) var(--qd-delay) forwards;
+}
+@keyframes qd-poi-bloom { to { opacity: 1; transform: scale(1); } }
+
+/* Destination pin — drops in then bobs gently. Two nested groups so the
+   drop-in (transform: translateY) doesn't fight with the bob loop. */
+.qd-pin-drop {
+  opacity: 0;
+  transform: translateY(-10px);
+  filter: drop-shadow(0 3px 4px rgba(30, 21, 65, 0.22));
+  animation: qd-pin-drop-in 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 2400ms forwards;
+}
+@keyframes qd-pin-drop-in { to { opacity: 1; transform: translateY(0); } }
+.qd-pin-bob {
+  animation: qd-pin-bob-loop 2.6s ease-in-out 3100ms infinite;
+}
+@keyframes qd-pin-bob-loop {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+
+/* Sparkles around the destination — twinkle in once the pin has landed */
+.qd-sparkles circle {
+  fill: #FFD501;
+  opacity: 0;
+  transform: scale(0);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.qd-sparkles circle:nth-child(1) { animation: qd-sparkle 2.2s ease-in-out 2900ms infinite; }
+.qd-sparkles circle:nth-child(2) { animation: qd-sparkle 2.2s ease-in-out 3120ms infinite; }
+.qd-sparkles circle:nth-child(3) { animation: qd-sparkle 2.2s ease-in-out 3340ms infinite; }
+.qd-sparkles circle:nth-child(4) { animation: qd-sparkle 2.2s ease-in-out 3560ms infinite; }
+@keyframes qd-sparkle {
+  0%, 100% { opacity: 0;   transform: scale(0); }
+  50%      { opacity: 0.7; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qd-guide, .qd-route, .qd-poi-ring, .qd-poi-pin,
+  .qd-pin-drop, .qd-pin-bob, .qd-sparkles circle {
+    animation: none;
+  }
+  .qd-route { stroke-dashoffset: 0; }
+  .qd-poi-pin { opacity: 1; transform: scale(1); }
+  .qd-pin-drop { opacity: 1; transform: none; }
+  .qd-sparkles circle { opacity: 0.55; transform: scale(1); }
+}
+
+/* Body copy fades in once the loading reveal has finished. */
+.quiz-done-final {
+  opacity: 0;
+  animation: quiz-done-final-in 540ms ease-out 3300ms forwards;
+}
+@keyframes quiz-done-final-in {
+  to { opacity: 1; }
 }
 .quiz-done p {
   font-family: var(--font-ui);
