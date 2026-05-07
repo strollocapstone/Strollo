@@ -212,8 +212,12 @@
 }
 
 /* ── Dominant TURN line ──────────────────────────────────────────────── */
+/* Equal top / bottom margin so the heading's text content sits at the
+   vertical centre of its row — aligns with the .wcw-turn-speaker mute
+   button on the right. The asymmetric 48 / 84 it had before floated the
+   first line above the button. */
 .wcw-turn {
-  margin: 48px 0 84px;
+  margin: 84px 0;
   font-family: var(--font-brand, var(--font-ui));
   font-size: 18px;
   font-weight: 700;
