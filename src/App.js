@@ -345,6 +345,7 @@ function App() {
             setAddedIds={setAddedIds}
             visitedIds={visitedIds}
             userLocation={lastKnownLocation}
+            startLocation={startLocation}
             tripStartTime={tripStartTime}
             journeyItems={journeyItems}
             onJourneyChange={setJourneyItems}

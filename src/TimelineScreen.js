@@ -365,6 +365,7 @@ export default function TimelineScreen({
   setAddedIds,
   visitedIds,
   userLocation,
+  startLocation,
   tripStartTime,
   onGoBack,
   journeyItems = [],
@@ -375,6 +376,7 @@ export default function TimelineScreen({
   const screenRef = React.useRef(null);
   const [isScrollable, setIsScrollable] = useState(false);
   const [userLocationLabel, setUserLocationLabel] = useState("");
+  const [startLocationLabel, setStartLocationLabel] = useState("");
   // Snapshot the journey + addedIds when Timeline mounts so "Back to map"
   // can revert any reorder / skip / remove / add the user did this session
   // (Preferences-style cancel). "Save changes" just closes — edits are
@@ -412,6 +414,33 @@ export default function TimelineScreen({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [userLocation]);
+  // Reverse-geocode the walk's starting location (snapshot at walk-start, not
+  // the live user location) so the rail label can read "You started from
+  // <name>" instead of a generic "Started here".
+  useEffect(() => {
+    if (!startLocation) return;
+    let cancelled = false;
+    const [lat, lng] = startLocation;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const a = data?.address || {};
+        const label =
+          a.amenity ||
+          a.shop ||
+          a.building ||
+          [a.house_number, a.road].filter(Boolean).join(" ") ||
+          a.neighbourhood ||
+          a.suburb ||
+          a.city ||
+          data?.display_name?.split(",").slice(0, 2).join(", ");
+        if (label) setStartLocationLabel(label);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [startLocation]);
   const handleClose = () => {
     if (closing || !onGoBack) return;
     // Back to map = secondary "cancel" — toss any timeline edits before
@@ -517,6 +546,31 @@ export default function TimelineScreen({
     return Math.min(ids.length - 1, Math.max(0, idx));
   };
 
+  // Shared drop commit so both the long-press card drag and the immediate
+  // dot drag funnel through the same reorder logic.
+  const commitDrop = () => {
+    if (draggingId === null) return;
+    const id = draggingId;
+    const ids = dragRef.current.reorderableIds;
+    const orig = ids.indexOf(id);
+    const target = computeDropIndex(dragRef.current.pointerY);
+    if (target !== orig && onJourneyChange && orig >= 0) {
+      const newReorder = ids.filter((_, i) => i !== orig);
+      newReorder.splice(target, 0, id);
+      // visited stays first, reordered confirmed in the middle, anything
+      // else trails — same shape as before.
+      const idToItem = new Map(journeyItems.map((j) => [j.id, j]));
+      const visitedItems = journeyItems.filter((j) => visitedIds?.has(j.id));
+      const reorderedItems = newReorder.map((rid) => idToItem.get(rid)).filter(Boolean);
+      const otherItems = journeyItems.filter(
+        (j) => !visitedIds?.has(j.id) && !ids.includes(j.id)
+      );
+      onJourneyChange([...visitedItems, ...reorderedItems, ...otherItems]);
+    }
+    setDraggingId(null);
+    setDragDeltaY(0);
+  };
+
   const onCardPointerDown = (e, id, offset, opts) => {
     const { isVisited = false, isReorderable = false, reorderableIds = [] } = opts || {};
     if (isVisited) return; // visited cards: no swipe, no drag
@@ -553,25 +607,7 @@ export default function TimelineScreen({
   const onCardPointerUp = () => {
     cancelLongPress();
     if (draggingId !== null) {
-      const id = draggingId;
-      const ids = dragRef.current.reorderableIds;
-      const orig = ids.indexOf(id);
-      const target = computeDropIndex(dragRef.current.pointerY);
-      if (target !== orig && onJourneyChange && orig >= 0) {
-        const newReorder = ids.filter((_, i) => i !== orig);
-        newReorder.splice(target, 0, id);
-        // Rebuild journeyItems: visited stays first in current order, then
-        // the reordered non-visited confirmed list, then any other items.
-        const idToItem = new Map(journeyItems.map((j) => [j.id, j]));
-        const visitedItems = journeyItems.filter((j) => visitedIds?.has(j.id));
-        const reorderedItems = newReorder.map((rid) => idToItem.get(rid)).filter(Boolean);
-        const otherItems = journeyItems.filter(
-          (j) => !visitedIds?.has(j.id) && !ids.includes(j.id)
-        );
-        onJourneyChange([...visitedItems, ...reorderedItems, ...otherItems]);
-      }
-      setDraggingId(null);
-      setDragDeltaY(0);
+      commitDrop();
       return;
     }
     const s = swipeStartRef.current;
@@ -662,6 +698,9 @@ export default function TimelineScreen({
   const reorderableIds = confirmedItems
     .filter((c) => !visitedIds?.has(c.id))
     .map((c) => c.id);
+  // Map<stopId, 1-based order> for the rail dot's number badge. Built off
+  // confirmedItems so visited stops keep their original order.
+  const stopNumberById = new Map(confirmedItems.map((c, i) => [c.id, i + 1]));
   const suggestionItems = showSuggestions
     ? rankedSuggestions.map((p) => buildItem(p, userPoint, "suggestion"))
     : [];
@@ -892,7 +931,7 @@ export default function TimelineScreen({
                 <div className="tl-rail-cell"><RailPin /></div>
                 <div className="tl-content-cell">
                   <span className="tl-you-are-here">
-                    {userLocationLabel || "You are here"}
+                    {userLocationLabel ? `You are at ${userLocationLabel}` : "You are here"}
                   </span>
                 </div>
               </div>
@@ -908,7 +947,9 @@ export default function TimelineScreen({
                   <span className="tl-rail-node" aria-hidden="true" />
                 </div>
                 <div className="tl-content-cell">
-                  <span className="tl-start-label">Started here</span>
+                  <span className="tl-start-label">
+                    {startLocationLabel ? `You started from ${startLocationLabel}` : "Started here"}
+                  </span>
                 </div>
               </div>
             );
@@ -950,9 +991,10 @@ export default function TimelineScreen({
 
           return (
             <div
-              className={`tl-row tl-row--card ${isSuggestion ? "tl-row--suggestion" : ""} ${isVisited ? "tl-row--visited" : ""}`}
+              className={`tl-row tl-row--card ${isSuggestion ? "tl-row--suggestion" : ""} ${isVisited ? "tl-row--visited" : ""} ${isBeingDragged ? "tl-row--reorder-dragging" : ""}`}
               key={row.key}
               ref={isReorderable ? setRowRef(item.id) : undefined}
+              style={isBeingDragged ? { transform: `translateY(${dragDeltaY}px)`, transition: "none" } : undefined}
             >
               <div className="tl-rail-cell">
                 {isCurrentTarget ? (
@@ -960,10 +1002,43 @@ export default function TimelineScreen({
                 ) : !isSuggestion && item.id === finalStopId ? (
                   <FinalStopPin />
                 ) : (
-                  <div
-                    className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}${isVisited ? " tl-rail-node--visited" : ""}`}
-                    aria-hidden="true"
-                  />
+                  <div className="tl-rail-stack">
+                    {/* Yellow numbered badge — sits on the rail above the
+                        purple dot, doubles as a drag handle for reorder. */}
+                    {!isSuggestion && stopNumberById.get(item.id) && (
+                      <span
+                        className={`tl-rail-stop-number${isReorderable ? " tl-rail-stop-number--reorderable" : ""}`}
+                        aria-label={isReorderable ? `Stop ${stopNumberById.get(item.id)} — drag to reorder` : `Stop ${stopNumberById.get(item.id)}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={isReorderable ? (e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+                          dragRef.current.startY = e.clientY;
+                          dragRef.current.pointerY = e.clientY;
+                          beginDrag(item.id, reorderableIds);
+                        } : undefined}
+                        onPointerMove={isReorderable ? (e) => {
+                          if (draggingId !== item.id) return;
+                          dragRef.current.pointerY = e.clientY;
+                          setDragDeltaY(e.clientY - dragRef.current.startY);
+                        } : undefined}
+                        onPointerUp={isReorderable ? (e) => {
+                          if (draggingId === item.id) commitDrop();
+                          try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+                        } : undefined}
+                        onPointerCancel={isReorderable ? () => {
+                          if (draggingId === item.id) commitDrop();
+                        } : undefined}
+                      >
+                        {stopNumberById.get(item.id)}
+                      </span>
+                    )}
+                    <div
+                      className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}${isVisited ? " tl-rail-node--visited" : ""}`}
+                      aria-hidden="true"
+                    />
+                  </div>
                 )}
               </div>
               <div className="tl-content-cell">
@@ -982,11 +1057,11 @@ export default function TimelineScreen({
                   const cardOffset = isSuggestion ? REVEALED_SUGGESTION : REVEALED_CONFIRMED;
                   const dx = isDragging ? swipe.dx : (isRevealed ? cardOffset : 0);
                   const swipeTransition = isDragging ? "none" : "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)";
-                  // While the user is reorder-dragging this card, the
-                  // translateY follows the pointer and translateX is 0.
-                  const cardTransform = isBeingDragged
-                    ? `translateY(${dragDeltaY}px)`
-                    : `translateX(${dx}px)`;
+                  // Reorder-dragging is applied to the .tl-row instead of
+                  // the card, so the rail-cell's stop-number badge lifts
+                  // with the card. The card itself only owns the swipe-x
+                  // transform.
+                  const cardTransform = `translateX(${dx}px)`;
                   const cardTransition = isBeingDragged ? "none" : swipeTransition;
                   // Visited cards: no swipe-to-reveal action stack.
                   const showActions = !isVisited;
