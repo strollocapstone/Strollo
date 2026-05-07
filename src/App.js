@@ -18,10 +18,12 @@ import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
 import QuizScreen, { QUIZ_DECK, buildMergedPreset } from './QuizScreen';
 import RewardScreen from './RewardScreen';
+import ProgressScreen from './ProgressScreen';
 import LoadingScreen from './LoadingScreen';
 import WelcomeScreen from './WelcomeScreen';
 import DevSwitch from './DevSwitch';
 import { cancelCloudTts, isCloudTtsPlaying } from './cloudTtsService';
+import { fetchIpLocation } from './mapUtils';
 import './App.css';
 
 function App() {
@@ -97,12 +99,25 @@ function App() {
   useEffect(() => {
     if (!navigator.geolocation) return;
     let cancelled = false;
+    const setFromCoords = (coords) => {
+      if (cancelled) return;
+      // Some browsers / DevTools sensor overrides hand back (0, 0) when
+      // there's no real fix. Skip those so HomeScreen doesn't initialise
+      // its map at the Atlantic.
+      if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
+      setLastKnownLocation([coords.latitude, coords.longitude]);
+    };
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      ({ coords }) => setFromCoords(coords),
+      async () => {
+        // Browser geolocation failed — try IP-based geolocation, then
+        // fall back to MOCK_LOCATION (Sproul Plaza) so the map always
+        // initialises somewhere useful.
         if (cancelled) return;
-        setLastKnownLocation([coords.latitude, coords.longitude]);
+        const ipPos = await fetchIpLocation();
+        if (cancelled) return;
+        setLastKnownLocation(ipPos || [37.8691, -122.2596]);
       },
-      () => { /* permission denied / timeout — HomeScreen will prompt again */ },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
     );
     return () => { cancelled = true; };
@@ -296,6 +311,26 @@ function App() {
               setScreen('home');
             }}
             onResume={() => setScreen('navigation')}
+            onSeeProgress={() => setScreen('progress')}
+          />
+        )}
+        {screen === 'progress' && (
+          <ProgressScreen
+            journeyItems={journeyItems}
+            visitedIds={visitedIds}
+            onGoBack={() => setScreen('reward')}
+            onPlanAnother={() => {
+              // Same wipe-and-home as the reward screen's onComplete so a
+              // fresh exploration starts with a clean slate.
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
+            }}
           />
         )}
         {screen === 'constraints' && (
@@ -332,6 +367,7 @@ function App() {
             setAddedIds={setAddedIds}
             visitedIds={visitedIds}
             userLocation={lastKnownLocation}
+            startLocation={startLocation}
             tripStartTime={tripStartTime}
             journeyItems={journeyItems}
             onJourneyChange={setJourneyItems}

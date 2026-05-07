@@ -673,19 +673,46 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maxZoom={19} />
           <ZoomTracker onZoom={setMapZoom} />
 
-          {/* Faint hint of the FUTURE leg of the route (target → next
-              unvisited stops), drawn along real walking streets via
-              OSRM rather than a straight line cutting across blocks.
-              Falls back to a thin straight dashed line while OSRM is
-              loading so the path doesn't disappear during a fetch. */}
+          {/* WALKED path — start → visited stops → user. Transparent dotted
+              line so the user can see where they've already been without
+              the trail competing visually with the upcoming legs. */}
+          {(() => {
+            if (!userLocation) return null;
+            const walked = [
+              startLocation,
+              ...confirmedStops
+                .filter((s) => visitedIds?.has(s.id))
+                .map((s) => [s.lat, s.lng]),
+              userLocation,
+            ].filter(Boolean);
+            if (walked.length < 2) return null;
+            return (
+              <Polyline
+                positions={walked}
+                pathOptions={{
+                  color: "#8851D4",
+                  weight: 4,
+                  opacity: 0.20,
+                  dashArray: "1 8",
+                  lineCap: "round",
+                  lineJoin: "round",
+                }}
+              />
+            );
+          })()}
+
+          {/* FUTURE leg (after the immediate next stop) — dotted in a
+              lighter purple so it reads as "upcoming" without being so
+              faded it disappears. Uses OSRM geometry where available,
+              falls back to straight lines while it loads. */}
           {remainingRoute && (
             <Polyline
               positions={remainingRoute}
               pathOptions={{
-                color: "#8851D4",
+                color: "#CC84F9",
                 weight: 4,
-                opacity: 0.45,
-                dashArray: "6 8",
+                opacity: 0.85,
+                dashArray: "1 8",
                 lineCap: "round",
                 lineJoin: "round",
               }}
@@ -698,24 +725,24 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 ...remainingStops.map((s) => [s.lat, s.lng]),
               ]}
               pathOptions={{
-                color: "#8851D4",
-                weight: 3,
-                opacity: 0.30,
-                dashArray: "4 8",
+                color: "#CC84F9",
+                weight: 4,
+                opacity: 0.85,
+                dashArray: "1 8",
                 lineCap: "round",
                 lineJoin: "round",
               }}
             />
           )}
 
-          {/* Walking route along streets (from OSRM) — salient leg from
-              user to next target. */}
+          {/* IMMEDIATE next stop — dotted purple line from the user to the
+              next target along real streets (OSRM); falls back to a
+              straight dotted line while the route fetch is in flight. */}
           {walkingRoute && (
-            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }} />
+            <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.95, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
-          {/* Fallback dashed line while route loads */}
           {!walkingRoute && stopPositions.length > 0 && (
-            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.75, dashArray: "6 8", lineCap: "round" }} />
+            <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.85, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
 
           {/* Route waypoint dots — solid purple discs at the spot the user
@@ -767,11 +794,15 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             .map((s) => {
               const expanded = expandedStopId === s.id;
               const isVisited = visitedIds?.has(s.id);
-              // Tier (mirrors HomeScreen): pill on tap, mini purple dot when
-              // zoomed out, labeled dot otherwise. Hidden at extreme low zoom.
+              const seq = confirmedStops.findIndex((c) => c.id === s.id) + 1;
+              // When the journey has multiple stops, every pill stays open
+              // (pill mode) so the user can read the stop's name + order at
+              // a glance. Single-stop journeys keep the original tier
+              // ladder (mini → dot) so a lone pin doesn't dominate the map.
               let mode;
               if (expanded) mode = 'open';
               else if (mapZoom < 12) mode = 'hidden';
+              else if (confirmedStops.length > 1) mode = 'pill';
               else if (mapZoom < 14) mode = 'mini';
               else mode = 'dot';
               if (mode === 'hidden') return null;
@@ -779,7 +810,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 <Marker
                   key={`stop-muted-${s.id}`}
                   position={[s.lat, s.lng]}
-                  icon={getStopIcon(s.name, s.desc, null, mode, !isVisited, true)}
+                  icon={getStopIcon(s.name, s.desc, seq, mode, !isVisited, true)}
                   eventHandlers={{
                     click: (e) => {
                       const target = e.originalEvent?.target;
@@ -801,6 +832,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           {nextTarget && (() => {
             const expanded = expandedStopId === nextTarget.id;
             const isVisited = visitedIds?.has(nextTarget.id);
+            const seq = confirmedStops.findIndex((c) => c.id === nextTarget.id) + 1;
             let mode;
             if (expanded) mode = 'open';
             else if (mapZoom < 12) mode = 'hidden';
@@ -811,7 +843,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               <Marker
                 key={`stop-${nextTarget.id}`}
                 position={[nextTarget.lat, nextTarget.lng]}
-                icon={getStopIcon(nextTarget.name, nextTarget.desc, 1, mode, !isVisited, false)}
+                icon={getStopIcon(nextTarget.name, nextTarget.desc, seq, mode, !isVisited, false)}
                 eventHandlers={{
                   click: (e) => {
                     const target = e.originalEvent?.target;

@@ -187,6 +187,43 @@
   position: relative;
   z-index: 2;
 }
+/* Stack the yellow numbered badge and the purple rail node vertically so
+   the badge sits on the rail just above its dot. Centred horizontally on
+   the rail axis (40px column). */
+.tl-rail-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+/* Yellow numbered badge on the rail — same visual vocabulary as the
+   .sugg-pin-dot pill on the home map. Marks the stop's 1-based position in
+   the journey and doubles as a drag handle when the stop is reorderable. */
+.tl-rail-stop-number {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(255, 213, 1, 0.45);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+.tl-rail-stop-number--reorderable {
+  cursor: grab;
+}
+.tl-rail-stop-number--reorderable:active {
+  cursor: grabbing;
+}
+
 /* Small node on the rail — filled purple dot for planned, outlined for suggestions */
 .tl-rail-node {
   width: 11px;
@@ -278,10 +315,20 @@
 }
 /* Card being long-press-dragged for reorder: lift visually so the user
    sees it's "picked up". touch-action prevents page scroll while dragging. */
-.tl-card--reorder-dragging {
-  z-index: 5;
+/* Lift the entire row (rail badge + card) above all other rows while it's
+   being reorder-dragged, so the dragging item is always the topmost layer.
+   The translateY transform is applied to the row inline; this rule just
+   handles the stacking + visual lift. */
+.tl-row--reorder-dragging {
+  z-index: 50;
+}
+.tl-row--reorder-dragging .tl-card {
   box-shadow: 0 12px 28px rgba(30, 21, 65, 0.20);
-  transform-origin: 50% 50%;
+  cursor: grabbing;
+}
+/* Legacy class kept for the (still-functional) long-press-on-card path —
+   stacking now lives on the row above. */
+.tl-card--reorder-dragging {
   cursor: grabbing;
 }
 
