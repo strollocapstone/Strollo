@@ -153,14 +153,55 @@ const prefersReducedMotion = () =>
   window.matchMedia &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-// ── Mini polaroid for the clothesline ─────────────────────────────────────
-function MiniPolaroid({ item, angle, delay }) {
+// ── Marker scribble overlay ───────────────────────────────────────────────
+// Three irregular strokes over the photo when the card is being "no'd" —
+// asymmetric back-and-forth with mixed L/Q segments plus two crossing slashes
+// at slight angles, so the scribble reads as a quick rejection mark rather
+// than a regular zigzag. Each stroke draws in via stroke-dashoffset with a
+// tiny stagger so it feels like the strokes were laid down one after another.
+function QuizScribble() {
+  const strokes = [
+    { d: "M 10 22 L 86 16 L 18 34 Q 50 46 84 38 L 14 52 L 92 60 L 22 72 Q 50 84 86 76 L 12 88 L 80 92", delay: 0,   width: 11 },
+    { d: "M 28 8 Q 50 38 76 94",  delay: 90,  width: 10 },
+    { d: "M 88 14 L 18 90",        delay: 160, width: 9  },
+  ];
   return (
-    <div className="quiz-mini-wrap" style={{ animationDelay: `${delay}ms` }}>
-      <svg className="quiz-pin" width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <rect x="6" y="2" width="12" height="8" rx="2" fill="#C4A373" />
-        <rect x="10" y="8" width="4" height="14" fill="#C4A373" />
-        <circle cx="9" cy="6" r="1.2" fill="#1E1541" opacity="0.5" />
+    <svg
+      className="quiz-scribble"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {strokes.map((s, i) => (
+        <path
+          key={i}
+          pathLength="100"
+          d={s.d}
+          stroke="#B91C1C"
+          strokeWidth={s.width}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          vectorEffect="non-scaling-stroke"
+          style={{ animationDelay: `${s.delay}ms` }}
+        />
+      ))}
+    </svg>
+  );
+}
+
+// ── Mini polaroid for the clothesline ─────────────────────────────────────
+function MiniPolaroid({ item, angle, delay, skipAnim }) {
+  return (
+    <div
+      className={`quiz-mini-wrap${skipAnim ? " quiz-mini-wrap--no-anim" : ""}`}
+      style={skipAnim ? undefined : { animationDelay: `${delay}ms` }}
+    >
+      {/* Bulletin-board push-pin: small dark needle under a glossy red dome. */}
+      <svg className="quiz-pin" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <line x1="12" y1="13" x2="12" y2="22" stroke="#5A4632" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="12" cy="9" r="5" fill="#D33F3F" />
+        <circle cx="10" cy="7" r="1.4" fill="#FFFFFF" opacity="0.6" />
       </svg>
       <div
         className="quiz-mini"
@@ -182,9 +223,15 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   const [peekDir, setPeekDir] = useState(null);
   const [incomingDir, setIncomingDir] = useState(null); // direction the prior card exited; drives undo slide-back
   const [closing, setClosing] = useState(false);
+  // For up-swipe exits: where on the clothesline the card should fly to
+  // (delta from the stack's neutral position to the new mini's slot center).
+  const [exitTarget, setExitTarget] = useState(null);
   // "drag" uses CSS transition (card has momentum from the finger); "button"
   // uses a keyframes animation with a subtle wind-up so the tap doesn't feel teleport-y.
   const exitSourceRef = useRef("drag");
+  // Card id of the most recently up-swiped polaroid — used to skip the new
+  // mini's drop-in animation since the active card already animated to its slot.
+  const justAddedIdRef = useRef(null);
 
   const startPos = useRef({ x: 0, y: 0, t: 0 });
   const lastPos = useRef({ x: 0, y: 0, t: 0 });
@@ -250,8 +297,10 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
       quizHistory: history,
       completedAt: new Date().toISOString(),
     };
-    // Hold the "All set!" screen long enough to read, THEN fade out, THEN hand off.
-    const READ_MS = 5500;
+    // Reveal sequence settles around 3s (route + pin landed), body copy
+    // fades in around 3.8s. Hold long enough to comfortably read both lines,
+    // THEN fade out, THEN hand off.
+    const READ_MS = 7500;
     const FADE_MS = 600;
     const tFade = setTimeout(() => setClosing(true), READ_MS);
     const tDone = setTimeout(() => {
@@ -264,6 +313,31 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
     if (!current || animatingRef.current) return;
     animatingRef.current = true;
     exitSourceRef.current = source;
+
+    // For "yes" swipes, compute the screen delta from the stack's neutral
+    // center to the slot the new mini will occupy on the clothesline, so the
+    // card animates directly into that spot (no off-screen disappear).
+    if (direction === "up") {
+      const stackEl = cardRef.current?.parentElement; // .quiz-stack — drag-free reference
+      const stackRect = stackEl?.getBoundingClientRect();
+      const lineRect = lineItemsRef.current?.getBoundingClientRect();
+      if (stackRect && lineRect) {
+        const N = history.filter(h => LABELS[h.direction].pinned).length;
+        // Mirror the geometry in QuizScreen.css: items have padding 0 12px,
+        // gap 10, mini is 42×54, mini-wrap padding-top 10.
+        const MINI_W = 42, MINI_H = 54, GAP = 10, PAD_X = 12, PAD_TOP = 10;
+        const miniCx = lineRect.left + PAD_X + N * (MINI_W + GAP) + MINI_W / 2;
+        const miniCy = lineRect.top + PAD_TOP + MINI_H / 2;
+        const stackCx = stackRect.left + stackRect.width / 2;
+        const stackCy = stackRect.top + stackRect.height / 2;
+        setExitTarget({
+          dx: Math.round(miniCx - stackCx),
+          dy: Math.round(miniCy - stackCy),
+        });
+      }
+      justAddedIdRef.current = current.id;
+    }
+
     setExitDir(direction);
 
     const exitMs = prefersReducedMotion() ? 200 : (exitSourceRef.current === "button" ? 720 : 640);
@@ -271,10 +345,11 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
       setHistory(h => [...h, { polaroidId: current.id, direction }]);
       setIndex(i => i + 1);
       setExitDir(null);
+      setExitTarget(null);
       setDrag({ x: 0, y: 0, active: false });
       animatingRef.current = false;
     }, exitMs);
-  }, [current]);
+  }, [current, history]);
 
   const onPointerDown = (e) => {
     if (!current || animatingRef.current) return;
@@ -339,8 +414,24 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
   // Active-card transform
   const cardStyle = (() => {
     if (exitDir) {
-      // Button-triggered exits use a CSS keyframe animation with a small wind-up
-      // so the tap feels intentional instead of an instant teleport.
+      // Up swipe → fly to the clothesline slot and shrink to mini size so the
+      // hand-off to the new mini polaroid looks like one continuous element.
+      if (exitDir === "up" && exitTarget) {
+        if (exitSourceRef.current === "button") {
+          // Keyframe carries the wind-up; CSS vars feed the per-swipe target.
+          return {
+            animation: `quiz-exit-up 720ms cubic-bezier(0.5, 0.05, 0.3, 1) forwards`,
+            "--exit-up-dx": `${exitTarget.dx}px`,
+            "--exit-up-dy": `${exitTarget.dy}px`,
+          };
+        }
+        return {
+          transform: `translate(${exitTarget.dx}px, ${exitTarget.dy}px) rotate(-4deg) scale(0.17)`,
+          transition: "transform 640ms cubic-bezier(0.22, 1, 0.36, 1)",
+          opacity: 1,
+        };
+      }
+      // Down swipe (no thanks) — keep flying off-screen (the tear effect plays on top).
       if (exitSourceRef.current === "button") {
         return {
           animation: `quiz-exit-${exitDir} 720ms cubic-bezier(0.5, 0.05, 0.3, 1) forwards`,
@@ -381,9 +472,81 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
           <div className="quiz-blob quiz-blob--3" />
         </div>
         <div className={`quiz-done-inner${closing ? " quiz-done-inner--fading" : ""}`}>
-          <h1>All set!</h1>
-          <p>We've got a feel for your vibe.</p>
-          <p className="quiz-done-hint">You can tweak these later in your settings.</p>
+          <h1>Shaping your city for you</h1>
+          {/* Hand-drawn route reveal — a faint pencil sketch hints at the
+              path, a Strollo-purple marker draws over it, push-pin-styled
+              place dots ping into existence as the marker passes them, and a
+              yellow location pin lands at the destination with a soft drop
+              and a settled bob. Sparkles fade in around the pin once it
+              arrives so the moment of "arrival" reads. */}
+          <div className="quiz-done-canvas" aria-hidden="true">
+            <svg className="quiz-done-canvas-svg" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet">
+              {/* Pencil guide — barely visible, gives the eye a target */}
+              <path
+                className="qd-guide"
+                d="M 24 138 C 50 100, 84 124, 116 92 S 156 54, 184 62 S 214 42, 220 36"
+                fill="none"
+                stroke="#8851D4"
+                strokeOpacity="0.16"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeDasharray="2 5"
+              />
+              {/* Marker stroke draws over the sketch */}
+              <path
+                className="qd-route"
+                pathLength="100"
+                d="M 24 138 C 50 100, 84 124, 116 92 S 156 54, 184 62 S 214 42, 220 36"
+                fill="none"
+                stroke="#8851D4"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Place markers — bulletin push-pins (needle + glossy dome)
+                  with a ping ring centered on the dome. The pin's needle tip
+                  lands on the route point, dome rises above. */}
+              {[
+                { x: 58,  y: 118, color: "#D33F3F", delay: "700ms" },
+                { x: 108, y: 92,  color: "#E8B43F", delay: "1100ms" },
+                { x: 152, y: 58,  color: "#5C9F66", delay: "1500ms" },
+                { x: 194, y: 58,  color: "#5276A8", delay: "1900ms" },
+              ].map((p, i) => (
+                <g key={i} transform={`translate(${p.x} ${p.y})`} style={{ "--qd-delay": p.delay }}>
+                  <circle className="qd-poi-ring" cx="0" cy="-9" r="5" stroke={p.color} />
+                  <g className="qd-poi-pin">
+                    <line x1="0" y1="-4" x2="0" y2="0" stroke="#5A4632" strokeWidth="1.6" strokeLinecap="round" />
+                    <circle cx="0" cy="-9" r="5" fill={p.color} />
+                    <circle cx="-1.5" cy="-10.5" r="1.3" fill="#FFFFFF" opacity="0.6" />
+                  </g>
+                </g>
+              ))}
+              {/* Destination flag (drops with bounce, then bobs gently) —
+                  matches the yellow flag from the WalkCompanionWidget so the
+                  "you've arrived" cue reads consistently across the app. */}
+              <g transform="translate(220 36)">
+                <g className="qd-pin-drop">
+                  <g className="qd-pin-bob">
+                    <line x1="0" y1="0" x2="0" y2="-18" stroke="#FFD501" strokeWidth="2.2" strokeLinecap="round" />
+                    <path d="M 0 -18 L 10 -15 L 0 -11 Z" fill="#FFD501" />
+                    <circle cx="0" cy="0" r="2" fill="#FFD501" />
+                  </g>
+                </g>
+              </g>
+              {/* Sparkles around the destination after it lands */}
+              <g className="qd-sparkles">
+                <circle cx="206" cy="14" r="1.4" />
+                <circle cx="232" cy="6"  r="1" />
+                <circle cx="236" cy="48" r="1.2" />
+                <circle cx="208" cy="50" r="0.9" />
+              </g>
+            </svg>
+          </div>
+          {/* Body copy waits for the loading reveal to finish before fading in. */}
+          <div className="quiz-done-final">
+            <p>All set! We've got a feel for your vibe.</p>
+            <p className="quiz-done-hint">You can tweak these later in your settings.</p>
+          </div>
         </div>
       </div>
     );
@@ -427,21 +590,22 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
         <svg className="quiz-line" viewBox="0 0 320 40" preserveAspectRatio="none">
           <path d="M 4 6 Q 160 44 316 6" stroke="#3E2A10" strokeWidth="1.3" fill="none" opacity="0.55" />
         </svg>
-        {/* Decorative pins — show regardless of pinned items */}
+        {/* Decorative bulletin-board push-pins — varied colors so the empty
+            line reads like a freshly cleared cork board. */}
         <div className="quiz-line-decor">
           {[
-            { left: "8%",  top: 6,  rot: -10 },
-            { left: "22%", top: 12, rot: 6 },
-            { left: "38%", top: 18, rot: -4 },
-            { left: "54%", top: 20, rot: 8 },
-            { left: "70%", top: 14, rot: -6 },
-            { left: "86%", top: 8,  rot: 10 },
+            { left: "8%",  top: 6,  rot: -10, color: "#D33F3F" },
+            { left: "22%", top: 12, rot: 6,   color: "#E8B43F" },
+            { left: "38%", top: 18, rot: -4,  color: "#5276A8" },
+            { left: "54%", top: 20, rot: 8,   color: "#8851D4" },
+            { left: "70%", top: 14, rot: -6,  color: "#5C9F66" },
+            { left: "86%", top: 8,  rot: 10,  color: "#D77F2A" },
           ].map((p, i) => (
             <svg key={i} className="quiz-line-decor-pin" width="12" height="12" viewBox="0 0 24 24" fill="none"
               style={{ left: p.left, top: p.top, transform: `translateX(-50%) rotate(${p.rot}deg)` }}>
-              <rect x="6" y="2" width="12" height="8" rx="2" fill="#C4A373" />
-              <rect x="10" y="8" width="4" height="14" fill="#C4A373" />
-              <circle cx="9" cy="6" r="1.2" fill="#1E1541" opacity="0.5" />
+              <line x1="12" y1="13" x2="12" y2="22" stroke="#5A4632" strokeWidth="1.6" strokeLinecap="round" />
+              <circle cx="12" cy="9" r="5" fill={p.color} />
+              <circle cx="10" cy="7" r="1.4" fill="#FFFFFF" opacity="0.55" />
             </svg>
           ))}
         </div>
@@ -455,7 +619,15 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
           onPointerLeave={handleLineUp}
         >
           {pinnedItems.map((it, i) => (
-            <MiniPolaroid key={`${it.id}-${i}`} item={it} angle={it.angle} delay={it.delay} />
+            <MiniPolaroid
+              key={`${it.id}-${i}`}
+              item={it}
+              angle={it.angle}
+              delay={it.delay}
+              /* The just-added mini takes over directly from the active card's
+                 fly-to-clothesline landing — skip its drop-in pin animation. */
+              skipAnim={i === pinnedItems.length - 1 && it.id === justAddedIdRef.current}
+            />
           ))}
         </div>
       </div>
@@ -500,23 +672,28 @@ export default function QuizScreen({ initialPreferences, onComplete, onClose, on
                 onPointerUp={isActive ? onPointerUp : undefined}
                 onPointerCancel={isActive ? onPointerUp : undefined}
               >
+                <span className="quiz-card-index" aria-label={`Card ${label} of ${total}`}>
+                  {label}<span className="quiz-card-index-sep">/</span>{total}
+                </span>
                 <div className="quiz-card-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
-                <div className="quiz-card-caption">
-                  <span className="quiz-card-index">{label}/{total}</span> {card.caption}
-                </div>
+                <div className="quiz-card-caption">{card.caption}</div>
                 {isActive && scribbleDir === "down" && (
                   <div className="quiz-tear" aria-hidden="true">
                     <div className="quiz-tear-half quiz-tear-half--top">
+                      <span className="quiz-card-index">
+                        {label}<span className="quiz-card-index-sep">/</span>{total}
+                      </span>
                       <div className="quiz-tear-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
-                      <div className="quiz-tear-caption">
-                        <span className="quiz-card-index">{label}/{total}</span> {card.caption}
-                      </div>
+                      <div className="quiz-tear-caption">{card.caption}</div>
+                      <QuizScribble />
                     </div>
                     <div className="quiz-tear-half quiz-tear-half--bottom">
+                      <span className="quiz-card-index">
+                        {label}<span className="quiz-card-index-sep">/</span>{total}
+                      </span>
                       <div className="quiz-tear-photo" style={card.image ? { backgroundImage: `url(${card.image})` } : undefined} />
-                      <div className="quiz-tear-caption">
-                        <span className="quiz-card-index">{label}/{total}</span> {card.caption}
-                      </div>
+                      <div className="quiz-tear-caption">{card.caption}</div>
+                      <QuizScribble />
                     </div>
                   </div>
                 )}
