@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-30
-// BUILD: a02bbfd
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
@@ -48,8 +48,10 @@ import { cancelCloudTts, isMobile } from "./cloudTtsService";
 
 // Progress strip that replaces the divider above the buttons section.
 // Renders boots → dotted curve → flag, where the boots position scales
-// with `progress` (0..1) and the curve segment behind the boots is light
-// purple ("walked") while the segment ahead is brand purple ("remaining").
+// with `progress` (0..1). The dot colors mirror the map's route-pin
+// language so the widget reads as one piece with the map: passed dots
+// take the muted/transparent purple (the visited-stop pin tint); upcoming
+// dots take the solid #8851D4 (the active stop's route-waypoint color).
 // Five-bar sound-wave glyph; matches the audio button used in the
 // HomeScreen search bar. Pass `active` to start the bouncy animation.
 function SoundBars({ active, color = "#FFD501" }) {
@@ -65,7 +67,7 @@ function SoundBars({ active, color = "#FFD501" }) {
   );
 }
 
-function ProgressStrip({ progress, disabled = false }) {
+function ProgressStrip({ progress, disabled = false, atTarget = false }) {
   const idSuffix = useId().replace(/:/g, "");
   const W = 320;
   const H = 32;
@@ -75,6 +77,12 @@ function ProgressStrip({ progress, disabled = false }) {
   const path = `M ${PAD} ${H / 2} C ${PAD + innerW * 0.25} 4, ${PAD + innerW * 0.45} ${H - 4}, ${PAD + innerW * 0.55} ${H / 2} S ${PAD + innerW * 0.85} 4, ${W - PAD} ${H / 2}`;
   const p = Math.max(0, Math.min(1, progress));
   const splitX = PAD + innerW * p;
+  // When the user is on the stop, the boots' progress-derived position
+  // sits on top of the flag. Lock the boots to a slot just LEFT of the
+  // flag so the two glyphs read side-by-side instead of overlapping.
+  const bootsLeft = atTarget
+    ? `calc(100% - 42px)`
+    : `calc(${PAD}px + (100% - ${PAD * 2}px) * ${p})`;
   return (
     <div className={`wcw-progress${disabled ? " wcw-progress--disabled" : ""}`} aria-hidden="true">
       <svg
@@ -95,8 +103,8 @@ function ProgressStrip({ progress, disabled = false }) {
         <path
           d={path}
           fill="none"
-          stroke="rgba(255, 213, 1, 0.45)"
-          strokeWidth="1.6"
+          stroke="rgba(136, 81, 212, 0.65)"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray="2 4"
           clipPath={`url(#wcw-walked-${idSuffix})`}
@@ -113,7 +121,7 @@ function ProgressStrip({ progress, disabled = false }) {
       </svg>
       <span
         className="wcw-progress-boots"
-        style={{ left: `calc(${PAD}px + (100% - ${PAD * 2}px) * ${p})` }}
+        style={{ left: bootsLeft }}
       >
         <svg width="11" height="18" viewBox="0 0 28 46" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 2 C5 2 3 5 3 10 L3 32 C3 38 5 44 10 44 L17 44 C20 44 22 42 23 38 L24 32 C24 28 22 26 19 26 L18 26 L18 10 C18 5 16 2 13 2 Z" fill="#F7F3F5"/>
@@ -138,6 +146,11 @@ function ProgressStrip({ progress, disabled = false }) {
 }
 
 function WalkCompanionWidgetInner({
+  // Dev-mode preview key. When set to one of the WIDGET_PREVIEW_KEYS the
+  // widget overrides selected internal state (navListening, aiPending) and
+  // its render flow so designers can preview every state from the
+  // NavigationMapScreen profile menu without driving the actual flows.
+  previewState = null,
   destination = "your next stop",
   instruction = "—",
   distance = "—",
@@ -862,7 +875,16 @@ function WalkCompanionWidgetInner({
   // also morph the nav-section below the divider into a "you're saying"
   // view — keep the normal walking chrome (Heading to / turn / DIST/ETA)
   // visible so the user can still see where they're going while talking.
-  const navListening = listening && !(convOpen && !isEmpty);
+  const navListening = previewState === 'user-speaking'
+    || (listening && !(convOpen && !isEmpty));
+  // Dev-preview overrides: aiPending ("Strollo thinking…" pulse on the
+  // speak button) is forced for the matching preview key. The transcript
+  // shown during the listening preview uses a fixed sample so designers
+  // see real text instead of an empty quote.
+  const previewAiPending = previewState === 'strollo-thinking';
+  const previewTranscript = previewState === 'user-speaking'
+    ? "Find me a coffee shop nearby"
+    : null;
   const glowing = !!suggestion && !listening;
 
   // Drag-up to expand into the full-screen chat. Tracks pointerdown only when
@@ -987,17 +1009,17 @@ function WalkCompanionWidgetInner({
               <div className="wcw-bottom-right">
                 <button
                   type="button"
-                  className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${aiPending ? " wcw-speak--pending" : ""}`}
+                  className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${(aiPending || previewAiPending) ? " wcw-speak--pending" : ""}`}
                   onClick={onSpeakToggle}
-                  disabled={aiPending}
-                  aria-label={aiPending ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
+                  disabled={aiPending || previewAiPending}
+                  aria-label={(aiPending || previewAiPending) ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
                   aria-pressed={speakActive}
-                  aria-busy={aiPending}
+                  aria-busy={aiPending || previewAiPending}
                 >
-                  {aiPending
+                  {(aiPending || previewAiPending)
                     ? <span className="wcw-speak-spinner" aria-hidden="true" />
                     : <SoundBars active={speakActive} color="currentColor" />}
-                  <span className="wcw-speak-label">{aiPending ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
+                  <span className="wcw-speak-label">{(aiPending || previewAiPending) ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
                 </button>
               </div>
             </div>
@@ -1108,7 +1130,7 @@ function WalkCompanionWidgetInner({
       {/* Empty-state body = Strollo Conversation port (Tips / Reel / Minimized) */}
       {isEmpty && convMode === "tips" && (
         <div className="strollo-tips-body">
-          {tipsLoading ? (
+          {(tipsLoading || previewState === 'no-stops') ? (
             <div className="strollo-tips-loading" role="status" aria-live="polite">
               <div className="strollo-tips-loading-head">
                 {!(trip && trip.length > 0) && (
@@ -1180,15 +1202,6 @@ function WalkCompanionWidgetInner({
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
           )}
-          {/* Prompt pills only show in the no-stops state (inside the
-              dotted suggestion box above) and in the tip-loaded fallback.
-              Once the user has saved one or more stops the widget
-              switches to the "Your stops are added." headline and the
-              tags are intentionally hidden so the user focuses on
-              tapping Start exploring. */}
-          {!tipsLoading && !(trip && trip.length > 0) && (
-            <PromptPills onTap={handlePromptTap} />
-          )}
         </div>
       )}
 
@@ -1220,8 +1233,26 @@ function WalkCompanionWidgetInner({
       {/* Walking-state body — preserved verbatim for non-empty journeys */}
       {!isEmpty && (
         navListening ? (
-          <h2 className="wcw-turn">{`“${transcript || "…"}”`}</h2>
-        ) : paused ? null : suggestion ? (
+          <h2 className="wcw-turn">{`“${(transcript || previewTranscript) || "…"}”`}</h2>
+        ) : paused ? null : (previewState === 'incident-with-suggestion' && narration && suggestion) ? (
+          // Dual-render preview: live incident announced via narration AND
+          // a follow-up suggestion (e.g., reroute) presented inline. The
+          // ordinary mutually-exclusive branches keep one or the other,
+          // so we open this short-circuit only for the explicit preview key.
+          <>
+            <p className="wcw-narration">{narration}</p>
+            <div className="wcw-suggestion" role="status">
+              <span className="wcw-suggestion-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M12 2a7 7 0 0 0-4 12.7 4 4 0 0 1 1.5 3.1V18h5v-.2a4 4 0 0 1 1.5-3.1A7 7 0 0 0 12 2z" />
+                </svg>
+              </span>
+              <span className="wcw-suggestion-text">{suggestion}</span>
+            </div>
+          </>
+        ) : suggestion ? (
           <div className="wcw-suggestion" role="status">
             <span className="wcw-suggestion-icon" aria-hidden="true">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1300,7 +1331,7 @@ function WalkCompanionWidgetInner({
           toward the destination flag. Sits between the stats row and
           the bottom buttons during a walk OR a stops-added preview. */}
       {!isEmpty && (
-        <ProgressStrip progress={progress} />
+        <ProgressStrip progress={progress} atTarget={atTarget} />
       )}
 
       {!(convOpen && !isEmpty) && (

@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: cda47b3
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //
@@ -20,7 +20,7 @@ import "./NavigationMapScreen.css";
 import WalkCompanionWidget from "./WalkCompanionWidget";
 import { getWalkingRoute, geocodePlace } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
-import { youIcon, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
+import { youIcon, youIconBelow, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
 
 // ── Stop label icon for journey locations on map ──────────────────────────
 // Category → Material Symbol glyph (mirrors the one used on HomeScreen for added pins).
@@ -221,7 +221,7 @@ function computeBearing([lat1, lng1], [lat2, lng2]) {
 }
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true, widgetPreview = null, onSetWidgetPreview }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -298,10 +298,21 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     return icon;
   }, []);
 
+  // Initial map center — real anchor when we have one (saved start, first
+  // journey item), otherwise [0, 0] so Leaflet still mounts. The boots
+  // marker is gated on `hasRealUserLocation` below so it never paints on
+  // the (0, 0) fallback (the Atlantic off Africa) before WatchLocation /
+  // LocateMe deliver real coords.
   const initialCenter = startLocation || (journeyItems.length > 0 && journeyItems[0].lat
     ? [journeyItems[0].lat, journeyItems[0].lng]
     : [0, 0]);
-  const [userLocation, setUserLocation] = useState(initialCenter);
+  const isRealLatLng = (p) => Array.isArray(p) && p.length === 2
+    && typeof p[0] === 'number' && typeof p[1] === 'number'
+    && !(p[0] === 0 && p[1] === 0);
+  const [userLocation, setUserLocation] = useState(
+    isRealLatLng(initialCenter) ? initialCenter : null
+  );
+  const hasRealUserLocation = isRealLatLng(userLocation);
   // Unique-per-mount key for the MapContainer. Prevents the
   // "Map container is already initialized" crash that fires in
   // production when React 18 reuses a DOM node across screen
@@ -344,6 +355,38 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // (none → narration → suggestion → narration+suggestion → none).
   const [aiTestMode, setAiTestMode] = useState(0);
   const [aiSampleIdx, setAiSampleIdx] = useState(0);
+
+  // ── Widget state preview (dev / design only) ────────────────────────────
+  // Profile FAB opens a menu with the 11 widget states designers want to
+  // verify. Picking an option flows up through onSetWidgetPreview to App.js
+  // (which configures the journey + screen) and back down via the
+  // `widgetPreview` prop, which we use here to override the aiNarration /
+  // aiSuggestion / atTarget signals so the active-walk render branches in
+  // WalkCompanionWidget match the chosen preview.
+  const [isPreviewMenuOpen, setIsPreviewMenuOpen] = useState(false);
+  const PREVIEW_STATES = [
+    { key: 'no-stops',                 label: 'No locations added' },
+    { key: 'stops-added',              label: 'Stops added (start not selected)' },
+    { key: 'walking',                  label: 'Walking to stop' },
+    { key: 'arrived',                  label: 'Arrived at a stop' },
+    { key: 'user-speaking',            label: 'User speaking' },
+    { key: 'strollo-thinking',         label: 'Strollo thinking…' },
+    { key: 'strollo-speaking',         label: 'Strollo speaking' },
+    { key: 'nudge-add-stop',           label: 'Nudge: add a stop' },
+    { key: 'nudge-tidbit',             label: 'Nudge: tidbit' },
+    { key: 'nudge-incident',           label: 'Nudge: live incident' },
+    { key: 'incident-with-suggestion', label: 'Incident + suggestion' },
+  ];
+  const PREVIEW_NARRATION = {
+    'strollo-speaking':         "On your left — the historic Claremont Hotel, built in 1915 and once nicknamed the \"Million Dollar Hotel\".",
+    'nudge-tidbit':             "Did you know? This block was a thriving jazz district back in the 1940s.",
+    'incident-with-suggestion': "Heads up — there's roadwork on Market Street ahead.",
+  };
+  const PREVIEW_SUGGESTION = {
+    'nudge-add-stop':           "Tartine Bakery is two blocks away — want to add it as a stop?",
+    'nudge-incident':           "Heads up — there's roadwork on Market Street ahead. Tap to reroute.",
+    'incident-with-suggestion': "I can route you down 17th Street instead — want me to switch?",
+  };
   const AI_NARRATIONS = [
     "On your left — the historic Claremont Hotel, built in 1915 and once nicknamed the \"Million Dollar Hotel\".",
     "You're walking along Telegraph Ave, the spine of UC Berkeley's counterculture in the 1960s.",
@@ -354,12 +397,19 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     "A nearby café opens in 5 minutes — want to add it as a stop?",
     "Did you know? This corner appeared in the film The Graduate.",
   ];
-  const aiNarration = aiTestMode === 1 || aiTestMode === 3
-    ? AI_NARRATIONS[aiSampleIdx % AI_NARRATIONS.length]
-    : "";
-  const aiSuggestion = aiTestMode === 2 || aiTestMode === 3
-    ? AI_SUGGESTIONS[aiSampleIdx % AI_SUGGESTIONS.length]
-    : "";
+  // Preview key wins over the existing aiTestMode cycler so designers can
+  // jump straight to a specific narration / suggestion variant without
+  // tapping through the four-step cycle.
+  const aiNarration = (widgetPreview && PREVIEW_NARRATION[widgetPreview]) ?? (
+    aiTestMode === 1 || aiTestMode === 3
+      ? AI_NARRATIONS[aiSampleIdx % AI_NARRATIONS.length]
+      : ""
+  );
+  const aiSuggestion = (widgetPreview && PREVIEW_SUGGESTION[widgetPreview]) ?? (
+    aiTestMode === 2 || aiTestMode === 3
+      ? AI_SUGGESTIONS[aiSampleIdx % AI_SUGGESTIONS.length]
+      : ""
+  );
   // Snapshot of the route distance (m) when each next-stop was first targeted,
   // so the companion widget's progress strip can render walked vs remaining.
   const initialDistRef = React.useRef({ id: null, dist: 0 });
@@ -433,7 +483,25 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // made it. Now enjoy it.") state without actually walking 300 ft up to
   // a real stop. Force-flag OR'd with the live geofence test below.
   const [forceAtTarget, setForceAtTarget] = useState(false);
-  const isAtTarget = forceAtTarget || (liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M);
+  const isAtTarget = widgetPreview === 'arrived' || forceAtTarget || (liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M);
+
+  // Boots overlap the stop pin once the user is on top of it. When the
+  // user is within ~30 m of ANY confirmed stop, swap the boots to the
+  // "below" variant so they hang beneath the purple route-dot instead of
+  // covering the pill. Threshold is tighter than FT_300_M so the boots
+  // only flip when the icons would actually collide on screen.
+  const NEAR_STOP_M = 30;
+  const isNearAnyStop = React.useMemo(() => {
+    if (!userLocation) return false;
+    if (widgetPreview === 'arrived') return true;
+    if (!confirmedStops?.length) return false;
+    for (const s of confirmedStops) {
+      if (s.lat == null || s.lng == null) continue;
+      const m = haversineKm(userLocation, [s.lat, s.lng]) * 1000;
+      if (m <= NEAR_STOP_M) return true;
+    }
+    return false;
+  }, [userLocation, confirmedStops, widgetPreview]);
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent
@@ -741,7 +809,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           {walkingRoute && (
             <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.95, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
-          {!walkingRoute && stopPositions.length > 0 && (
+          {!walkingRoute && userLocation && stopPositions.length > 0 && (
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.85, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
 
@@ -751,10 +819,17 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               where the stop pins are showing as pills/labeled-dots
               (mapZoom >= 14); below that, pins demote to bare mini-dots
               and an extra route-dot would orphan itself with no pill to
-              anchor to. */}
-          {!isExplorationMode && userLocation && confirmedStops.length > 0 && mapZoom >= 14 && (
+              anchor to. Single-stop journeys get the dot even in
+              exploration mode so the lone pin matches the HomeScreen
+              treatment (purple route-dot underneath the yellow pill). */}
+          {userLocation && confirmedStops.length > 0 && mapZoom >= 14 && (!isExplorationMode || confirmedStops.length === 1) && (
             <>
               {(() => {
+                // Start dot only renders when a real start anchor exists
+                // (i.e. user has pressed Start exploring). In exploration
+                // mode startLocation is null, so the dot self-suppresses —
+                // the single-stop case still gets its own dot below.
+                if (isExplorationMode) return null;
                 // Snap the start dot to the first vertex of the OSRM route
                 // when one is loaded — the route is snapped to the road
                 // network, so anchoring the dot at the raw GPS coords would
@@ -795,22 +870,26 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               const expanded = expandedStopId === s.id;
               const isVisited = visitedIds?.has(s.id);
               const seq = confirmedStops.findIndex((c) => c.id === s.id) + 1;
-              // When the journey has multiple stops, every pill stays open
-              // (pill mode) so the user can read the stop's name + order at
-              // a glance. Single-stop journeys keep the original tier
-              // ladder (mini → dot) so a lone pin doesn't dominate the map.
+              // Pill mode for any confirmed stop in this loop so the name
+              // and sequence number are always visible — single-stop
+              // journeys (especially in exploration mode where this loop
+              // owns the lone pin) match HomeScreen's added-pill visual.
+              // Demote to mini below mapZoom 14 only when the pin would
+              // otherwise crowd a tight cluster — at single-stop scale it
+              // never does, so we keep the pill there too.
               let mode;
               if (expanded) mode = 'open';
               else if (mapZoom < 12) mode = 'hidden';
-              else if (confirmedStops.length > 1) mode = 'pill';
-              else if (mapZoom < 14) mode = 'mini';
-              else mode = 'dot';
+              else mode = 'pill';
               if (mode === 'hidden') return null;
+              // Lone confirmed stop = the journey itself; render at full
+              // strength like HomeScreen instead of fading to muted-purple.
+              const isLone = confirmedStops.length === 1;
               return (
                 <Marker
                   key={`stop-muted-${s.id}`}
                   position={[s.lat, s.lng]}
-                  icon={getStopIcon(s.name, s.desc, seq, mode, !isVisited, true)}
+                  icon={getStopIcon(s.name, s.desc, seq, mode, !isVisited, !isLone)}
                   eventHandlers={{
                     click: (e) => {
                       const target = e.originalEvent?.target;
@@ -878,7 +957,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           })()}
 
           {/* User position */}
-          <Marker position={userLocation} icon={youIcon} />
+          {hasRealUserLocation && <Marker position={userLocation} icon={isNearAnyStop ? youIconBelow : youIcon} />}
           <WatchLocation onUpdate={setUserLocation} />
 
           {/* AI-suggested pin from Gemini's last reply. Pans into the
@@ -923,15 +1002,72 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       <button
         type="button"
         className="fab-circle top-right-btn"
-        aria-label={`Profile (at target ${forceAtTarget ? "on" : "off"}, AI test mode ${aiTestMode})`}
-        onClick={() => {
-          setForceAtTarget((v) => !v);
-          setAiTestMode((m) => (m + 1) % 4);
-          setAiSampleIdx((i) => i + 1);
-        }}
+        aria-label="Open widget state preview menu"
+        aria-haspopup="menu"
+        aria-expanded={isPreviewMenuOpen}
+        onClick={() => setIsPreviewMenuOpen((v) => !v)}
       >
         <span className="top-right-initials">ST</span>
       </button>
+      {isPreviewMenuOpen && (
+        <>
+          <div
+            className="nav-preview-menu-backdrop"
+            onClick={() => setIsPreviewMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="nav-preview-menu" role="menu" aria-label="Widget state preview">
+            <div className="nav-preview-menu-header">
+              <span className="nav-preview-menu-title">Widget state preview</span>
+              {widgetPreview && (
+                <button
+                  type="button"
+                  className="nav-preview-menu-exit"
+                  onClick={() => {
+                    if (onSetWidgetPreview) onSetWidgetPreview(null);
+                    setForceAtTarget(false);
+                    setAiTestMode(0);
+                    setIsPreviewMenuOpen(false);
+                  }}
+                >
+                  Exit preview
+                </button>
+              )}
+            </div>
+            <ul className="nav-preview-menu-list" role="none">
+              {PREVIEW_STATES.map((opt) => {
+                const isActive = widgetPreview === opt.key;
+                return (
+                  <li key={opt.key} role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`nav-preview-menu-item${isActive ? " nav-preview-menu-item--active" : ""}`}
+                      onClick={() => {
+                        if (onSetWidgetPreview) onSetWidgetPreview(opt.key);
+                        // Reset the manual cycler so its samples don't compete
+                        // with the preview's curated copy.
+                        setAiTestMode(0);
+                        setForceAtTarget(false);
+                        setIsPreviewMenuOpen(false);
+                      }}
+                    >
+                      <span className="nav-preview-menu-item-label">{opt.label}</span>
+                      {isActive && (
+                        <span className="nav-preview-menu-item-check" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </>
+      )}
 
       {/* ── TOP BAR (hidden while companion widget owns the top; back is
            reachable via the journey flag in the bottom-right stack) ── */}
@@ -1120,6 +1256,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           <div className="wcw-host" style={{ visibility: showVoice ? undefined : 'hidden' }}>
           <WalkCompanionWidget
             ref={widgetRef}
+            previewState={widgetPreview}
             destination={nextWaypoint}
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
