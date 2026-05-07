@@ -1,3 +1,14 @@
+// FEATURE: walk-nav
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
+// DEPENDS ON: ./WalkCompanionWidget
+// CONSUMED BY: leaf  (design-preview component; not currently mounted by App.js)
+//
+// Mock of the OS lock screen during an active walk: dark backdrop with
+// WalkCompanionWidget mounted as a notification-like overlay. Used as a
+// design preview surface; not invoked by the production flow.
+
 // LockScreen represents the phone's lock screen state during a walk —
 // it is NOT an in-app screen. When the user locks their phone mid-walk,
 // the OS shows this: a dark backdrop with the Walk Companion widget

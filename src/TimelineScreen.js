@@ -1,3 +1,14 @@
+// FEATURE: timeline
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
+// DEPENDS ON: leaf  (NavigationMapScreen renders behind as backdrop, but TimelineScreen does not import it — App.js mounts both)
+// CONSUMED BY: ./App.js
+//
+// Journey timeline overlay. Mounts on top of NavigationMapScreen as a sheet
+// listing the user's added stops, their visited/skipped state, and per-stop
+// dwell time. Edit interactions delegate back up to App.js via callbacks.
+
 import React, { useState, useEffect } from "react";
 import "./TimelineScreen.css";
 import { fetchNearbyPlaces } from "./geminiService";

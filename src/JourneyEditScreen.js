@@ -1,3 +1,14 @@
+// FEATURE: walk-nav
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
+// DEPENDS ON: leaf
+// CONSUMED BY: leaf  (design-preview component; not currently mounted by NavigationMapScreen)
+//
+// Journey-edit modal for during-walk: lets the user reorder/remove upcoming
+// stops without leaving the walk. See Design.md "Journey Edit Screen
+// (During-Walk)" for the spec.
+
 // Opens from the flag icon on NavigationMapScreen.
 // See Design.md "Journey Edit Screen (During-Walk)" for the full spec.
 import React, { useState } from "react";

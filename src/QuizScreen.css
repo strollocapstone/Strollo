@@ -117,8 +117,8 @@
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-/* Soft fade-in entry — used when the quiz arrives directly from IntroScreen
-   so the hand-off mirrors LoadingScreen → IntroScreen (gentle reveal rather
+/* Soft fade-in entry — used when the quiz arrives directly from WelcomeScreen
+   so the hand-off mirrors LoadingScreen → WelcomeScreen (gentle reveal rather
    than a sheet rising from the bottom). Other entry paths keep `quiz-slide-up`. */
 .quiz-screen--enter-fade {
   animation: quiz-screen-in 0.6s cubic-bezier(0.22, 1, 0.36, 1);

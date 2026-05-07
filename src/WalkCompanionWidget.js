@@ -1,3 +1,17 @@
+// FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-30
+// BUILD: a02bbfd
+// DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
+// CONSUMED BY: ./NavigationMapScreen, ./LockScreen
+//
+// Bottom-pinned dynamic-island walk widget. Currently mixes: nav chrome
+// (turn line, DIST/ETA, skip/end buttons), nav-maneuver TTS, STT-polling
+// conversation session, in-walk conversation overlay, tip card, drag gesture.
+// PHASE 4 of the refactor splits this into widgets/WalkCompanionWidget/{NavChrome,
+// ConvOverlay, SpeakButton, ProgressStrip, SoundBars} + hooks/useConvSession +
+// hooks/useNavTts. Don't add features inline — extract to one of those targets.
+
 // Walk Companion minimized widget (bottom-pinned, during-walk).
 //
 // CANONICAL NAVIGATION MODULE — this is the single shared component for
@@ -1066,17 +1080,12 @@ function WalkCompanionWidgetInner({
                 onClick={onArrived}
                 aria-label={`Confirm you have arrived at ${destination}`}
               >
-                {isLastStop ? (
-                  /* Destination pin for the final stop. */
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="#8851D4" stroke="none" aria-hidden="true">
-                    <path d="M12 22s7-7.06 7-12a7 7 0 1 0-14 0c0 4.94 7 12 7 12z"/>
-                    <circle cx="12" cy="10" r="2.6" fill="#FFFFFF"/>
-                  </svg>
-                ) : (
-                  /* Solid purple dot for any earlier stop. */
-                  <span className="wcw-skip-dot" />
-                )}
-                <span>I am here</span>
+                <svg className="wcw-skip-flag" width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
+                  <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3 L18 6 L8 10 Z"/>
+                  <circle cx="8" cy="21" r="2"/>
+                </svg>
+                <span>I've arrived</span>
               </button>
             ) : canSkip ? (
               <button

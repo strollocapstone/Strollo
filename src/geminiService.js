@@ -1,3 +1,23 @@
+// FEATURE: shared-service  (multi — phase 3 splits)
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-30
+// BUILD: 7152ed6
+// DEPENDS ON: env REACT_APP_GEMINI_API_KEY, ./services/googleMapsService
+// CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./WalkCompanionWidget, ./RewardScreen, ./useJourneyVoice, ./strollowConversation (useTipFetch)
+//
+// Currently mixes: Gemini REST client (sendMessage), prompt builders
+// (buildSystemPrompt, buildConversationPrompt), response parsing
+// (extractPlaces, extractActions, cleanResponseText), Nominatim geocoding
+// (geocodePlace), Overpass nearby-places (fetchNearbyPlaces), and walking
+// route (getWalkingRoute). PHASE 3 of the refactor splits this into
+// services/{geminiClient, geminiResponseParser, geocoding, overpass, routing}.
+//
+// geocodePlace and getWalkingRoute now try the Google Maps services first
+// (via ./services/googleMapsService) and fall back to the legacy
+// Nominatim/OSRM path on any error so the upgrade is failure-soft.
+
+import { searchPlaceText, walkingRoute as googleWalkingRoute } from "./services/googleMapsService";
+
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const MODELS = ["gemini-2.5-flash-lite"];
@@ -320,6 +340,33 @@ function _haversineKm(aLat, aLon, bLat, bLon) {
 }
 
 export async function geocodePlace(name, nearLat, nearLon, hintLat = null, hintLng = null) {
+  // Google Places (New) first — uses the canonical place_id + storefront
+  // coordinates, which is materially more accurate than Nominatim for
+  // venues. Returns null on any error so we naturally fall back below.
+  const biasLat = hintLat != null ? hintLat : nearLat;
+  const biasLng = hintLng != null ? hintLng : nearLon;
+  const fromGoogle = await searchPlaceText(cleanPlaceName(name), biasLat, biasLng, 2000);
+  if (fromGoogle) {
+    // Same hint-vs-result sanity check as the Nominatim path so a wrong-city
+    // match doesn't slip through (e.g. Berkeley Bowl in Phoenix).
+    const refLat = hintLat != null ? hintLat : nearLat;
+    const refLon = hintLng != null ? hintLng : nearLon;
+    if (refLat != null && refLon != null) {
+      const distKm = _haversineKm(fromGoogle.lat, fromGoogle.lng, refLat, refLon);
+      const cap = hintLat != null ? HINT_REJECT_KM : 5.0;
+      if (distKm > cap) {
+        console.warn(`[Strollo] Places result for "${name}" landed ${distKm.toFixed(2)} km from ${hintLat != null ? 'hint' : 'user'} — falling back to Nominatim.`);
+      } else {
+        console.log(`[Strollo] Places geocoded "${name}" →`, fromGoogle.displayName);
+        return { lat: fromGoogle.lat, lng: fromGoogle.lng, displayName: fromGoogle.displayName };
+      }
+    } else {
+      console.log(`[Strollo] Places geocoded "${name}" →`, fromGoogle.displayName);
+      return { lat: fromGoogle.lat, lng: fromGoogle.lng, displayName: fromGoogle.displayName };
+    }
+  }
+
+  // Fallback: existing Nominatim flow.
   const cleanName = cleanPlaceName(name);
   // Dedup query variants — short names often collapse cleanName / split(',')[0].
   const queries = Array.from(new Set([cleanName, cleanName.split(',')[0], name].filter(Boolean)));
@@ -375,9 +422,17 @@ export async function geocodePlace(name, nearLat, nearLon, hintLat = null, hintL
   return null;
 }
 
-// Get walking route between two points via OSRM (with turn-by-turn steps)
+// Walking route between waypoints. Tries Google Routes API first (proper
+// pedestrian routing — sidewalks, plazas, stairs, indoor passages), and
+// falls back to the OSRM demo server on any error so the upgrade is
+// failure-soft. Both paths return the same { coordinates, distance,
+// duration, steps } shape, so consumers don't change.
 export async function getWalkingRoute(points) {
   if (points.length < 2) return [];
+  const fromGoogle = await googleWalkingRoute(points);
+  if (fromGoogle) return fromGoogle;
+
+  // Fallback: OSRM demo (legacy path).
   const coords = points.map(p => `${p[1]},${p[0]}`).join(';');
   const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson&steps=true`;
   const res = await fetch(url);

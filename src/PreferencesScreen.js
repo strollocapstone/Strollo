@@ -1,3 +1,15 @@
+// FEATURE: preferences
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// Pre-walk constraints editor: accessibility flags (avoid stairs/hills),
+// avoidances (busy streets / loud / crowded), category filters (cafes, parks,
+// etc.), and preferred walk duration. State is owned by App.js as
+// `preferences`; this screen is a controlled editor.
+
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import "./PreferencesScreen.css";
 

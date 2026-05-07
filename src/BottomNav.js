@@ -1,3 +1,13 @@
+// FEATURE: shared-ui
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-28
+// BUILD: f718df0
+// DEPENDS ON: leaf
+// CONSUMED BY: (currently none — design-preview component pending integration)
+//
+// Bottom tab bar. Not currently mounted by App.js; reserved for an upcoming
+// nav redesign. If you wire this up, update CONSUMED BY accordingly.
+
 import React from "react";
 import "./BottomNav.css";
 

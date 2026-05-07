@@ -1,3 +1,17 @@
+// FEATURE: shared-util  (multi — phase 3 splits)
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-04-30
+// BUILD: 7152ed6
+// DEPENDS ON: react-leaflet, leaflet
+// CONSUMED BY: ./HomeScreen, ./NavigationMapScreen, ./strollowConversation (reverseGeocode)
+//
+// Currently mixes: Leaflet helper components (WatchLocation, LocateMe, FlyTo,
+// TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker,
+// MapClickListener), Leaflet icons (youIcon), pure geo math (haversineKm,
+// isWithinWalkingRadius, MOCK_LOCATION, WALKING_RADIUS_KM), and Nominatim
+// reverse geocoding. PHASE 3 splits into utils/leafletHelpers, utils/geoMath,
+// utils/icons, services/geocoding (reverseGeocode).
+
 import React, { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
@@ -79,7 +93,10 @@ export function WatchLocation({ onUpdate }) {
         onUpdateRef.current(pos);
       },
       (err) => { console.warn("[Strollo] Geolocation watch error:", err.message); },
-      { enableHighAccuracy: false, maximumAge: 5000 }
+      // Use the GPS chip during a walk — cell/wifi triangulation is ~50m
+      // off, GPS is ~3-10m. The maximumAge cap keeps stale fixes from
+      // sticking around so the boots avatar tracks the user in real time.
+      { enableHighAccuracy: true, maximumAge: 2000 }
     );
     return () => navigator.geolocation.clearWatch(id);
   }, []);
@@ -145,7 +162,9 @@ export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
           }
         }
       },
-      { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+      // Locate FAB asks for high-accuracy GPS so the centring is on the
+      // user, not on a cell-tower triangulation 50m away.
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
     );
     return () => { cancelled = true; };
   }, [trigger, map]);

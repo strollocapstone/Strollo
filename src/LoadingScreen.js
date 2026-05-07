@@ -1,9 +1,21 @@
+// FEATURE: intro
+// LAST UPDATED BY: Evelyn Wong
+// UPDATE DATE: 2026-05-04
+// BUILD: e5021a5
+// DEPENDS ON: leaf
+// CONSUMED BY: ./App.js
+//
+// Boot/loading animation. Pure presentational. Calls onComplete after its
+// timed sequence so App.js advances to the WelcomeScreen.
+
 // Loading Screen — playful, Marauder's-Map-style boot trail that walks the
 // Strollo wordmark into being. Two boot SVGs (the "ll" of strollo) come
 // striding in along curved paths from opposite corners; small footprint marks
 // fade in along the trail behind them; the whole thing settles into the
 // finished wordmark, then the screen fades out.
 import React, { useEffect, useState } from "react";
+import leftBootImg from "./assets/loading-left-boot.png";
+import rightBootImg from "./assets/loading-right-boot.png";
 import "./LoadingScreen.css";
 
 const TOTAL_MS = 5800;
@@ -64,10 +76,10 @@ function Footprint({ x, y, rot, delay, mirror }) {
       {/* forefoot + arch (outer shoe outline) */}
       <path
         d="M3 2.6 Q7 0.6 11 2.6 Q12.4 5 12 8.5 Q11.4 12 10 13.4 L4 13.4 Q2.6 12 2 8.5 Q1.6 5 3 2.6 Z"
-        fill="#34233E"
+        fill="#A969C8"
       />
       {/* heel pad */}
-      <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="#34233E" />
+      <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="#A969C8" />
     </svg>
   );
 }
@@ -105,41 +117,32 @@ export default function LoadingScreen({ onComplete }) {
           ))}
 
           {/* Final pose matches the Strollo logo: upright boot on the left
-              (Vector 22) and kicking boot on the right (Vector 23) overlap to
-              form the inverted-V "M" between "stro" and "o". */}
-          <svg
-            className="ls-boot ls-boot--left"
-            width="31"
-            height="46"
-            viewBox="0 0 31 46"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M4.45905 22.8849C9.71539 20.7834 18.2006 7.58113 22.7119 1.12256C25.2104 1.68282 28.6111 6.10266 29.9992 8.24255C30.0917 11.324 22.172 22.1324 18.2006 27.1514C23.6372 28.6688 29.7254 36.1077 29.0738 40.691C28.4747 44.9053 26.6833 44.3483 24.7939 43.6091L3.04756 32.2871C0.614161 30.8737 -0.445456 24.8459 4.45905 22.8849Z"
-              fill="#34233E"
-              stroke="#A969C8"
-              strokeWidth="2"
-              strokeLinecap="round"
+              and kicking boot on the right overlap to form the inverted-V
+              "M" between "stro" and "o". Each boot is a span (carrying the
+              walk-in translate animation) wrapping an img (carrying the
+              counter-rotation that keeps the boot upright during the walk,
+              and the delayed settle-tilt that drops it into the natural
+              artwork angle once it lands in the wordmark). */}
+          <span className="ls-boot ls-boot--left">
+            <img
+              className="ls-boot-tilt ls-boot-tilt--left"
+              src={leftBootImg}
+              width="31"
+              height="46"
+              alt=""
+              aria-hidden="true"
             />
-          </svg>
-
-          <svg
-            className="ls-boot ls-boot--right"
-            width="53"
-            height="48"
-            viewBox="0 0 53 48"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M14.4954 1.15656C13.4811 0.233265 5.69659 3.61869 1.93115 5.42681C4.12125 7.04257 8.66283 10.7588 9.30833 12.6978C12.19 13.9673 18.6821 27.1772 20.0283 29.3171C21.1619 31.119 22.1031 43.3974 25.2154 45.9364C27.7052 47.9677 31.3246 46.6289 32.8231 45.7056C34.8982 44.4271 49.3065 33.8182 50.9202 33.0103C52.2113 32.364 51.9961 30.125 51.7271 29.0863C49.8828 25.2084 45.2721 24.4698 43.1973 24.5852C40.4308 24.1236 34.36 27.7783 31.6704 29.6633C30.0567 22.9694 15.7634 2.31068 14.4954 1.15656Z"
-              fill="#34233E"
-              stroke="#A969C8"
-              strokeWidth="2"
-              strokeLinecap="round"
+          </span>
+          <span className="ls-boot ls-boot--right">
+            <img
+              className="ls-boot-tilt ls-boot-tilt--right"
+              src={rightBootImg}
+              width="53"
+              height="48"
+              alt=""
+              aria-hidden="true"
             />
-          </svg>
+          </span>
         </div>
 
         <span className="ls-text ls-text--right">o</span>
