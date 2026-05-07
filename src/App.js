@@ -362,6 +362,7 @@ function App() {
               }
             }}
             nearbyPlaces={nearbyPlaces}
+            setNearbyPlaces={setNearbyPlaces}
             addedIds={addedIds}
             setAddedIds={setAddedIds}
             visitedIds={visitedIds}

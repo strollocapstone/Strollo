@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect } from "react";
 import "./TimelineScreen.css";
+import { fetchNearbyPlaces } from "./geminiService";
 
 // Fallback image when the place doesn't have one
 const FALLBACK_IMAGE =
@@ -361,6 +362,7 @@ const fmtImperial = (meters) => {
 
 export default function TimelineScreen({
   nearbyPlaces = [],
+  setNearbyPlaces,
   addedIds,
   setAddedIds,
   visitedIds,
@@ -377,6 +379,32 @@ export default function TimelineScreen({
   const [isScrollable, setIsScrollable] = useState(false);
   const [userLocationLabel, setUserLocationLabel] = useState("");
   const [startLocationLabel, setStartLocationLabel] = useState("");
+  // If the Timeline opens before the home screen had a chance to populate
+  // nearbyPlaces (e.g. dev-mode skip, deep-link, or a stale session),
+  // kick off a fallback fetch around the user's current location so the
+  // suggestion rail isn't empty when no stops are added yet.
+  useEffect(() => {
+    if (nearbyPlaces && nearbyPlaces.length > 0) return;
+    if (!userLocation || !setNearbyPlaces) return;
+    let cancelled = false;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    (async () => {
+      try {
+        const places = await fetchNearbyPlaces(
+          userLocation[0],
+          userLocation[1],
+          1500,
+          controller ? { signal: controller.signal } : undefined,
+        );
+        if (cancelled) return;
+        if (Array.isArray(places) && places.length > 0) setNearbyPlaces(places);
+      } catch (_) { /* ignore — suggestions just stay empty */ }
+    })();
+    return () => {
+      cancelled = true;
+      if (controller) controller.abort();
+    };
+  }, [nearbyPlaces, userLocation, setNearbyPlaces]);
   // Snapshot the journey + addedIds when Timeline mounts so "Back to map"
   // can revert any reorder / skip / remove / add the user did this session
   // (Preferences-style cancel). "Save changes" just closes — edits are
@@ -1134,7 +1162,7 @@ export default function TimelineScreen({
                             <polygon points="4 5 13 12 4 19 4 5" />
                             <polygon points="13 5 22 12 13 19 13 5" />
                           </svg>
-                          <span className="tl-card-action-label">Skip stop</span>
+                          <span className="tl-card-action-label">Skip</span>
                         </button>
                       )}
                     </div>

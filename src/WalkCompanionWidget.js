@@ -151,6 +151,10 @@ function WalkCompanionWidgetInner({
   // is hidden when false (i.e. the immediate next stop is the only / final
   // one) so the user doesn't accidentally drop their last destination.
   canSkip = true,
+  // True when the current target is the LAST confirmed stop in the trip.
+  // Drives the at-target glyph: purple destination-pin for the final
+  // stop, purple dot for any earlier stop.
+  isLastStop = false,
   // Shown in the empty state ("You are at <currentLocationName>") when the
   // user hasn't planned any stops yet. Reverse-geocoded by the widget itself
   // when not provided.
@@ -171,6 +175,7 @@ function WalkCompanionWidgetInner({
   onEnd,                       // eslint-disable-line no-unused-vars
   onExpand,
   onChat,
+  onOpenTimeline,
   onSpeakStart,
   onSpeakEnd,
 }, forwardedRef) {
@@ -1066,7 +1071,7 @@ function WalkCompanionWidgetInner({
           )
         ) : (
           <>
-            <span className="wcw-heading-label">Heading to</span>
+            <span className="wcw-heading-label">{atTarget ? "You are at" : "Heading to"}</span>
             <span className="wcw-destination">{destination}</span>
             {atTarget ? (
               <button
@@ -1104,15 +1109,86 @@ function WalkCompanionWidgetInner({
       {isEmpty && convMode === "tips" && (
         <div className="strollo-tips-body">
           {tipsLoading ? (
-            <div className="strollo-tips-skel">
-              <SkeletonLine width="92%" />
-              <SkeletonLine width="76%" />
-              <SkeletonLine width="58%" />
+            <div className="strollo-tips-loading" role="status" aria-live="polite">
+              <div className="strollo-tips-loading-head">
+                {!(trip && trip.length > 0) && (
+                  <span className="strollo-tips-trail" aria-hidden="true">
+                    {/* Two prints, both facing UPWARD with a slight stride
+                        tilt. They're not symmetric — the left foot sits
+                        a bit higher than the right so the pair reads as
+                        a casual mid-stride pose rather than a centered
+                        glyph. */}
+                    {[
+                      { tx: -8, ty: -7, rot: -10 },
+                      { tx: 7,  ty:  4, rot:  10 },
+                    ].map((p, i) => (
+                      <svg
+                        key={i}
+                        className="strollo-tips-print"
+                        style={{
+                          transform: `translate(${p.tx}px, ${p.ty}px) rotate(${p.rot}deg)`,
+                          animationDelay: `${i * 1.2}s`,
+                        }}
+                        width="13"
+                        height="18"
+                        viewBox="0 0 14 22"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M3 2.6 Q7 0.6 11 2.6 Q12.4 5 12 8.5 Q11.4 12 10 13.4 L4 13.4 Q2.6 12 2 8.5 Q1.6 5 3 2.6 Z" fill="currentColor" />
+                        <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="currentColor" />
+                      </svg>
+                    ))}
+                  </span>
+                )}
+                <p className="strollo-tips-loading-text">
+                  {trip && trip.length > 0
+                    ? "Your stops are added. Ready when you are."
+                    : "Strollo is looking for things you might like nearby."}
+                </p>
+                <button
+                  type="button"
+                  className={`wcw-icon-btn wcw-status-mute${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                  onClick={toggleConvVoice}
+                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                  aria-pressed={activeVoice === "conv"}
+                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "conv" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "conv" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+              {/* Secondary prompt copy + prompt pills live together
+                  inside the dotted suggestion box, only when the user
+                  hasn't saved any stops. */}
+              {!(trip && trip.length > 0) && (
+                <div className="wcw-suggestion strollo-tips-hint">
+                  <span className="wcw-suggestion-text">
+                    Speak to Strollo to find spots to explore too.
+                  </span>
+                  <PromptPills onTap={handlePromptTap} />
+                </div>
+              )}
             </div>
           ) : (
             <p className="strollo-tips-tip">{tip}</p>
           )}
-          <PromptPills disabled={tipsLoading} onTap={handlePromptTap} />
+          {/* Prompt pills only show in the no-stops state (inside the
+              dotted suggestion box above) and in the tip-loaded fallback.
+              Once the user has saved one or more stops the widget
+              switches to the "Your stops are added." headline and the
+              tags are intentionally hidden so the user focuses on
+              tapping Start exploring. */}
+          {!tipsLoading && !(trip && trip.length > 0) && (
+            <PromptPills onTap={handlePromptTap} />
+          )}
         </div>
       )}
 
@@ -1160,7 +1236,7 @@ function WalkCompanionWidgetInner({
           <p className="wcw-narration">{narration}</p>
         ) : (
           <div className="wcw-turn-row">
-            <h2 className="wcw-turn">{instruction}</h2>
+            <h2 className="wcw-turn">{atTarget ? "You made it to your stop. Now enjoy it." : instruction}</h2>
             {/* Mute / speaker toggle moved up next to the turn instruction
                 so the secondary controls don't crowd the bottom row. Lower
                 hierarchy than the SAY ANYTHING bar — compact, subtle. */}
@@ -1185,20 +1261,47 @@ function WalkCompanionWidgetInner({
         )
       )}
 
-      {!navListening && !isEmpty && (
-        <div className="wcw-stats">
-          <div className="wcw-stat">
-            <span className="wcw-stat-label">DIST</span>
-            <span className="wcw-stat-value">{paused ? "—" : distance}</span>
+      {!navListening && !isEmpty && (() => {
+        // Parse the next maneuver direction from the instruction text.
+        // "left" / "right" / "arriving" stay as words; "straight" is
+        // shown as an upward arrow glyph instead so the cell has a
+        // strong directional anchor at a glance.
+        const ins = (instruction || "").toLowerCase();
+        let turnDir = "straight";
+        if (ins.includes("arriv")) turnDir = "arriving";
+        else if (ins.includes("left")) turnDir = "left";
+        else if (ins.includes("right")) turnDir = "right";
+        const goValue = paused ? "—" : (
+          turnDir === "straight" ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label="straight ahead">
+              <line x1="12" y1="20" x2="12" y2="6"/>
+              <polyline points="6 11 12 6 18 11"/>
+            </svg>
+          ) : turnDir
+        );
+        return (
+          <div className="wcw-stats">
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">DIST</span>
+              <span className="wcw-stat-value">{paused ? "—" : distance}</span>
+            </div>
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">ETA</span>
+              <span className="wcw-stat-value">{paused ? "—" : eta}</span>
+            </div>
+            <div className="wcw-stat">
+              <span className="wcw-stat-label">GO</span>
+              <span className="wcw-stat-value">{goValue}</span>
+            </div>
           </div>
-          <div className="wcw-stat">
-            <span className="wcw-stat-label">ETA</span>
-            <span className="wcw-stat-value">{paused ? "—" : eta}</span>
-          </div>
-        </div>
+        );
+      })()}
+      {/* Progress strip — dotted curve with the user's boots walking
+          toward the destination flag. Sits between the stats row and
+          the bottom buttons during a walk OR a stops-added preview. */}
+      {!isEmpty && (
+        <ProgressStrip progress={progress} />
       )}
-      {/* ProgressStrip removed per design — the dotted boots→flag strip
-          was redundant with the route line + DIST/ETA stats. */}
 
       {!(convOpen && !isEmpty) && (
       <div className="wcw-bottom">
@@ -1242,6 +1345,9 @@ function WalkCompanionWidgetInner({
             </>
           ) : (
             <>
+              {/* Mute lives next to the "You are at <location>" heading
+                  in the empty / Tips state status row, so this cluster
+                  only carries the chat shortcut here. */}
               {onChat && (
                 <button
                   type="button"
@@ -1255,9 +1361,9 @@ function WalkCompanionWidgetInner({
                   </svg>
                 </button>
               )}
-              {/* Mute/speaker icon lives next to the turn instruction
-                  (`.wcw-turn-speaker`) — fully removed from this row so
-                  the End walk button can sit flush against the left
+              {/* During an active walk the mute icon lives next to the turn
+                  instruction (`.wcw-turn-speaker`) — kept out of this row
+                  so the End walk button can sit flush against the left
                   inner padding. */}
             </>
           )}

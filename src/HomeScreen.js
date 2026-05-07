@@ -1806,8 +1806,31 @@ export default function HomeScreen({
                 <>
                   <div className="chat-msg chat-msg--ai">
                     <div className="chat-avatar">S</div>
-                    <div className="chat-bubble chat-bubble--ai chat-typing">
-                      <span/><span/><span/>
+                    <div className="chat-bubble chat-bubble--ai chat-loader-bubble">
+                      {/* Marauder's-Map footprint trail — shoe-sole prints
+                          (forefoot + heel) alternating left/right across
+                          the bubble. Each appears in sequence, holds for
+                          a beat, then fades, so the loader reads as
+                          Strollo walking across the bubble while it
+                          hunts for places. Mirrors the LoadingScreen's
+                          `ls-footprint` SVG/keyframe pattern. */}
+                      <span className="chat-loader-trail" aria-hidden="true">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <svg
+                            key={i}
+                            className={`chat-loader-print${i % 2 === 0 ? '' : ' chat-loader-print--mirror'}`}
+                            style={{ animationDelay: `${i * 0.32}s` }}
+                            width="14"
+                            height="22"
+                            viewBox="0 0 14 22"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path d="M3 2.6 Q7 0.6 11 2.6 Q12.4 5 12 8.5 Q11.4 12 10 13.4 L4 13.4 Q2.6 12 2 8.5 Q1.6 5 3 2.6 Z" fill="currentColor" />
+                            <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="currentColor" />
+                          </svg>
+                        ))}
+                      </span>
                     </div>
                   </div>
                   <div className="chat-status">

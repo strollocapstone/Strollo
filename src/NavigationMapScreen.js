@@ -429,7 +429,11 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // of the next confirmed stop. Below that threshold the widget's Skip
   // button flips to a confirm-arrival button.
   const FT_300_M = 91.44;
-  const isAtTarget = liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M;
+  // Dev-only override so the profile FAB can toggle the at-target ("You
+  // made it. Now enjoy it.") state without actually walking 300 ft up to
+  // a real stop. Force-flag OR'd with the live geofence test below.
+  const [forceAtTarget, setForceAtTarget] = useState(false);
+  const isAtTarget = forceAtTarget || (liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M);
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent
@@ -504,10 +508,14 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         return out;
       });
     }
-    if (remainingAfter === 0 && onGoBack) {
-      // Defer one tick so the visitedIds update flushes before the
-      // parent unmounts this screen.
-      setTimeout(() => onGoBack(), 0);
+    if (remainingAfter === 0) {
+      // Last stop confirmed — bounce to the Reward screen so the user
+      // sees their walk reflection. Falls back to onGoBack if the
+      // parent didn't wire onEndWalk. Deferred one tick so the
+      // visitedIds update flushes before the parent unmounts this
+      // screen.
+      const finish = onEndWalk || onGoBack;
+      if (finish) setTimeout(() => finish(), 0);
     }
   };
 
@@ -907,14 +915,17 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         </MapContainer>
       </div>
 
-      {/* Profile FAB — top-right of the map. Doubles as a dev cycler that
-          steps through AI presentation modes (none → narration → suggestion
-          → narration+suggestion). */}
+      {/* Profile FAB — top-right of the map. Doubles as a dev toggle for
+          the at-target ("You are at" / "You made it. Now enjoy it.")
+          widget state, so the arrived UI can be previewed without
+          walking 300 ft to a real stop. Each tap also advances the AI
+          test mode for the secondary narration / suggestion previews. */}
       <button
         type="button"
         className="fab-circle top-right-btn"
-        aria-label={`Profile (AI test mode ${aiTestMode})`}
+        aria-label={`Profile (at target ${forceAtTarget ? "on" : "off"}, AI test mode ${aiTestMode})`}
         onClick={() => {
+          setForceAtTarget((v) => !v);
           setAiTestMode((m) => (m + 1) % 4);
           setAiSampleIdx((i) => i + 1);
         }}
@@ -1020,9 +1031,17 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
            we just hide the widget instead of unmounting it. */}
       {voiceMode !== "full" && (() => {
         // The "next stop" being routed to == first non-visited confirmed
-        // Timeline item. When nothing is confirmed/all visited, the widget
-        // shows an empty state and the CTA flips to "See suggestions".
-        const nextStop = nextTarget;
+        // Timeline item. When the user has saved stops but hasn't pressed
+        // Start exploring yet (`isExplorationMode === true`), preview the
+        // walk by pointing the widget at the FIRST confirmed stop —
+        // exposes DIST/ETA/TURN and the "Heading to <name>" header even
+        // before the route is committed. The map's actual stopPositions /
+        // OSRM fetch remain gated on `nextTarget`, so no purple line is
+        // drawn until the user explicitly starts the walk.
+        const previewStop = isExplorationMode && confirmedStops.length > 0
+          ? confirmedStops[0]
+          : null;
+        const nextStop = nextTarget || previewStop;
         const isEmpty = !nextStop;
         const nextWaypoint = nextStop ? nextStop.name.split(",")[0] : null;
         // Live route values when available, static placeholders otherwise.
@@ -1033,6 +1052,18 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           const feet = m * 3.28084;
           if (feet < 528) return `${Math.round(feet)} ft`;
           return `${(m / 1609.344).toFixed(1)} mi`;
+        };
+        // Conversational distance phrasing for the TURN instruction line —
+        // short walks read in feet; once the distance crosses ~0.1 mi the
+        // headline switches to time ("about 3 minutes") since most people
+        // think in walking minutes for non-trivial distances.
+        const fmtDistNatural = (m) => {
+          const feet = m * 3.28084;
+          if (feet < 25) return "a few steps";
+          if (feet < 150) return `${Math.round(feet / 10) * 10} feet`;
+          if (feet < 528) return `${Math.round(feet / 50) * 50} feet`;
+          const mins = Math.max(1, Math.round(m / 80));
+          return `about ${mins} minute${mins === 1 ? "" : "s"}`;
         };
         // Live straight-line distance to the NEXT destination — updates every time
         // userLocation ticks or nextStop changes (e.g. after a skip). No OSRM dependency,
@@ -1068,16 +1099,22 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         let instruction;
         if (isEmpty) {
           instruction = "—";
+        } else if (previewStop && nextStop === previewStop) {
+          // Preview state — user has saved stops but hasn't pressed
+          // Start exploring yet. Override the directions headline with
+          // a calm "ready when you are" line so the widget doesn't fake
+          // a live walk.
+          instruction = "your stops are added. ready when you are.";
         } else if (!userLocation || liveDistToStopM === null) {
           instruction = "head out";
         } else if (distToTurnM !== null && distToTurnM <= 15) {
           instruction = `turn ${String(nextTurn.maneuver.modifier || "right").toLowerCase()}`;
         } else if (distToTurnM !== null) {
-          instruction = `walk forward ${fmtDist(distToTurnM)}`;
+          instruction = `walk forward ${fmtDistNatural(distToTurnM)}`;
         } else if (liveDistToStopM <= 15) {
           instruction = "arriving";
         } else {
-          instruction = `walk forward ${fmtDist(liveDistToStopM)}`;
+          instruction = `walk forward ${fmtDistNatural(liveDistToStopM)}`;
         }
         return (
           <div className="wcw-host" style={{ visibility: showVoice ? undefined : 'hidden' }}>
@@ -1087,12 +1124,14 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
             eta={isEmpty ? "—" : eta}
-            canSkip={confirmedStops.filter((s) => !visitedIds?.has(s.id)).length > 1}
+            canSkip={confirmedStops.filter((s) => !visitedIds?.has(s.id)).length >= 1}
             atTarget={isAtTarget}
+            isLastStop={!!nextStop && confirmedStops.length > 0 && confirmedStops[confirmedStops.length - 1].id === nextStop.id}
             progress={progress}
             narration={aiNarration}
             suggestion={aiSuggestion}
             onArrived={handleArrived}
+            onOpenTimeline={onOpenTimeline}
             onEnd={onEndWalk || onGoBack}
             onSkip={() => {
               if (!nextStop || !onJourneyChange) return;

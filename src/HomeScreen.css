@@ -1490,7 +1490,8 @@
 }
 .chat-bubble--live { opacity: 0.7; border: 1px dashed rgba(255,255,255,0.5); }
 
-/* Typing dots */
+/* Typing dots — kept for any non-loader chat affordance that still uses
+   the .chat-typing class. */
 .chat-typing { display: flex; gap: 5px; padding: 14px 18px; }
 .chat-typing span {
   width: 7px; height: 7px; border-radius: 50%;
@@ -1502,6 +1503,42 @@
 @keyframes chat-dot-pulse {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* Marauder's-Map footprint loader — shoe-sole prints alternating
+   left/right across the chat-loading AI bubble. Each print fades in,
+   holds for a beat, then fades out so the row reads as a walking
+   trail. SVG matches LoadingScreen's `Footprint`. */
+.chat-loader-bubble {
+  padding: 10px 16px;
+}
+.chat-loader-trail {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 26px;
+  color: var(--chat-purple, #34233E);
+}
+.chat-loader-print {
+  display: block;
+  opacity: 0;
+  /* Rotated 90° clockwise so toes point RIGHT (walking forward across
+     the bubble) instead of upward, with a ±12° stride tilt. */
+  transform: rotate(78deg);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 1px 2px rgba(52, 35, 62, 0.18));
+  animation: chat-loader-print 2.0s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+/* Alternate prints flip across the walk axis + tilt the other way so
+   the trail reads as left-foot/right-foot stepping rightward. */
+.chat-loader-print--mirror {
+  transform: rotate(102deg) scaleY(-1);
+}
+@keyframes chat-loader-print {
+  0%   { opacity: 0; }
+  18%  { opacity: 0.95; }
+  62%  { opacity: 0.65; }
+  100% { opacity: 0; }
 }
 
 /* Scanning status (Screen 2) */
