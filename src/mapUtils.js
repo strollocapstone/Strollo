@@ -74,6 +74,34 @@ export const youIcon = L.divIcon({
 // ── Fallback location if GPS is unavailable (UC Berkeley, Sproul Plaza) ──
 export const MOCK_LOCATION = [37.8691, -122.2596];
 
+// ── IP-based geolocation fallback ────────────────────────────────────────
+// Free public endpoint (CORS-enabled, HTTPS, ~1k req/day per IP). Returns
+// a [lat, lng] that's usually accurate to the user's city — much closer
+// than MOCK_LOCATION when CoreLocation/GPS are unavailable. Resolves to
+// null on any failure (network, parse, missing fields, abort, timeout).
+let __ipLocationPromise = null;
+export function fetchIpLocation(timeoutMs = 6000) {
+  if (__ipLocationPromise) return __ipLocationPromise;
+  __ipLocationPromise = (async () => {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      const res = await fetch("https://ipapi.co/json/", { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const lat = Number(data?.latitude);
+      const lng = Number(data?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      if (Math.abs(lat) < 1e-6 && Math.abs(lng) < 1e-6) return null;
+      return [lat, lng];
+    } catch (_) {
+      return null;
+    }
+  })();
+  return __ipLocationPromise;
+}
+
 // ── Watch user location (with 10m threshold to avoid waggle) ─────────────
 export function WatchLocation({ onUpdate }) {
   const onUpdateRef = useRef(onUpdate);
@@ -81,26 +109,37 @@ export function WatchLocation({ onUpdate }) {
   onUpdateRef.current = onUpdate;
 
   useEffect(() => {
-    const id = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        // Drop bogus (0, 0) updates — see LocateMe note above.
-        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
-        if (lastPos.current) {
-          const dlat = Math.abs(coords.latitude - lastPos.current[0]);
-          const dlng = Math.abs(coords.longitude - lastPos.current[1]);
-          if (dlat < 0.0001 && dlng < 0.0001) return;
-        }
-        const pos = [coords.latitude, coords.longitude];
-        lastPos.current = pos;
-        onUpdateRef.current(pos);
+    const handleSuccess = ({ coords }) => {
+      // Drop bogus (0, 0) updates — see LocateMe note above.
+      if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
+      if (lastPos.current) {
+        const dlat = Math.abs(coords.latitude - lastPos.current[0]);
+        const dlng = Math.abs(coords.longitude - lastPos.current[1]);
+        if (dlat < 0.0001 && dlng < 0.0001) return;
+      }
+      const pos = [coords.latitude, coords.longitude];
+      lastPos.current = pos;
+      onUpdateRef.current(pos);
+    };
+
+    // Try GPS first; if the device can't get a fix (desktop without GPS,
+    // CoreLocation kCLErrorLocationUnknown), fall back to a low-accuracy
+    // watch using Wi-Fi/IP. City-level beats no boots at all.
+    let activeId = navigator.geolocation.watchPosition(
+      handleSuccess,
+      (err) => {
+        console.warn("[Strollo] Geolocation watch error:", err.message);
+        if (err.code === 1) return; // permission denied — don't keep retrying
+        navigator.geolocation.clearWatch(activeId);
+        activeId = navigator.geolocation.watchPosition(
+          handleSuccess,
+          (e2) => { console.warn("[Strollo] Geolocation watch error (low-accuracy fallback):", e2.message); },
+          { enableHighAccuracy: false, maximumAge: 30000 }
+        );
       },
-      (err) => { console.warn("[Strollo] Geolocation watch error:", err.message); },
-      // Use the GPS chip during a walk — cell/wifi triangulation is ~50m
-      // off, GPS is ~3-10m. The maximumAge cap keeps stale fixes from
-      // sticking around so the boots avatar tracks the user in real time.
       { enableHighAccuracy: true, maximumAge: 2000 }
     );
-    return () => navigator.geolocation.clearWatch(id);
+    return () => navigator.geolocation.clearWatch(activeId);
   }, []);
   return null;
 }
@@ -139,66 +178,85 @@ export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
   useEffect(() => {
     if (!trigger) return;
     let cancelled = false;
-    console.log("[LocateMe] effect fired (trigger=", trigger, "), calling getCurrentPosition");
-    if (navigator.permissions?.query) {
-      navigator.permissions.query({ name: "geolocation" })
-        .then((p) => console.log("[LocateMe] permission state:", p.state))
-        .catch((e) => console.log("[LocateMe] permission query failed:", e));
-    }
+
+    const onSuccess = ({ coords }) => {
+      if (cancelled) return;
+      // Drop the (0, 0) sentinel some browsers return when they don't have
+      // a real fix — keeps the boots from rendering in the Atlantic.
+      if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
+      const pos = [coords.latitude, coords.longitude];
+      try {
+        if (isFirstLocate.current) {
+          map.setView(pos, zoom);
+          isFirstLocate.current = false;
+        } else {
+          // Leaflet's flyTo to the same lat/lng + zoom is silently a no-op,
+          // which makes the focus FAB feel broken when the user is already
+          // centered. If we're already there, do a brief zoom-out → zoom-in
+          // pulse so the click always reads as a re-center.
+          const center = map.getCenter();
+          const sameSpot = Math.abs(center.lat - pos[0]) < 5e-5 &&
+                           Math.abs(center.lng - pos[1]) < 5e-5 &&
+                           Math.abs(map.getZoom() - zoom) < 0.1;
+          if (sameSpot) {
+            map.setZoom(Math.max(0, zoom - 1.2), { animate: true });
+            setTimeout(() => {
+              try { map.flyTo(pos, zoom, { duration: 0.55 }); } catch (_) {}
+            }, 320);
+          } else {
+            map.flyTo(pos, zoom, { duration: 0.9 });
+          }
+        }
+      } catch (_) { /* map may be unmounted */ }
+      onLocateRef.current(pos);
+    };
+
+    // Try high-accuracy GPS first. If the device can't get a GPS fix
+    // (kCLErrorLocationUnknown / TIMEOUT / POSITION_UNAVAILABLE — common on
+    // desktops without GPS or with macOS Location Services warming up),
+    // fall back to low-accuracy Wi-Fi/IP-based geolocation. City-level
+    // precision is better than no boots at all.
+    const fallbackToIp = async (priorErr) => {
+      if (cancelled) return;
+      const ipPos = await fetchIpLocation();
+      if (cancelled) return;
+      if (ipPos) {
+        console.warn("[Strollo] Geolocation: using IP-based fallback", ipPos);
+        onSuccess({ coords: { latitude: ipPos[0], longitude: ipPos[1] } });
+        return;
+      }
+      console.warn("[Strollo] Geolocation: IP fallback failed, using MOCK_LOCATION (initial:", priorErr?.code, priorErr?.message, ")");
+      onSuccess({ coords: { latitude: MOCK_LOCATION[0], longitude: MOCK_LOCATION[1] } });
+    };
+
+    const tryLowAccuracy = (highAccErr) => {
+      if (cancelled) return;
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        (err) => {
+          if (cancelled) return;
+          fallbackToIp(err);
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+      );
+    };
+
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
+      onSuccess,
+      (err) => {
         if (cancelled) return;
-        console.log("[LocateMe] success — coords:", coords.latitude, coords.longitude, "accuracy:", coords.accuracy);
-        // Some browsers / dev sensor overrides report (0, 0) when they don't
-        // actually have a fix. Treat that as a generic failure so the boots
-        // don't end up floating in the Atlantic.
-        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) {
-          console.warn("[LocateMe] coords are (0, 0) — treating as no fix");
+        // Permission denied: surface the card so the user can re-grant.
+        // Other errors (POSITION_UNAVAILABLE, TIMEOUT, kCLErrorLocationUnknown)
+        // → low-accuracy → IP fallback → MOCK_LOCATION, all silent.
+        if (err.code === 1) {
+          console.warn("[Strollo] Geolocation error:", err.code, err.message);
           if (onErrorRef.current) {
-            onErrorRef.current("Unable to get your location. Please try again.");
+            onErrorRef.current("Location permission denied. Please enable it in your browser settings.");
           }
           return;
         }
-        const pos = [coords.latitude, coords.longitude];
-        try {
-          if (isFirstLocate.current) {
-            map.setView(pos, zoom);
-            isFirstLocate.current = false;
-          } else {
-            // Leaflet's flyTo to the same lat/lng + zoom is silently a no-op,
-            // which makes the focus FAB feel broken when the user is already
-            // centered. If we're already there, do a brief zoom-out → zoom-in
-            // pulse so the click always reads as a re-center.
-            const center = map.getCenter();
-            const sameSpot = Math.abs(center.lat - pos[0]) < 5e-5 &&
-                             Math.abs(center.lng - pos[1]) < 5e-5 &&
-                             Math.abs(map.getZoom() - zoom) < 0.1;
-            if (sameSpot) {
-              map.setZoom(Math.max(0, zoom - 1.2), { animate: true });
-              setTimeout(() => {
-                try { map.flyTo(pos, zoom, { duration: 0.55 }); } catch (_) {}
-              }, 320);
-            } else {
-              map.flyTo(pos, zoom, { duration: 0.9 });
-            }
-          }
-        } catch (_) { /* map may be unmounted */ }
-        onLocateRef.current(pos);
+        tryLowAccuracy(err);
       },
-      (err) => {
-        if (cancelled) return;
-        console.log("[LocateMe] error — code:", err.code, "message:", err.message);
-        if (onErrorRef.current) {
-          if (err.code === 1) {
-            onErrorRef.current("Location permission denied. Please enable it in your browser settings.");
-          } else {
-            onErrorRef.current("Unable to get your location. Please try again.");
-          }
-        }
-      },
-      // High-accuracy GPS centres on the user instead of a cell-tower
-      // triangulation 50m away. The 8s timeout was too aggressive on cold
-      // starts; 20s gives the browser room to lock GPS without timing out.
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
     );
     return () => { cancelled = true; };

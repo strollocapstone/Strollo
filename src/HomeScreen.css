@@ -564,9 +564,9 @@
   background: rgba(0, 0, 0, 0.35);
   z-index: 100;
 }
-/* Solid cream card — reads as a clear, defined surface so the frosted-glass
-   "Not now" button on top has the same soft pill appearance as the
-   .reward-undo-pill ("Oops, I'm not done exploring") on the reward screen. */
+/* Cream-tinted near-opaque card so the frosted-glass cancel button reads as
+   a soft pill against it (mirrors the .reward-undo-pill on the reward
+   screen). */
 .locate-popover {
   position: absolute;
   left: 50%; top: 50%;
@@ -607,9 +607,7 @@
   gap: 10px;
 }
 /* Buttons echo PreferencesScreen's bottom action pair, scaled down so the
-   pair fits comfortably inside the 280px card without dominating it.
-   Tighter height + horizontal padding + 13/600 type read closer to the
-   visual weight of the pwc footer in its wider container. */
+   pair fits comfortably inside the 280px card. */
 .locate-popover-btn {
   flex: 1;
   height: 38px;

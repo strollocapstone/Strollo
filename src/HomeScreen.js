@@ -1293,11 +1293,7 @@ export default function HomeScreen({
             <button
               className="fab-circle bottom-right-btn"
               aria-label="Focus on my location"
-              onClick={() => {
-                console.log("[FocusFAB] click — bumping locateTrigger");
-                setLocateError("");
-                setLocateTrigger((t) => t + 1);
-              }}
+              onClick={() => setLocateTrigger((t) => t + 1)}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8851D4" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="2.5" fill="#8851D4" stroke="none"/>
