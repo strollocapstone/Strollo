@@ -1,0 +1,294 @@
+/* ── Exploration Progress Screen ────────────────────────────────────────── */
+/* Per-category breakdown of the rewards the user has collected. Each row
+   shows the actual 3D collectibles they earned (same artwork the trail
+   uses) so the page reads as a personal trophy case rather than a stats
+   dashboard. Encourages variety on the next walk via nudges on the
+   under-explored categories within the visible top 6. */
+
+.progress-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, #FBF6FF 0%, #F2EAFF 100%);
+  font-family: var(--font-ui);
+  color: #34233E;
+  display: flex;
+  flex-direction: column;
+  animation: progress-screen-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes progress-screen-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.progress-bg-frost {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(255, 213, 1, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 86% 92%, rgba(136, 81, 212, 0.18) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.progress-scroll {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 22px 18px;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.progress-header {
+  margin: 0 0 28px;
+  text-align: left;
+}
+.progress-title {
+  font-family: "Unbounded", sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: #34233E;
+  /* Extra breathing room before the subtitle so the two lines feel like a
+     two-act header rather than a stacked sentence. */
+  margin: 0 0 22px;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+.progress-subtitle {
+  font-family: "Satoshi", sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: #5A4B64;
+  line-height: 1.45;
+  margin: 0;
+  max-width: 320px;
+}
+
+/* ── Category list ──────────────────────────────────────────────────────── */
+/* Generous gap between categories so each row gets its own breathing room
+   instead of feeling like a dense list. */
+.progress-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-bottom: 18px;
+}
+
+.progress-category {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Hair-thin divider with faded edges — subtle visual separator between
+   categories that doesn't read as a hard rule. Skipped on the last row so
+   the bottom of the list isn't capped with a stray line. */
+.progress-category:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: -14px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(52, 35, 62, 0.06) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+.progress-category-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Icon glyph — plain black symbol, no chip background, so the row reads as
+   "icon · label · count-chip" rather than a row of bubbles. */
+.progress-category-icon {
+  flex-shrink: 0;
+  font-size: 22px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+  color: #1E1541;
+}
+.progress-category-label {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 15px;
+  color: #34233E;
+}
+/* Count chip — sits at the right edge of the row, matched frosted-white
+   styling so it visually pairs with the icon chip on the left. */
+.progress-category-count {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  color: #1E1541;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ── Collectibles row ───────────────────────────────────────────────────── */
+/* Each visited stop renders as a small SVG thumbnail backed by a round
+   STOP_TINTS gradient — same vocabulary as the .reward-trail-stop on the
+   reward screen. Row scrolls horizontally when the chips overflow so the
+   user can swipe through their collection. A right-edge mask hints that
+   there's more to scroll to. */
+.progress-collectibles {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding: 4px 22px 4px 42px; /* aligns under the label, breathing room on both ends */
+  margin: 0 -22px;             /* break out of the screen padding so the row reaches the edge */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 28px), transparent 100%);
+  touch-action: pan-x;
+  cursor: grab;
+}
+.progress-collectibles:active { cursor: grabbing; }
+.progress-collectibles::-webkit-scrollbar { display: none; }
+
+.progress-collectible {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 -1px 2px rgba(52, 35, 62, 0.18),
+    0 2px 6px rgba(52, 35, 62, 0.14);
+  overflow: hidden;
+}
+.progress-collectible svg {
+  width: 92%;
+  height: 92%;
+  display: block;
+}
+.progress-collectibles--empty {
+  opacity: 0.6;
+}
+.progress-collectible--ghost {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1.5px dashed rgba(136, 81, 212, 0.35);
+  box-shadow: none;
+}
+.progress-collectible--ghost .material-symbols-rounded {
+  font-size: 22px;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Empty rows: dim the head + icon so the gaps register without disappearing. */
+.progress-category--empty .progress-category-icon { opacity: 0.65; }
+.progress-category--empty .progress-category-label { opacity: 0.75; color: #5A4B64; }
+.progress-category--empty .progress-category-count { opacity: 0.55; }
+
+/* Friendly nudge under under-explored categories — encourages the next walk. */
+.progress-category-nudge {
+  margin: 0;
+  padding-left: 42px;
+  font-family: "Satoshi", sans-serif;
+  font-weight: 500;
+  font-size: 12.5px;
+  color: #6F5C7C;
+  line-height: 1.35;
+  font-style: italic;
+}
+
+/* ── See all toggle — frosted-glass pill matching the quiz screen's
+   .quiz-dir YES / NO buttons. Lives centered below the visible top-N
+   categories so its job (reveal the rest) reads as an inline action. */
+.progress-see-all {
+  display: block;
+  margin: 6px auto 10px;
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.42);
+  backdrop-filter: blur(8px) saturate(1.25);
+  -webkit-backdrop-filter: blur(8px) saturate(1.25);
+  box-shadow: 0 1px 6px rgba(40, 22, 6, 0.10);
+  font-family: "Satoshi", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #1E1541;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.progress-see-all:hover  { background: rgba(255, 253, 247, 0.65); }
+.progress-see-all:active { transform: scale(0.98); }
+
+/* ── Bottom action bar — mirrors RewardScreen's .reward-actions pair so
+   the two surfaces feel like one family. Background is fully transparent
+   so the secondary "Back to my rewards today" pill reads as see-through
+   (matches .reward-undo-pill on the reward screen). */
+.progress-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 22px calc(20px + env(safe-area-inset-bottom));
+  background: transparent;
+}
+.progress-share-btn,
+.progress-undo-pill {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  font-family: "Satoshi", sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease-out, filter 0.18s ease, background 0.15s ease;
+}
+.progress-share-btn {
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  box-shadow: 0 2px 10px rgba(255, 213, 1, 0.35);
+}
+.progress-share-btn:hover  { filter: brightness(1.05); }
+.progress-share-btn:active { transform: scale(0.98); }
+.progress-undo-pill {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px) saturate(1.4);
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: 0 2px 10px rgba(62, 42, 18, 0.12);
+  color: #1E1541;
+}
+.progress-undo-pill:hover  { background: rgba(255, 255, 255, 0.55); }
+.progress-undo-pill:active { transform: scale(0.98); }

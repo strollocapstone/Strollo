@@ -55,12 +55,473 @@ const VIBE_BY_CATEGORY = {
   waterfront: ["pier", "harbour", "marina", "beach"],
   shop:       ["jewelry", "jeweler", "boutique", "shop", "store"],
 };
-function vibeFor(category, name) {
+export function vibeFor(category, name) {
   const haystack = `${category || ""} ${name || ""}`.toLowerCase();
   for (const [vibe, words] of Object.entries(VIBE_BY_CATEGORY)) {
     if (words.some((w) => haystack.includes(w))) return vibe;
   }
   return "park"; // sensible default — has both artwork + tint
+}
+
+// Food spots all share a single "restaurant" / "burger" / "seafood" / "bar"
+// vibe, so without this they'd render with the same generic collectible.
+// Map keywords in the stop's name + category to a Material Symbol glyph so
+// each food spot reads as the kind of food it serves (ramen, sushi, soup,
+// rice, steak, pizza, taco, …). Returns null for non-food vibes so the
+// caller falls back to the curated COLLECTIBLES artwork.
+const FOOD_VIBES = new Set(["restaurant", "burger", "seafood", "bar"]);
+// Per-food signature color so each kind of food reads at a glance — broths
+// warm orange, steaks deep red, sushi rose, ice cream pink, etc.
+const FOOD_ICON_COLOR = {
+  ramen_dining:    "#E8884A",
+  set_meal:        "#D85C5C",
+  rice_bowl:       "#C18B5C",
+  soup_kitchen:    "#E89B5C",
+  local_pizza:     "#D85C5C",
+  lunch_dining:    "#D9A93E",
+  outdoor_grill:   "#A8483F",
+  kebab_dining:    "#8B5A3C",
+  dinner_dining:   "#C45050",
+  brunch_dining:   "#E8B43F",
+  bakery_dining:   "#C49056",
+  icecream:        "#EF8FB1",
+  local_bar:       "#D9962E",
+  sports_bar:      "#D9962E",
+  nightlife:       "#8851D4",
+  tapas:           "#D85C5C",
+  restaurant:      "#B07957",
+};
+
+// Custom 3D-style food collectibles — same vocabulary as the coffee /
+// historic / etc. illustrations in COLLECTIBLES (140×140 viewBox, layered
+// gradients + highlights), but split out so they can be picked per food
+// kind based on the stop's name.
+export const FOOD_COLLECTIBLES = {
+  ramen_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-ramen-bowl" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#E66B4E" />
+          <stop offset="60%" stopColor="#B83C2A" />
+          <stop offset="100%" stopColor="#7A1F12" />
+        </linearGradient>
+        <linearGradient id="g-ramen-broth" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFD58A" />
+          <stop offset="100%" stopColor="#E89B3A" />
+        </linearGradient>
+      </defs>
+      <path d="M48 30 C42 40, 52 48, 46 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M64 26 C58 38, 70 48, 64 60" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M82 30 C76 40, 86 48, 80 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M30 64 H110 L102 110 a10 10 0 0 1 -10 8 H48 a10 10 0 0 1 -10 -8 Z" fill="url(#g-ramen-bowl)" />
+      <ellipse cx="70" cy="66" rx="38" ry="6" fill="url(#g-ramen-broth)" />
+      <path d="M44 64 Q56 58 70 64 T98 64" stroke="#FFE8A8" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M48 68 Q60 62 72 68 T96 68" stroke="#FFE8A8" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <ellipse cx="56" cy="66" rx="7" ry="5" fill="#FFFAEC" />
+      <ellipse cx="56" cy="66" rx="3.5" ry="2.5" fill="#F2A93A" />
+      <circle cx="84" cy="65" r="2" fill="#5C9F66" />
+      <circle cx="88" cy="68" r="2" fill="#5C9F66" />
+      <circle cx="92" cy="64" r="2" fill="#5C9F66" />
+      <ellipse cx="50" cy="76" rx="12" ry="3" fill="#FFFFFF" opacity="0.30" />
+      <path d="M104 110 a8 8 0 0 0 8 -8 v-6 a8 8 0 0 0 -8 -8" fill="none" stroke="url(#g-ramen-bowl)" strokeWidth="6" strokeLinecap="round" />
+    </svg>
+  ),
+  set_meal: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-sushi-rice" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#E8DEC6" />
+        </linearGradient>
+        <linearGradient id="g-sushi-fish" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FF9173" />
+          <stop offset="100%" stopColor="#D14A2C" />
+        </linearGradient>
+        <linearGradient id="g-sushi-board" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#3A2A1C" />
+          <stop offset="100%" stopColor="#1A0F08" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="70" cy="100" rx="50" ry="10" fill="url(#g-sushi-board)" />
+      <rect x="36" y="64" width="72" height="32" rx="4" fill="#5A4632" />
+      <rect x="38" y="66" width="68" height="2" rx="1" fill="#8B6A4F" opacity="0.6" />
+      <rect x="44" y="56" width="20" height="32" rx="3" fill="#1E1414" />
+      <rect x="46" y="56" width="16" height="32" rx="2" fill="url(#g-sushi-rice)" />
+      <path d="M44 56 H64 L62 50 H46 Z" fill="url(#g-sushi-fish)" />
+      <path d="M48 56 L48 50" stroke="#FFFFFF" strokeWidth="0.8" opacity="0.55" />
+      <rect x="76" y="56" width="20" height="32" rx="3" fill="#1E1414" />
+      <rect x="78" y="56" width="16" height="32" rx="2" fill="url(#g-sushi-rice)" />
+      <ellipse cx="86" cy="56" rx="9" ry="3" fill="url(#g-sushi-fish)" />
+      <circle cx="84" cy="55" r="1" fill="#FFAE94" />
+      <circle cx="88" cy="55" r="1" fill="#FFAE94" />
+      <ellipse cx="56" cy="60" rx="6" ry="2" fill="#FFFFFF" opacity="0.35" />
+    </svg>
+  ),
+  rice_bowl: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-rice-bowl" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F4D8B0" />
+          <stop offset="60%" stopColor="#C28D5A" />
+          <stop offset="100%" stopColor="#7A4A28" />
+        </linearGradient>
+        <radialGradient id="g-rice" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#E8DEC6" />
+        </radialGradient>
+      </defs>
+      <path d="M28 64 H112 L102 110 a10 10 0 0 1 -10 8 H48 a10 10 0 0 1 -10 -8 Z" fill="url(#g-rice-bowl)" />
+      <ellipse cx="70" cy="64" rx="42" ry="8" fill="url(#g-rice)" />
+      <ellipse cx="56" cy="62" rx="2" ry="1.4" fill="#FFFFFF" />
+      <ellipse cx="64" cy="60" rx="2" ry="1.4" fill="#FFFFFF" />
+      <ellipse cx="74" cy="62" rx="2" ry="1.4" fill="#FFFFFF" />
+      <ellipse cx="82" cy="60" rx="2" ry="1.4" fill="#FFFFFF" />
+      <circle cx="62" cy="62" r="3" fill="#5C9F66" />
+      <circle cx="78" cy="62" r="3" fill="#D85C5C" />
+      <ellipse cx="70" cy="60" rx="6" ry="2.5" fill="#F2A93A" />
+      <ellipse cx="50" cy="74" rx="10" ry="2.5" fill="#FFFFFF" opacity="0.35" />
+    </svg>
+  ),
+  soup_kitchen: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-soup-bowl" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F0DCB4" />
+          <stop offset="100%" stopColor="#A8835A" />
+        </linearGradient>
+        <linearGradient id="g-soup-broth" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFC97A" />
+          <stop offset="100%" stopColor="#D67E2C" />
+        </linearGradient>
+      </defs>
+      <path d="M50 28 C44 38, 54 46, 48 56" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M70 24 C64 36, 76 46, 70 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M90 28 C84 38, 94 46, 88 56" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M28 66 H112 L100 108 a10 10 0 0 1 -10 8 H50 a10 10 0 0 1 -10 -8 Z" fill="url(#g-soup-bowl)" />
+      <ellipse cx="70" cy="66" rx="42" ry="8" fill="url(#g-soup-broth)" />
+      <circle cx="58" cy="66" r="3" fill="#5C9F66" />
+      <circle cx="74" cy="64" r="3" fill="#D85C5C" />
+      <circle cx="82" cy="68" r="2.5" fill="#FFFAEC" />
+      <ellipse cx="50" cy="78" rx="12" ry="3" fill="#FFFFFF" opacity="0.32" />
+      <rect x="100" y="48" width="6" height="40" rx="3" transform="rotate(20 103 68)" fill="#3A2A1C" />
+    </svg>
+  ),
+  local_pizza: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-pizza-cheese" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFDB88" />
+          <stop offset="100%" stopColor="#E89B3A" />
+        </linearGradient>
+        <linearGradient id="g-pizza-crust" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#E8C087" />
+          <stop offset="100%" stopColor="#A06B30" />
+        </linearGradient>
+      </defs>
+      <path d="M70 24 L116 102 L24 102 Z" fill="url(#g-pizza-crust)" />
+      <path d="M70 36 L106 96 L34 96 Z" fill="url(#g-pizza-cheese)" />
+      <circle cx="62" cy="64" r="6" fill="#D14A2C" />
+      <circle cx="62" cy="64" r="4" fill="#FF7152" opacity="0.55" />
+      <circle cx="84" cy="68" r="6" fill="#D14A2C" />
+      <circle cx="84" cy="68" r="4" fill="#FF7152" opacity="0.55" />
+      <circle cx="70" cy="84" r="6" fill="#D14A2C" />
+      <circle cx="70" cy="84" r="4" fill="#FF7152" opacity="0.55" />
+      <circle cx="50" cy="90" r="2" fill="#5C9F66" />
+      <circle cx="92" cy="88" r="2" fill="#5C9F66" />
+      <circle cx="76" cy="56" r="2" fill="#5C9F66" />
+      <path d="M70 36 L106 96 L34 96 Z" fill="#FFFFFF" opacity="0.10" />
+    </svg>
+  ),
+  lunch_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-burger-bun" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F2C879" />
+          <stop offset="100%" stopColor="#A0712A" />
+        </linearGradient>
+        <linearGradient id="g-burger-patty" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#9C5532" />
+          <stop offset="100%" stopColor="#5A2C12" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="70" cy="46" rx="42" ry="22" fill="url(#g-burger-bun)" />
+      <ellipse cx="60" cy="38" rx="6" ry="3" fill="#FFF6D8" opacity="0.7" />
+      <circle cx="56" cy="42" r="1.5" fill="#FFF6D8" />
+      <circle cx="78" cy="38" r="1.5" fill="#FFF6D8" />
+      <circle cx="86" cy="44" r="1.5" fill="#FFF6D8" />
+      <rect x="28" y="62" width="84" height="6" rx="3" fill="#5C9F66" />
+      <rect x="28" y="68" width="84" height="6" rx="3" fill="#FFFAEC" />
+      <ellipse cx="70" cy="80" rx="42" ry="9" fill="url(#g-burger-patty)" />
+      <ellipse cx="70" cy="92" rx="40" ry="6" fill="#D85C5C" />
+      <ellipse cx="70" cy="106" rx="42" ry="14" fill="url(#g-burger-bun)" />
+      <ellipse cx="58" cy="100" rx="10" ry="2.5" fill="#FFFFFF" opacity="0.35" />
+    </svg>
+  ),
+  outdoor_grill: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-steak" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#A8483F" />
+          <stop offset="60%" stopColor="#7A2A1F" />
+          <stop offset="100%" stopColor="#3F1108" />
+        </linearGradient>
+        <linearGradient id="g-steak-fat" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFF1D6" />
+          <stop offset="100%" stopColor="#F0CE94" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="70" cy="100" rx="48" ry="10" fill="#1E1414" opacity="0.4" />
+      <path d="M28 64 Q70 44 112 64 Q108 92 70 92 Q32 92 28 64 Z" fill="url(#g-steak)" />
+      <path d="M40 60 Q70 50 100 60" fill="none" stroke="url(#g-steak-fat)" strokeWidth="3" strokeLinecap="round" />
+      <path d="M44 76 Q70 68 96 76" fill="none" stroke="url(#g-steak-fat)" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+      <path d="M50 64 L48 86" stroke="#1E1414" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <path d="M70 60 L70 86" stroke="#1E1414" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <path d="M90 64 L92 86" stroke="#1E1414" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <path d="M40 72 H100" stroke="#1E1414" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <ellipse cx="58" cy="58" rx="14" ry="3" fill="#FFFFFF" opacity="0.18" />
+    </svg>
+  ),
+  kebab_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-taco-shell" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F2C879" />
+          <stop offset="100%" stopColor="#9C5F1E" />
+        </linearGradient>
+        <linearGradient id="g-taco-meat" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#A8483F" />
+          <stop offset="100%" stopColor="#5A2A1A" />
+        </linearGradient>
+      </defs>
+      <path d="M22 78 Q70 24 118 78 Q118 94 100 100 Q70 110 40 100 Q22 94 22 78 Z" fill="url(#g-taco-shell)" />
+      <path d="M28 78 Q70 38 112 78 Q108 86 90 86 Q70 90 50 86 Q32 86 28 78 Z" fill="url(#g-taco-meat)" />
+      <circle cx="50" cy="74" r="3" fill="#5C9F66" />
+      <circle cx="62" cy="68" r="3" fill="#5C9F66" />
+      <circle cx="78" cy="68" r="3" fill="#FFFAEC" />
+      <circle cx="86" cy="74" r="3" fill="#D85C5C" />
+      <circle cx="70" cy="64" r="2.5" fill="#FFEB7E" />
+      <path d="M40 96 Q70 102 100 96" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" opacity="0.4" fill="none" />
+      <path d="M22 78 Q44 30 70 30" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" opacity="0.30" />
+    </svg>
+  ),
+  dinner_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-pasta-plate" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#C9C0BD" />
+        </radialGradient>
+        <linearGradient id="g-pasta-sauce" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#E84A2C" />
+          <stop offset="100%" stopColor="#9A1F12" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="70" cy="78" rx="54" ry="20" fill="url(#g-pasta-plate)" />
+      <ellipse cx="70" cy="74" rx="44" ry="14" fill="url(#g-pasta-sauce)" />
+      <path d="M40 74 Q50 64 60 72 T80 72 T100 74" fill="none" stroke="#F4D77F" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M44 78 Q56 70 66 76 T86 76 T100 78" fill="none" stroke="#F4D77F" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M44 82 Q56 76 70 82 T96 82" fill="none" stroke="#F4D77F" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="62" cy="68" r="3" fill="#5C9F66" />
+      <circle cx="80" cy="76" r="3" fill="#5C9F66" />
+      <circle cx="72" cy="80" r="2" fill="#FFFAEC" />
+      <circle cx="60" cy="80" r="2" fill="#FFFAEC" />
+      <ellipse cx="56" cy="68" rx="10" ry="3" fill="#FFFFFF" opacity="0.4" />
+    </svg>
+  ),
+  brunch_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-pancake" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F2C879" />
+          <stop offset="100%" stopColor="#A0712A" />
+        </linearGradient>
+        <linearGradient id="g-syrup" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#E88B2E" />
+          <stop offset="100%" stopColor="#7A4108" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="70" cy="106" rx="50" ry="6" fill="#1E1414" opacity="0.18" />
+      <ellipse cx="70" cy="98" rx="44" ry="10" fill="url(#g-pancake)" />
+      <ellipse cx="70" cy="84" rx="40" ry="9" fill="url(#g-pancake)" />
+      <ellipse cx="70" cy="72" rx="36" ry="8" fill="url(#g-pancake)" />
+      <path d="M36 70 Q44 76 52 72" fill="none" stroke="url(#g-syrup)" strokeWidth="3.5" strokeLinecap="round" />
+      <path d="M52 72 Q60 84 70 80 Q80 76 88 84 Q96 90 104 84" fill="none" stroke="url(#g-syrup)" strokeWidth="3.5" strokeLinecap="round" />
+      <rect x="62" y="50" width="14" height="14" rx="2" fill="#FFF1AA" />
+      <rect x="62" y="50" width="14" height="14" rx="2" fill="url(#g-syrup)" opacity="0.45" />
+      <ellipse cx="56" cy="68" rx="10" ry="2.5" fill="#FFFFFF" opacity="0.4" />
+    </svg>
+  ),
+  bakery_dining: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-croissant" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F2C879" />
+          <stop offset="55%" stopColor="#C0853C" />
+          <stop offset="100%" stopColor="#7A4108" />
+        </linearGradient>
+      </defs>
+      <path d="M30 92 Q50 30 110 60 Q116 80 100 96 Q70 110 30 92 Z" fill="url(#g-croissant)" />
+      <path d="M44 78 Q60 60 80 64" fill="none" stroke="#FFE0A8" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+      <path d="M52 88 Q66 72 88 76" fill="none" stroke="#FFE0A8" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+      <path d="M64 96 Q80 84 100 86" fill="none" stroke="#FFE0A8" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+      <path d="M48 70 Q42 78 46 90" fill="none" stroke="#7A4108" strokeWidth="1.5" opacity="0.55" />
+      <path d="M70 60 Q66 78 76 92" fill="none" stroke="#7A4108" strokeWidth="1.5" opacity="0.55" />
+      <path d="M92 64 Q90 80 100 90" fill="none" stroke="#7A4108" strokeWidth="1.5" opacity="0.55" />
+      <ellipse cx="68" cy="58" rx="20" ry="6" fill="#FFFFFF" opacity="0.18" />
+    </svg>
+  ),
+  icecream: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-icecream-cone" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F2C879" />
+          <stop offset="100%" stopColor="#7A4108" />
+        </linearGradient>
+        <radialGradient id="g-scoop-pink" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#FFD0DD" />
+          <stop offset="100%" stopColor="#D85C8E" />
+        </radialGradient>
+        <radialGradient id="g-scoop-mint" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#E1F5DA" />
+          <stop offset="100%" stopColor="#5C9F66" />
+        </radialGradient>
+      </defs>
+      <path d="M50 70 L70 120 L90 70 Z" fill="url(#g-icecream-cone)" />
+      <path d="M52 74 L70 110" stroke="#FFFFFF" strokeOpacity="0.35" strokeWidth="1" />
+      <path d="M70 74 L88 70" stroke="#FFFFFF" strokeOpacity="0.35" strokeWidth="1" />
+      <path d="M58 80 L82 80" stroke="#7A4108" strokeOpacity="0.5" strokeWidth="1" />
+      <circle cx="58" cy="60" r="14" fill="url(#g-scoop-mint)" />
+      <circle cx="82" cy="62" r="14" fill="url(#g-scoop-pink)" />
+      <ellipse cx="54" cy="54" rx="4" ry="2.5" fill="#FFFFFF" opacity="0.55" />
+      <ellipse cx="78" cy="56" rx="4" ry="2.5" fill="#FFFFFF" opacity="0.55" />
+      <circle cx="70" cy="50" r="3" fill="#D85C5C" />
+      <path d="M70 47 L70 42" stroke="#5C9F66" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  local_bar: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-beer" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFE16E" />
+          <stop offset="100%" stopColor="#C77F0F" />
+        </linearGradient>
+        <linearGradient id="g-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.10" />
+        </linearGradient>
+      </defs>
+      <path d="M44 36 H92 L96 100 a10 10 0 0 1 -10 10 H50 a10 10 0 0 1 -10 -10 Z" fill="url(#g-beer)" />
+      <ellipse cx="68" cy="36" rx="22" ry="7" fill="#FFFAEC" />
+      <ellipse cx="60" cy="32" rx="6" ry="4" fill="#FFFFFF" />
+      <ellipse cx="78" cy="34" rx="5" ry="3" fill="#FFFFFF" />
+      <ellipse cx="68" cy="30" rx="4" ry="3" fill="#FFFFFF" />
+      <path d="M44 36 H92 L96 100 a10 10 0 0 1 -10 10 H50 a10 10 0 0 1 -10 -10 Z" fill="url(#g-glass)" />
+      <path d="M50 50 L48 96" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+      <path d="M92 44 H104 a8 8 0 0 1 8 8 v18 a8 8 0 0 1 -8 8 H94" fill="none" stroke="#C77F0F" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="60" cy="64" r="2" fill="#FFFFFF" opacity="0.7" />
+      <circle cx="76" cy="80" r="1.5" fill="#FFFFFF" opacity="0.7" />
+    </svg>
+  ),
+  sports_bar: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-beer2" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFE16E" />
+          <stop offset="100%" stopColor="#C77F0F" />
+        </linearGradient>
+      </defs>
+      <path d="M44 36 H92 L96 100 a10 10 0 0 1 -10 10 H50 a10 10 0 0 1 -10 -10 Z" fill="url(#g-beer2)" />
+      <ellipse cx="68" cy="36" rx="22" ry="7" fill="#FFFAEC" />
+      <ellipse cx="60" cy="32" rx="6" ry="4" fill="#FFFFFF" />
+      <ellipse cx="78" cy="34" rx="5" ry="3" fill="#FFFFFF" />
+      <path d="M50 50 L48 96" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+      <path d="M92 44 H104 a8 8 0 0 1 8 8 v18 a8 8 0 0 1 -8 8 H94" fill="none" stroke="#C77F0F" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="60" cy="64" r="2" fill="#FFFFFF" opacity="0.7" />
+      <circle cx="76" cy="80" r="1.5" fill="#FFFFFF" opacity="0.7" />
+    </svg>
+  ),
+  nightlife: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-cocktail" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFA9CD" />
+          <stop offset="100%" stopColor="#8851D4" />
+        </linearGradient>
+      </defs>
+      <path d="M28 36 H112 L70 88 Z" fill="url(#g-cocktail)" />
+      <path d="M28 36 H112" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
+      <line x1="70" y1="88" x2="70" y2="116" stroke="#34233E" strokeWidth="3" strokeLinecap="round" />
+      <ellipse cx="70" cy="118" rx="20" ry="4" fill="#34233E" />
+      <path d="M50 50 L70 50" stroke="#FFFFFF" strokeWidth="1.5" opacity="0.55" />
+      <line x1="86" y1="32" x2="78" y2="62" stroke="#5C9F66" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="78" cy="62" r="4" fill="#5C9F66" />
+      <circle cx="58" cy="56" r="3" fill="#FFEB7E" />
+      <ellipse cx="56" cy="50" rx="10" ry="2" fill="#FFFFFF" opacity="0.45" />
+    </svg>
+  ),
+  tapas: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-tapas-plate" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#C9C0BD" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="70" cy="80" rx="48" ry="14" fill="url(#g-tapas-plate)" />
+      <circle cx="50" cy="74" r="8" fill="#D14A2C" />
+      <circle cx="48" cy="72" r="3" fill="#FFAE94" opacity="0.7" />
+      <circle cx="70" cy="68" r="9" fill="#5C9F66" />
+      <circle cx="68" cy="66" r="3" fill="#A8D5B0" opacity="0.7" />
+      <circle cx="92" cy="74" r="8" fill="#FFEB7E" />
+      <circle cx="90" cy="72" r="3" fill="#FFFAEC" opacity="0.7" />
+      <ellipse cx="56" cy="74" rx="10" ry="2.5" fill="#FFFFFF" opacity="0.35" />
+    </svg>
+  ),
+  restaurant: (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-rest-plate" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#C9C0BD" />
+        </radialGradient>
+        <radialGradient id="g-rest-dome" cx="50%" cy="0%" r="100%">
+          <stop offset="0%" stopColor="#FFD89A" />
+          <stop offset="60%" stopColor="#D49A2A" />
+          <stop offset="100%" stopColor="#7A4108" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="70" cy="100" rx="54" ry="14" fill="url(#g-rest-plate)" />
+      <path d="M22 84 Q70 32 118 84" fill="url(#g-rest-dome)" />
+      <circle cx="70" cy="36" r="4" fill="#34233E" />
+      <line x1="70" y1="32" x2="70" y2="22" stroke="#34233E" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M40 76 Q70 50 100 76" fill="none" stroke="#FFFAEC" strokeWidth="2" strokeLinecap="round" opacity="0.45" />
+      <path d="M30 84 Q70 90 110 84" stroke="#7A4108" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <ellipse cx="56" cy="100" rx="20" ry="3" fill="#FFFFFF" opacity="0.40" />
+    </svg>
+  ),
+};
+export function pickFoodIcon(name, category, vibe) {
+  if (!FOOD_VIBES.has(vibe)) return null;
+  const text = `${name || ""} ${category || ""}`.toLowerCase();
+  if (/ramen|noodle|udon|soba/.test(text))                        return "ramen_dining";
+  if (/sushi|sashimi|maki|tempura|izakaya|japanese/.test(text))    return "set_meal";
+  if (/poke|rice bowl|donburi|bibimbap/.test(text))                return "rice_bowl";
+  if (/soup|pho|chowder|broth|congee/.test(text))                  return "soup_kitchen";
+  if (/pizza|pizzeria|slice/.test(text))                           return "local_pizza";
+  if (/burger|smashburger|patty/.test(text))                       return "lunch_dining";
+  if (/steak|grill|bbq|barbecue|smokehouse|chophouse/.test(text))  return "outdoor_grill";
+  if (/fish|seafood|oyster|crab|lobster|shrimp|clam/.test(text))   return "set_meal";
+  if (/taco|burrito|taqueria|mexican|tortilla|cantina/.test(text)) return "kebab_dining";
+  if (/kebab|kabob|gyro|shawarma|falafel|mediterranean/.test(text)) return "kebab_dining";
+  if (/curry|biryani|indian|thai|vietnamese|asian/.test(text))     return "ramen_dining";
+  if (/pasta|trattoria|italian|risotto/.test(text))                return "dinner_dining";
+  if (/breakfast|brunch|pancake|waffle|eggs|diner/.test(text))     return "brunch_dining";
+  if (/bakery|pastry|patisserie|croissant|donut|doughnut|cake/.test(text)) return "bakery_dining";
+  if (/ice cream|gelato|sorbet|frozen yogurt|froyo/.test(text))    return "icecream";
+  if (/wine|cocktail|whisk|martini|lounge/.test(text))             return "nightlife";
+  if (/beer|brewery|brewhouse|pub|tavern/.test(text))              return "sports_bar";
+  if (/tapas|small plate|appetizer/.test(text))                    return "tapas";
+  return "restaurant"; // generic fallback within the food family
 }
 
 // Build the structure the screen expects from the actual walk state. We don't
@@ -162,7 +623,7 @@ const HERO_BG_IMAGES = {
   shop:       "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=720&h=1280&fit=crop&q=80",
 };
 
-const STOP_TINTS = {
+export const STOP_TINTS = {
   coffee:     "radial-gradient(circle at 30% 28%, #F7D8C6 0%, #E4A988 70%, #C77F5E 100%)",
   park:       "radial-gradient(circle at 30% 28%, #E4EECB 0%, #B6CE95 70%, #7FA266 100%)",
   bookshop:   "radial-gradient(circle at 30% 28%, #FFE76B 0%, #F2B400 70%, #B68300 100%)",
@@ -192,7 +653,7 @@ function getToneByDuration(totalMins) {
   return "short";
 }
 
-const COLLECTIBLES = {
+export const COLLECTIBLES = {
   coffee: (
     <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
       <defs>
@@ -288,32 +749,46 @@ const COLLECTIBLES = {
   historic: (
     <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
       <defs>
-        <linearGradient id="g-hist-glass" x1="20%" y1="10%" x2="80%" y2="100%">
-          <stop offset="0%" stopColor="#FFE36B" />
-          <stop offset="55%" stopColor="#FFB02E" />
-          <stop offset="100%" stopColor="#A85A00" />
+        <linearGradient id="g-art-frame" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFE38C" />
+          <stop offset="55%" stopColor="#D49A2A" />
+          <stop offset="100%" stopColor="#8E5F08" />
         </linearGradient>
-        <linearGradient id="g-hist-cap" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#5E4276" />
-          <stop offset="100%" stopColor="#2E1C42" />
+        <linearGradient id="g-art-frame-inner" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#8E5F08" />
+          <stop offset="100%" stopColor="#FFD879" />
         </linearGradient>
-        <radialGradient id="g-hist-flame" cx="50%" cy="60%" r="50%">
-          <stop offset="0%" stopColor="#FFFFFF" />
-          <stop offset="40%" stopColor="#FFD501" />
-          <stop offset="100%" stopColor="#FF7A2B" stopOpacity="0" />
-        </radialGradient>
+        <linearGradient id="g-art-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFD89A" />
+          <stop offset="100%" stopColor="#FF9E5C" />
+        </linearGradient>
+        <linearGradient id="g-art-hill" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7DBE89" />
+          <stop offset="100%" stopColor="#3D7E48" />
+        </linearGradient>
       </defs>
-      <path d="M70 18 V28" stroke="#34233E" strokeWidth="3" strokeLinecap="round" />
-      <path d="M58 28 H82" stroke="#34233E" strokeWidth="3" strokeLinecap="round" />
-      <path d="M56 32 H84 L80 44 H60 Z" fill="url(#g-hist-cap)" />
-      <path d="M52 46 H88 L84 54 H56 Z" fill="url(#g-hist-cap)" />
-      <rect x="54" y="54" width="32" height="48" rx="6" fill="url(#g-hist-glass)" />
-      <path d="M56 56 L 58 100" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" opacity="0.45" />
-      <rect x="62" y="62" width="16" height="32" rx="3" fill="#FFF4D9" opacity="0.35" />
-      <ellipse cx="70" cy="80" rx="12" ry="14" fill="url(#g-hist-flame)" />
-      <circle cx="70" cy="78" r="4" fill="#FFFFFF" opacity="0.85" />
-      <path d="M52 102 H88 L84 112 H56 Z" fill="url(#g-hist-cap)" />
-      <rect x="60" y="112" width="20" height="5" rx="2" fill="url(#g-hist-cap)" />
+      {/* Hanging cord above the frame */}
+      <path d="M62 22 L70 30 L78 22" fill="none" stroke="#34233E" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+      <circle cx="70" cy="22" r="2" fill="#34233E" opacity="0.7" />
+      {/* Outer gold frame */}
+      <rect x="22" y="30" width="96" height="84" rx="6" fill="url(#g-art-frame)" />
+      {/* Inner inset (darker, for depth) */}
+      <rect x="28" y="36" width="84" height="72" rx="2" fill="url(#g-art-frame-inner)" opacity="0.55" />
+      {/* Painted canvas — sky */}
+      <rect x="32" y="40" width="76" height="34" rx="1" fill="url(#g-art-sky)" />
+      {/* Sun glow */}
+      <circle cx="92" cy="56" r="9" fill="#FFFFFF" opacity="0.18" />
+      <circle cx="92" cy="56" r="6" fill="#FFEB7E" />
+      {/* Far hill */}
+      <path d="M32 72 Q 58 58 84 64 T 108 68 L 108 86 L 32 86 Z" fill="#A8D5B0" />
+      {/* Near hill */}
+      <path d="M32 80 Q 52 72 76 80 T 108 84 L 108 100 L 32 100 Z" fill="url(#g-art-hill)" />
+      {/* Tree silhouette */}
+      <path d="M52 92 L52 78 L48 78 L52 72 L56 78 L52 78 Z" fill="#2A4F2C" opacity="0.85" />
+      {/* Painted canvas bottom edge */}
+      <rect x="32" y="100" width="76" height="2" rx="1" fill="#5C7E51" opacity="0.6" />
+      {/* Frame highlight on top edge */}
+      <rect x="22" y="30" width="96" height="3" rx="1.5" fill="#FFF4D9" opacity="0.55" />
     </svg>
   ),
   market: (
@@ -800,6 +1275,7 @@ function RevisitCard({ id, name, category, note, delay, rating, onRate }) {
 function TrailStop({ stop, index, isHero, isStart, isLingered }) {
   const floatDuration = 4.4 + (index % 3) * 0.6;
   const floatDelay = index * 0.45;
+  const foodIconName = pickFoodIcon(stop.name, stop.category, stop.vibe);
   return (
     <div className={`reward-trail-row reward-trail-row--${index % 2 === 0 ? "left" : "right"}`}>
       <div
@@ -823,7 +1299,9 @@ function TrailStop({ stop, index, isHero, isStart, isLingered }) {
             animationDelay: `${floatDelay}s`,
           }}
         >
-          {COLLECTIBLES[stop.vibe]}
+          {foodIconName && FOOD_COLLECTIBLES[foodIconName]
+            ? FOOD_COLLECTIBLES[foodIconName]
+            : (COLLECTIBLES[stop.vibe] || FOOD_COLLECTIBLES.restaurant)}
         </div>
         {/* Tag rules: only LINGERED is shown.
             • Single stop → tagged when lingerMins > 1.
@@ -837,6 +1315,215 @@ function TrailStop({ stop, index, isHero, isStart, isLingered }) {
       <div className="reward-trail-label">{stop.name}</div>
     </div>
   );
+}
+
+// Per-shop coffee variants — picked deterministically by the stop's id so
+// repeat visits to the same place keep the same collectible while different
+// cafés get different cups (latte / espresso / iced / matcha).
+const COFFEE_VARIANTS = [
+  COLLECTIBLES.coffee, // latte with cream foam (default)
+  // Espresso shot — short ceramic cup, dark crema disc.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-cof2-cup" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#C9C0BD" />
+        </linearGradient>
+        <radialGradient id="g-cof2-crema" cx="50%" cy="35%" r="60%">
+          <stop offset="0%" stopColor="#7A4108" />
+          <stop offset="100%" stopColor="#2C1503" />
+        </radialGradient>
+      </defs>
+      <path d="M52 32 C 50 42, 56 50, 52 60" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M70 28 C 66 38, 74 48, 70 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M88 32 C 84 42, 92 50, 88 60" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M44 70 H100 V100 a14 14 0 0 1 -14 14 H58 a14 14 0 0 1 -14 -14 Z" fill="url(#g-cof2-cup)" />
+      <ellipse cx="72" cy="74" rx="26" ry="5" fill="url(#g-cof2-crema)" />
+      <path d="M100 78 H110 a8 8 0 0 1 8 8 v4 a8 8 0 0 1 -8 8 H100" fill="none" stroke="url(#g-cof2-cup)" strokeWidth="6" strokeLinecap="round" />
+      <ellipse cx="58" cy="80" rx="8" ry="2.5" fill="#FFFFFF" opacity="0.55" />
+      <ellipse cx="80" cy="70" rx="6" ry="1.5" fill="#FFFFFF" opacity="0.5" />
+    </svg>
+  ),
+  // Iced coffee — tall glass with ice cubes + straw.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-cof3-glass" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#C8895A" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#4A2C12" />
+        </linearGradient>
+      </defs>
+      <path d="M48 38 L92 38 L88 116 a8 8 0 0 1 -8 8 H60 a8 8 0 0 1 -8 -8 Z" fill="url(#g-cof3-glass)" />
+      <path d="M48 38 L92 38 L88 116 a8 8 0 0 1 -8 8 H60 a8 8 0 0 1 -8 -8 Z" fill="#FFFFFF" opacity="0.18" />
+      <rect x="58" y="48" width="10" height="10" rx="2" fill="#FFFFFF" opacity="0.55" />
+      <rect x="72" y="58" width="10" height="10" rx="2" fill="#FFFFFF" opacity="0.55" />
+      <rect x="62" y="70" width="10" height="10" rx="2" fill="#FFFFFF" opacity="0.45" />
+      <rect x="76" y="78" width="9" height="9" rx="2" fill="#FFFFFF" opacity="0.40" />
+      <line x1="80" y1="20" x2="80" y2="124" stroke="#5C9F66" strokeWidth="4" strokeLinecap="round" />
+      <line x1="80" y1="20" x2="80" y2="124" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
+      <path d="M50 50 L 48 110" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+    </svg>
+  ),
+  // Matcha latte — green cup with foam art.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-cof4-cup" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#C9C0BD" />
+        </linearGradient>
+        <radialGradient id="g-cof4-matcha" cx="50%" cy="35%" r="60%">
+          <stop offset="0%" stopColor="#A8D5B0" />
+          <stop offset="100%" stopColor="#4A7A3E" />
+        </radialGradient>
+      </defs>
+      <path d="M50 30 C 46 40, 56 48, 50 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M70 26 C 64 36, 76 46, 70 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M90 30 C 86 40, 94 48, 90 58" stroke="#D9BEF0" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" fill="none" />
+      <path d="M104 76 h6 a12 12 0 0 1 12 12 v4 a12 12 0 0 1 -12 12 h-6 Z" fill="url(#g-cof4-cup)" />
+      <path d="M32 68 H104 V102 a18 18 0 0 1 -18 18 H50 a18 18 0 0 1 -18 -18 Z" fill="url(#g-cof4-cup)" />
+      <ellipse cx="68" cy="72" rx="34" ry="5.5" fill="url(#g-cof4-matcha)" />
+      <path d="M62 70 Q 68 64 74 70 Q 68 76 62 70 Z" fill="#FFFFFF" opacity="0.65" />
+      <path d="M68 64 L 68 76" stroke="#FFFFFF" strokeWidth="0.8" opacity="0.6" />
+      <ellipse cx="44" cy="78" rx="8" ry="2" fill="#FFFFFF" opacity="0.4" />
+    </svg>
+  ),
+];
+
+// Per-park flower variants — different blooms (cherry blossom, tulip,
+// sunflower) keyed off the stop id so each park reads as its own flower.
+const PARK_VARIANTS = [
+  COLLECTIBLES.park, // purple petal flower (default)
+  // Cherry blossom — light pink petals around small yellow centre.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-cherry-petal" cx="30%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#FFE9F2" />
+          <stop offset="55%" stopColor="#FFB7CE" />
+          <stop offset="100%" stopColor="#D85C8E" />
+        </radialGradient>
+        <linearGradient id="g-cherry-branch" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#5A4632" />
+          <stop offset="100%" stopColor="#2C1F12" />
+        </linearGradient>
+      </defs>
+      <path d="M22 116 Q 60 92 100 90 Q 120 88 122 80" fill="none" stroke="url(#g-cherry-branch)" strokeWidth="5" strokeLinecap="round" />
+      <g transform="translate(78 60)">
+        <path d="M0 -22 Q 8 -20 8 -10 Q 0 -6 -8 -10 Q -8 -20 0 -22 Z" fill="url(#g-cherry-petal)" />
+        <path d="M22 -10 Q 24 0 16 6 Q 8 4 8 -4 Q 14 -12 22 -10 Z" fill="url(#g-cherry-petal)" />
+        <path d="M14 18 Q 20 24 12 28 Q 4 28 4 20 Q 8 14 14 18 Z" fill="url(#g-cherry-petal)" />
+        <path d="M-14 18 Q -20 24 -12 28 Q -4 28 -4 20 Q -8 14 -14 18 Z" fill="url(#g-cherry-petal)" />
+        <path d="M-22 -10 Q -24 0 -16 6 Q -8 4 -8 -4 Q -14 -12 -22 -10 Z" fill="url(#g-cherry-petal)" />
+        <circle r="6" fill="#FFE36B" />
+        <circle r="2.5" fill="#B8500A" />
+      </g>
+      <circle cx="44" cy="100" r="4" fill="url(#g-cherry-petal)" />
+      <circle cx="56" cy="92" r="3.5" fill="url(#g-cherry-petal)" />
+      <circle cx="100" cy="68" r="3.5" fill="url(#g-cherry-petal)" />
+      <circle cx="42" cy="84" r="3" fill="url(#g-cherry-petal)" />
+    </svg>
+  ),
+  // Tulip — red cup-shaped bloom with green stem and leaf.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="g-tulip-bloom" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FF8B8B" />
+          <stop offset="60%" stopColor="#D14A2C" />
+          <stop offset="100%" stopColor="#7A1F12" />
+        </linearGradient>
+        <linearGradient id="g-tulip-stem" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7DBE89" />
+          <stop offset="100%" stopColor="#3D7E48" />
+        </linearGradient>
+      </defs>
+      <path d="M70 124 L 70 56" stroke="url(#g-tulip-stem)" strokeWidth="6" strokeLinecap="round" fill="none" />
+      <path d="M70 92 Q 50 78 38 96 Q 38 102 50 100 Q 64 98 70 92 Z" fill="url(#g-tulip-stem)" />
+      <path d="M50 60 Q 50 28 70 28 Q 90 28 90 60 Q 90 70 78 60 Q 70 78 62 60 Q 50 70 50 60 Z" fill="url(#g-tulip-bloom)" />
+      <path d="M70 30 L 70 60" stroke="#FFFFFF" strokeOpacity="0.4" strokeWidth="1.5" />
+      <ellipse cx="60" cy="40" rx="6" ry="3" fill="#FFFFFF" opacity="0.45" />
+    </svg>
+  ),
+  // Sunflower — yellow petals around dark brown centre.
+  (
+    <svg viewBox="0 0 140 140" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <radialGradient id="g-sun-petal" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#FFF6A8" />
+          <stop offset="60%" stopColor="#FFC84A" />
+          <stop offset="100%" stopColor="#A66800" />
+        </radialGradient>
+        <radialGradient id="g-sun-center" cx="40%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#7A4108" />
+          <stop offset="100%" stopColor="#2C1503" />
+        </radialGradient>
+        <linearGradient id="g-sun-stem" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7DBE89" />
+          <stop offset="100%" stopColor="#3D7E48" />
+        </linearGradient>
+      </defs>
+      <path d="M70 124 L 70 60" stroke="url(#g-sun-stem)" strokeWidth="5" strokeLinecap="round" fill="none" />
+      <ellipse cx="56" cy="98" rx="9" ry="6" fill="url(#g-sun-stem)" transform="rotate(-25 56 98)" />
+      <g transform="translate(70 56)">
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+          <ellipse key={a} cx="0" cy="-22" rx="8" ry="14" fill="url(#g-sun-petal)" transform={`rotate(${a})`} />
+        ))}
+        <circle r="14" fill="url(#g-sun-center)" />
+        <circle r="4" cx="-3" cy="-3" fill="#FFFFFF" opacity="0.30" />
+      </g>
+    </svg>
+  ),
+];
+
+// Stable hash → variant index. Same id always maps to the same variant so
+// the user sees a consistent collectible per stop across rerenders.
+function variantIndex(id, count) {
+  const s = String(id || "");
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) hash = ((hash << 5) + hash + s.charCodeAt(i)) | 0;
+  return Math.abs(hash) % count;
+}
+
+// Helper used by other screens (e.g., ProgressScreen) to render the same
+// collectible illustration that the trail uses for a given stop. Picks a
+// food-specific SVG when the stop's name resolves to a food kind; for
+// coffee + park vibes, picks a deterministic variant by the stop's id;
+// falls back to the curated COLLECTIBLES vibe artwork otherwise. Ice
+// cream is detected explicitly because VIBE_BY_CATEGORY lumps it under
+// "coffee" — without this guard, an ice-cream stop would render a coffee
+// cup instead of a cone.
+export function getStopCollectible(stop) {
+  if (!stop) return null;
+  const text = `${stop.name || ""} ${stop.desc || stop.category || ""}`.toLowerCase();
+  if (/ice cream|gelato|sorbet|frozen yogurt|froyo|creamery/.test(text)) {
+    return FOOD_COLLECTIBLES.icecream;
+  }
+  // Bakery is folded into the coffee vibe in VIBE_BY_CATEGORY too — short-
+  // circuit so a pastry shop renders a croissant instead of a coffee cup.
+  if (/bakery|patisserie|pastry|donut|doughnut|croissant|cake/.test(text)) {
+    return FOOD_COLLECTIBLES.bakery_dining;
+  }
+  const vibe = stop.vibe || vibeFor(stop.desc || stop.category, stop.name);
+  if (vibe === "coffee") {
+    return COFFEE_VARIANTS[variantIndex(stop.id, COFFEE_VARIANTS.length)];
+  }
+  if (vibe === "park") {
+    return PARK_VARIANTS[variantIndex(stop.id, PARK_VARIANTS.length)];
+  }
+  const foodIcon = pickFoodIcon(stop.name, stop.desc || stop.category, vibe);
+  if (foodIcon && FOOD_COLLECTIBLES[foodIcon]) return FOOD_COLLECTIBLES[foodIcon];
+  return COLLECTIBLES[vibe] || FOOD_COLLECTIBLES.restaurant;
+}
+
+// Returns the STOP_TINTS gradient for a given stop's vibe — used by other
+// screens to back-fill the round chip behind a collectible so it matches
+// the trail's vocabulary on the reward screen.
+export function getStopTint(stop) {
+  if (!stop) return STOP_TINTS.park;
+  const vibe = stop.vibe || vibeFor(stop.desc || stop.category, stop.name);
+  return STOP_TINTS[vibe] || STOP_TINTS.park;
 }
 
 export default function RewardScreen({
@@ -853,6 +1540,7 @@ export default function RewardScreen({
   similarPlaces: similarOverride,
   onComplete, // primary nav: home
   onResume,   // user changed their mind — go back to the active walk
+  onSeeProgress, // open the per-category exploration-progress screen
   onShare,
 }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -978,12 +1666,18 @@ export default function RewardScreen({
 
   // Background hero image: try Wikipedia for an actual photo of one of the
   // explored locations (hero stop), fall back to the curated vibe-based image.
+  // We key the effect off a stable string of stop ids (plus the vibe) so the
+  // fetch doesn't re-trigger every time `walkData` is rebuilt by an upstream
+  // state tick (e.g., dwell-time updates), which otherwise caused the bg to
+  // flash back to the fallback mid-view.
   const fallbackBg = HERO_BG_IMAGES[hero.vibe] || HERO_BG_IMAGES.park;
   const [bgImage, setBgImage] = useState(fallbackBg);
+  const bgKey = useMemo(
+    () => walkData.stops.map((s) => s.id).join("|") + "::" + hero.vibe,
+    [walkData.stops, hero.vibe]
+  );
   useEffect(() => {
     setBgImage(fallbackBg);
-    // Walk the explored stops in dwell order; the first one with a Wikipedia
-    // photo wins, so the background reflects somewhere the user actually went.
     const candidates = [...walkData.stops].sort((a, b) => b.lingerMins - a.lingerMins);
     let cancelled = false;
     (async () => {
@@ -1004,7 +1698,8 @@ export default function RewardScreen({
       }
     })();
     return () => { cancelled = true; };
-  }, [walkData.stops, fallbackBg]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bgKey]);
 
   // Empty state: the user ended a journey with nothing to reflect on —
   // no stops added AND no spots visited. Skip the trail/treasures UI in
@@ -1107,7 +1802,10 @@ export default function RewardScreen({
   }
 
   return (
-    <div className={`reward-screen reward-screen--${hero.vibe}`}>
+    <div
+      className={`reward-screen reward-screen--${hero.vibe}`}
+      style={{ background: STOP_TINTS[hero.vibe] || STOP_TINTS.park }}
+    >
       <img className="reward-bg-image" src={bgImage} alt="" aria-hidden="true" />
       <div className="reward-bg-frost" />
 
@@ -1138,17 +1836,54 @@ export default function RewardScreen({
         <p className="reward-subheader">{TONE_SUBHEADERS[tone]}</p>
 
         <section className="reward-trail" aria-label="Your walk">
-          <svg className="reward-trail-path" viewBox="0 0 280 640" preserveAspectRatio="none" aria-hidden="true">
-            <path
-              d="M 70 60 C 70 130, 210 150, 210 220 C 210 290, 70 310, 70 380 C 70 450, 210 470, 210 540"
-              stroke="#8851D4"
-              strokeWidth="2"
-              strokeDasharray="3 7"
-              strokeLinecap="round"
-              fill="none"
-              opacity="0.55"
-            />
-          </svg>
+          {(() => {
+            // Build the snaking dotted path procedurally so it always
+            // starts at the first stop and ends at the last, regardless
+            // of how many stops the user actually visited. Each segment
+            // is a smooth S-curve between alternating left / right rows,
+            // mirroring the .reward-trail-row layout.
+            const n = walkData.stops.length;
+            const top = 60;
+            const pitch = 160;
+            const xL = 70;
+            const xR = 210;
+            const totalH = top + Math.max(0, n - 1) * pitch + 100;
+            const stops = Array.from({ length: n }, (_, i) => ({
+              x: i % 2 === 0 ? xL : xR,
+              y: top + i * pitch,
+            }));
+            let d = "";
+            if (stops.length > 0) {
+              d = `M ${stops[0].x} ${stops[0].y}`;
+              for (let i = 1; i < stops.length; i++) {
+                const p = stops[i - 1];
+                const c = stops[i];
+                const cp1y = p.y + 70;
+                const cp2y = c.y - 70;
+                d += ` C ${p.x} ${cp1y}, ${c.x} ${cp2y}, ${c.x} ${c.y}`;
+              }
+            }
+            return (
+              <svg
+                className="reward-trail-path"
+                viewBox={`0 0 280 ${totalH}`}
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                {n >= 2 && (
+                  <path
+                    d={d}
+                    stroke="#8851D4"
+                    strokeWidth="2"
+                    strokeDasharray="3 7"
+                    strokeLinecap="round"
+                    fill="none"
+                    opacity="0.55"
+                  />
+                )}
+              </svg>
+            );
+          })()}
           <div className="reward-trail-stops">
             {walkData.stops.map((stop, i) => (
               <TrailStop
@@ -1218,14 +1953,9 @@ export default function RewardScreen({
         <div className="reward-actions">
           <button
             className="reward-share-btn"
-            onClick={onComplete}
+            onClick={onSeeProgress || onComplete}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6"/>
-              <line x1="8" y1="3" x2="8" y2="18"/>
-              <line x1="16" y1="6" x2="16" y2="21"/>
-            </svg>
-            <span>Plan another exploration</span>
+            <span>See my exploration progress</span>
           </button>
           {/* Hidden on past-date throwbacks — there's no walk to resume. */}
           {dateMode === 'today' && (

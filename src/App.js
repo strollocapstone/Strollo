@@ -18,6 +18,7 @@ import PreWalkConstraintsScreen from './PreferencesScreen';
 import TimelineScreen from './TimelineScreen';
 import QuizScreen, { QUIZ_DECK, buildMergedPreset } from './QuizScreen';
 import RewardScreen from './RewardScreen';
+import ProgressScreen from './ProgressScreen';
 import LoadingScreen from './LoadingScreen';
 import WelcomeScreen from './WelcomeScreen';
 import DevSwitch from './DevSwitch';
@@ -310,6 +311,26 @@ function App() {
               setScreen('home');
             }}
             onResume={() => setScreen('navigation')}
+            onSeeProgress={() => setScreen('progress')}
+          />
+        )}
+        {screen === 'progress' && (
+          <ProgressScreen
+            journeyItems={journeyItems}
+            visitedIds={visitedIds}
+            onGoBack={() => setScreen('reward')}
+            onPlanAnother={() => {
+              // Same wipe-and-home as the reward screen's onComplete so a
+              // fresh exploration starts with a clean slate.
+              setJourneyItems([]);
+              setAddedIds(new Set());
+              setVisitedIds(new Set());
+              setVisitedAt(new Map());
+              setStopDwellMs(new Map());
+              setStartLocation(null);
+              setTripStartTime(null);
+              setScreen('home');
+            }}
           />
         )}
         {screen === 'constraints' && (
