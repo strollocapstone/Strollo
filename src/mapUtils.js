@@ -83,6 +83,8 @@ export function WatchLocation({ onUpdate }) {
   useEffect(() => {
     const id = navigator.geolocation.watchPosition(
       ({ coords }) => {
+        // Drop bogus (0, 0) updates — see LocateMe note above.
+        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
         if (lastPos.current) {
           const dlat = Math.abs(coords.latitude - lastPos.current[0]);
           const dlng = Math.abs(coords.longitude - lastPos.current[1]);
@@ -137,23 +139,55 @@ export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
   useEffect(() => {
     if (!trigger) return;
     let cancelled = false;
+    console.log("[LocateMe] effect fired (trigger=", trigger, "), calling getCurrentPosition");
+    if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: "geolocation" })
+        .then((p) => console.log("[LocateMe] permission state:", p.state))
+        .catch((e) => console.log("[LocateMe] permission query failed:", e));
+    }
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         if (cancelled) return;
+        console.log("[LocateMe] success — coords:", coords.latitude, coords.longitude, "accuracy:", coords.accuracy);
+        // Some browsers / dev sensor overrides report (0, 0) when they don't
+        // actually have a fix. Treat that as a generic failure so the boots
+        // don't end up floating in the Atlantic.
+        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) {
+          console.warn("[LocateMe] coords are (0, 0) — treating as no fix");
+          if (onErrorRef.current) {
+            onErrorRef.current("Unable to get your location. Please try again.");
+          }
+          return;
+        }
         const pos = [coords.latitude, coords.longitude];
         try {
           if (isFirstLocate.current) {
             map.setView(pos, zoom);
             isFirstLocate.current = false;
           } else {
-            // Always fly to user at the default zoom — animates even if we're already there
-            map.flyTo(pos, zoom, { duration: 0.9 });
+            // Leaflet's flyTo to the same lat/lng + zoom is silently a no-op,
+            // which makes the focus FAB feel broken when the user is already
+            // centered. If we're already there, do a brief zoom-out → zoom-in
+            // pulse so the click always reads as a re-center.
+            const center = map.getCenter();
+            const sameSpot = Math.abs(center.lat - pos[0]) < 5e-5 &&
+                             Math.abs(center.lng - pos[1]) < 5e-5 &&
+                             Math.abs(map.getZoom() - zoom) < 0.1;
+            if (sameSpot) {
+              map.setZoom(Math.max(0, zoom - 1.2), { animate: true });
+              setTimeout(() => {
+                try { map.flyTo(pos, zoom, { duration: 0.55 }); } catch (_) {}
+              }, 320);
+            } else {
+              map.flyTo(pos, zoom, { duration: 0.9 });
+            }
           }
         } catch (_) { /* map may be unmounted */ }
         onLocateRef.current(pos);
       },
       (err) => {
         if (cancelled) return;
+        console.log("[LocateMe] error — code:", err.code, "message:", err.message);
         if (onErrorRef.current) {
           if (err.code === 1) {
             onErrorRef.current("Location permission denied. Please enable it in your browser settings.");
@@ -162,9 +196,10 @@ export function LocateMe({ trigger, onLocate, onError, zoom = 16 }) {
           }
         }
       },
-      // Locate FAB asks for high-accuracy GPS so the centring is on the
-      // user, not on a cell-tower triangulation 50m away.
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+      // High-accuracy GPS centres on the user instead of a cell-tower
+      // triangulation 50m away. The 8s timeout was too aggressive on cold
+      // starts; 20s gives the browser room to lock GPS without timing out.
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
     );
     return () => { cancelled = true; };
   }, [trigger, map]);

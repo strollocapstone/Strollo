@@ -100,6 +100,10 @@ function App() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         if (cancelled) return;
+        // Some browsers / DevTools sensor overrides hand back (0, 0) when
+        // there's no real fix. Skip those so HomeScreen doesn't initialise
+        // its map at the Atlantic.
+        if (Math.abs(coords.latitude) < 1e-6 && Math.abs(coords.longitude) < 1e-6) return;
         setLastKnownLocation([coords.latitude, coords.longitude]);
       },
       () => { /* permission denied / timeout — HomeScreen will prompt again */ },

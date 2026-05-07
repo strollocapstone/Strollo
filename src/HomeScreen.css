@@ -564,14 +564,15 @@
   background: rgba(0, 0, 0, 0.35);
   z-index: 100;
 }
-/* Card is mostly white with a hint of frost — still blurs the scrim behind
-   it so the edges feel soft, but the body stays crisp and readable. */
+/* Solid cream card — reads as a clear, defined surface so the frosted-glass
+   "Not now" button on top has the same soft pill appearance as the
+   .reward-undo-pill ("Oops, I'm not done exploring") on the reward screen. */
 .locate-popover {
   position: absolute;
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   width: 280px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(251, 248, 243, 0.85);
   backdrop-filter: blur(20px) saturate(1.25);
   -webkit-backdrop-filter: blur(20px) saturate(1.25);
   border-radius: 20px;
@@ -605,18 +606,19 @@
   display: flex;
   gap: 10px;
 }
-/* Buttons mirror TimelineScreen's bottom-bar pair — frosted-glass cancel on
-   the left, Strollo-yellow primary on the right. Same 44px height, 18px
-   radius, 14/700 type so the two sticky footers feel like one family. */
+/* Buttons echo PreferencesScreen's bottom action pair, scaled down so the
+   pair fits comfortably inside the 280px card without dominating it.
+   Tighter height + horizontal padding + 13/600 type read closer to the
+   visual weight of the pwc footer in its wider container. */
 .locate-popover-btn {
   flex: 1;
-  height: 44px;
+  height: 38px;
   border: none;
-  border-radius: var(--radius-pill);
-  padding: 0 16px;
+  border-radius: 18px;
+  padding: 0 12px;
   font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
