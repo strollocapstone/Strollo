@@ -997,49 +997,50 @@ export default function TimelineScreen({
               style={isBeingDragged ? { transform: `translateY(${dragDeltaY}px)`, transition: "none" } : undefined}
             >
               <div className="tl-rail-cell">
-                {isCurrentTarget ? (
-                  <RailPin />
-                ) : !isSuggestion && item.id === finalStopId ? (
-                  <FinalStopPin />
-                ) : (
-                  <div className="tl-rail-stack">
-                    {/* Yellow numbered badge — sits on the rail above the
-                        purple dot, doubles as a drag handle for reorder. */}
-                    {!isSuggestion && stopNumberById.get(item.id) && (
-                      <span
-                        className={`tl-rail-stop-number${isReorderable ? " tl-rail-stop-number--reorderable" : ""}`}
-                        aria-label={isReorderable ? `Stop ${stopNumberById.get(item.id)} — drag to reorder` : `Stop ${stopNumberById.get(item.id)}`}
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={isReorderable ? (e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
-                          dragRef.current.startY = e.clientY;
-                          dragRef.current.pointerY = e.clientY;
-                          beginDrag(item.id, reorderableIds);
-                        } : undefined}
-                        onPointerMove={isReorderable ? (e) => {
-                          if (draggingId !== item.id) return;
-                          dragRef.current.pointerY = e.clientY;
-                          setDragDeltaY(e.clientY - dragRef.current.startY);
-                        } : undefined}
-                        onPointerUp={isReorderable ? (e) => {
-                          if (draggingId === item.id) commitDrop();
-                          try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
-                        } : undefined}
-                        onPointerCancel={isReorderable ? () => {
-                          if (draggingId === item.id) commitDrop();
-                        } : undefined}
-                      >
-                        {stopNumberById.get(item.id)}
-                      </span>
-                    )}
+                <div className="tl-rail-stack">
+                  {/* Yellow numbered badge — shown on every confirmed stop
+                      (regular, current-target, final). Doubles as a drag
+                      handle for reorder when the stop is reorderable. */}
+                  {!isSuggestion && stopNumberById.get(item.id) && (
+                    <span
+                      className={`tl-rail-stop-number${isReorderable ? " tl-rail-stop-number--reorderable" : ""}`}
+                      aria-label={isReorderable ? `Stop ${stopNumberById.get(item.id)} — drag to reorder` : `Stop ${stopNumberById.get(item.id)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={isReorderable ? (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+                        dragRef.current.startY = e.clientY;
+                        dragRef.current.pointerY = e.clientY;
+                        beginDrag(item.id, reorderableIds);
+                      } : undefined}
+                      onPointerMove={isReorderable ? (e) => {
+                        if (draggingId !== item.id) return;
+                        dragRef.current.pointerY = e.clientY;
+                        setDragDeltaY(e.clientY - dragRef.current.startY);
+                      } : undefined}
+                      onPointerUp={isReorderable ? (e) => {
+                        if (draggingId === item.id) commitDrop();
+                        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+                      } : undefined}
+                      onPointerCancel={isReorderable ? () => {
+                        if (draggingId === item.id) commitDrop();
+                      } : undefined}
+                    >
+                      {stopNumberById.get(item.id)}
+                    </span>
+                  )}
+                  {isCurrentTarget ? (
+                    <RailPin />
+                  ) : !isSuggestion && item.id === finalStopId ? (
+                    <FinalStopPin />
+                  ) : (
                     <div
                       className={`tl-rail-node${isSuggestion ? " tl-rail-node--suggest" : ""}${isVisited ? " tl-rail-node--visited" : ""}`}
                       aria-hidden="true"
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div className="tl-content-cell">
                 {isExpanded ? (

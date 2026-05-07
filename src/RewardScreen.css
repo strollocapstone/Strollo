@@ -346,6 +346,27 @@
   z-index: 0;
 }
 
+/* Material-Symbol rendering for food spots — replaces the generic
+   COLLECTIBLES artwork when the stop's name/category resolves to a
+   specific food kind (ramen, sushi, soup, rice, pizza, …). The font-size
+   matches the visual weight of the COLLECTIBLES SVGs the icon replaces. */
+.reward-trail-food-icon {
+  font-size: 44px;
+  color: #34233E;
+  /* Filled, heavy-weight Material Symbol with stacked drop-shadows: a thin
+     bright highlight on top, a soft mid-shadow below the glyph, and a
+     wider lift shadow so each food icon reads as a raised colored sticker
+     rather than a flat outline glyph. */
+  font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 48;
+  filter:
+    drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.55))
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 3px 6px rgba(52, 35, 62, 0.25));
+}
+.reward-trail-stop--hero .reward-trail-food-icon {
+  font-size: 52px;
+}
+
 .reward-trail-stop--hero {
   width: 100px;
   height: 100px;
