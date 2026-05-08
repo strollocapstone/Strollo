@@ -1417,11 +1417,17 @@ function WalkCompanionWidgetInner({
                     ))}
                 </span>
                 <p className="strollo-tips-loading-text">
-                  {pendingPillTag
-                    ? `Strollo is looking for cool ${pendingPillTag.toLowerCase()} nearby…`
-                    : pendingSpokenQuery
-                      ? "Strollo is finding something for you…"
-                      : "Strollo is looking for things you might like nearby."}
+                  {pendingPillTag ? (
+                    <>
+                      {"Strollo is looking for cool "}
+                      <span className="strollo-tips-tip-keyword">
+                        {pendingPillTag.toLowerCase()}
+                      </span>
+                      {" nearby…"}
+                    </>
+                  ) : pendingSpokenQuery
+                    ? "Strollo is finding something for you…"
+                    : "Strollo is looking for things you might like nearby."}
                 </p>
                 <button
                   type="button"
