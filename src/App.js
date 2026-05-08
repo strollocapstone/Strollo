@@ -1,7 +1,7 @@
 // FEATURE: shell
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-08
-// BUILD: c88cd26b
+// BUILD: 71132ffc
 // DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./WelcomeScreen, ./DevSwitch, ./cloudTtsService
 // CONSUMED BY: ./index.js (root mount)
 //
@@ -375,6 +375,7 @@ function App() {
             preferences={preferences}
             nearbyPlaces={nearbyPlaces}
             showVoice={screen === 'navigation'}
+            behindRewardOverlay={screen === 'reward'}
             widgetPreview={widgetPreview}
             onSetWidgetPreview={setupWidgetPreview}
             autoListenTrigger={autoListenTrigger}

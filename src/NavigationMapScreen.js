@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-08
-// BUILD: c88cd26b
+// BUILD: 71132ffc
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //
@@ -234,7 +234,7 @@ function computeBearing([lat1, lng1], [lat2, lng2]) {
 }
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true, widgetPreview = null, onSetWidgetPreview, autoListenTrigger = null, prefilledTranscript = "", prefilledTranscriptTrigger = null, forceAtTargetTrigger = 0, onLastStopArrival, onClearWidgetPreview }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true, widgetPreview = null, onSetWidgetPreview, autoListenTrigger = null, prefilledTranscript = "", prefilledTranscriptTrigger = null, forceAtTargetTrigger = 0, onLastStopArrival, onClearWidgetPreview, behindRewardOverlay = false }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -1182,7 +1182,10 @@ Plain text only. No quotes, no markdown, no preamble.`;
 
       {/* Profile FAB — top-right of the map. Opens a small preview menu
           for design + dev to verify the four marquee widget states
-          without walking to / triggering them in the real flow. */}
+          without walking to / triggering them in the real flow. Hidden
+          when the Reward screen is overlaying the map so the reward UI
+          owns the screen chrome. */}
+      {!behindRewardOverlay && (
       <button
         type="button"
         className={`fab-circle top-right-btn${widgetPreview ? ' top-right-btn--active' : ''}`}
@@ -1193,7 +1196,8 @@ Plain text only. No quotes, no markdown, no preamble.`;
       >
         <span className="top-right-initials">ST</span>
       </button>
-      {isPreviewMenuOpen && (
+      )}
+      {!behindRewardOverlay && isPreviewMenuOpen && (
         <>
           <div
             className="nav-preview-menu-backdrop"
@@ -1264,8 +1268,10 @@ Plain text only. No quotes, no markdown, no preamble.`;
       )}
 
       {/* ── TOP BAR (hidden while companion widget owns the top; back is
-           reachable via the journey flag in the bottom-right stack) ── */}
-      {!showVoice && (
+           reachable via the journey flag in the bottom-right stack).
+           Also hidden while the Reward screen is overlaying the map so
+           the reward UI owns the screen chrome. ── */}
+      {!showVoice && !behindRewardOverlay && (
         <div className="nav-top-bar">
           <button className="back-btn" onClick={onGoBack}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E1541" strokeWidth="2.5" strokeLinecap="round">
