@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: 39ece31e
+// UPDATE DATE: 2026-05-08
+// BUILD: c603b66
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //

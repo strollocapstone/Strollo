@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: 39ece31e
+// UPDATE DATE: 2026-05-08
+// BUILD: c603b66
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
