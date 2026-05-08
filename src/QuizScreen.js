@@ -1,8 +1,8 @@
 // FEATURE: quiz
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
-// DEPENDS ON: leaf (exports QUIZ_DECK + buildMergedPreset for App.js dev-mode)
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: 39ece31e
+// DEPENDS ON: ./assets/quiz-hidden-gems.jpeg (exports QUIZ_DECK + buildMergedPreset for App.js dev-mode)
 // CONSUMED BY: ./App.js
 //
 // Vibe-preference Polaroid swipe quiz. Each card has a set of vibes; swiping
@@ -12,6 +12,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import "./QuizScreen.css";
+import quizHiddenGems from "./assets/quiz-hidden-gems.jpeg";
 
 // ── Deck (6 lifestyle bundles) ────────────────────────────────────────────
 // Each polaroid is a complete lifestyle preset: caption sells the vibe,
@@ -38,8 +39,8 @@ export const QUIZ_DECK = [
     preset: { destination: "loop", duration: "60 min", distance: 1.0,
               avoidances: ["Big crowds", "Busy roads"],
               mapFilters: ["cafes", "ai-highlights", "saved-places"] } },
-  { id: "p4",  image: "https://images.unsplash.com/photo-1615621734603-04c156e22380?q=80&w=2670&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    caption: "Record shops you could browse for hours",
+  { id: "p4",  image: quizHiddenGems,
+    caption: "Hidden gems in neighborhoods with more character than foot traffic",
     vibes: ["music", "cozy", "retro", "quiet"],
     preset: { destination: "open", duration: "60 min", distance: 1.2,
               avoidances: ["Big crowds"],

@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-07
-// BUILD: cda47b3
+// BUILD: 39ece31e
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
@@ -103,7 +103,7 @@ function ProgressStrip({ progress, disabled = false, atTarget = false }) {
         <path
           d={path}
           fill="none"
-          stroke="rgba(136, 81, 212, 0.65)"
+          stroke="rgba(136, 81, 212, 0.85)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray="2 4"

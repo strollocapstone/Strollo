@@ -798,8 +798,9 @@
   line-height: 1.25;
   color: #3B1F6E;
   letter-spacing: -0.3px;
-  margin: 0 0 22px;
+  margin: 0 auto 22px;
   max-width: 280px;
+  text-align: center;
 }
 /* Pulsing ellipsis at the end of the title — reads as a loading indicator
    without needing extra UI. */
