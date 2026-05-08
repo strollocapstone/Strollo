@@ -103,21 +103,36 @@ function NarrationBody({ text, className }) {
   );
 }
 
+// Naïve plural → singular stem so the highlighter bridges the gap when
+// the prompt-pill label is plural ("Cafes") but Gemini's tip uses the
+// singular ("cafe"). Handles -ies → -y, -es, and trailing -s.
+function stemPlural(word) {
+  if (!word) return word;
+  if (word.length > 3 && word.endsWith("ies")) return word.slice(0, -3) + "y";
+  if (word.length > 3 && word.endsWith("es"))  return word.slice(0, -2);
+  if (word.length > 2 && word.endsWith("s"))   return word.slice(0, -1);
+  return word;
+}
 function highlightTipKeywords(tip, transcript) {
   if (!tip) return tip;
   if (!transcript) return tip;
-  const keywords = new Set(
-    String(transcript)
-      .toLowerCase()
-      .split(/[^a-z']+/i)
-      .filter((w) => w && w.length >= 4 && !TIP_KEYWORD_STOPWORDS.has(w))
-  );
+  const keywords = new Set();
+  String(transcript)
+    .toLowerCase()
+    .split(/[^a-z']+/i)
+    .forEach((w) => {
+      if (!w || w.length < 4 || TIP_KEYWORD_STOPWORDS.has(w)) return;
+      // Index both the original form and its stem so "cafes" / "cafe"
+      // and "gems" / "gem" all match.
+      keywords.add(w);
+      keywords.add(stemPlural(w));
+    });
   if (keywords.size === 0) return tip;
   const tokens = String(tip).split(/(\s+)/);
   return tokens.map((tok, i) => {
     if (!tok || /^\s+$/.test(tok)) return tok;
     const cleaned = tok.toLowerCase().replace(/[^a-z]/g, "");
-    if (cleaned && keywords.has(cleaned)) {
+    if (cleaned && (keywords.has(cleaned) || keywords.has(stemPlural(cleaned)))) {
       return (
         <span key={`kw-${i}`} className="strollo-tips-tip-keyword">{tok}</span>
       );
