@@ -1,7 +1,7 @@
 // FEATURE: reward
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: 25225b52
+// UPDATE DATE: 2026-05-08
+// BUILD: 3d077e44
 // DEPENDS ON: ./geminiService (fetchNearbyPlaces)
 // CONSUMED BY: ./App.js, ./ProgressScreen (getStopCollectible, getStopTint)
 //
@@ -1195,19 +1195,43 @@ function ThumbIcon({ filled, direction = "up" }) {
 // Mirrors HomeScreen's CATEGORY_ICONS so the reward revisit cards share the
 // same visual vocabulary as the home suggested-spots cards.
 const CATEGORY_ICONS = {
-  Coffee: "local_cafe", Restaurant: "restaurant", Bar: "local_bar",
-  "Ice Cream": "icecream", Bakery: "bakery", Bookstore: "menu_book",
-  Library: "local_library", Theatre: "theater_comedy", Florist: "local_florist",
-  Museum: "museum", Gallery: "palette", Art: "brush",
-  Viewpoint: "landscape", Attraction: "attractions", Arts: "theater_comedy",
-  Park: "park", Garden: "yard",
+  Coffee: "local_cafe", "Coffee Shop": "local_cafe", Café: "local_cafe", Cafe: "local_cafe",
+  Restaurant: "restaurant", Eatery: "restaurant", Diner: "restaurant",
+  Bar: "local_bar", Pub: "local_bar", Brewery: "local_bar",
+  "Ice Cream": "icecream", Gelato: "icecream",
+  Bakery: "bakery", Pastry: "bakery",
+  Bookstore: "menu_book", Bookshop: "menu_book", Books: "menu_book",
+  Library: "local_library",
+  Theatre: "theater_comedy", Theater: "theater_comedy",
+  Florist: "local_florist",
+  Museum: "museum", Gallery: "palette", Art: "brush", Arts: "theater_comedy",
+  Viewpoint: "landscape", Scenic: "landscape",
+  Attraction: "attractions", Monument: "attractions", Landmark: "attractions",
+  Park: "park", Trail: "park", Greenway: "park",
+  Garden: "yard",
+  Market: "storefront", Grocery: "storefront", Shop: "storefront", Store: "storefront", Boutique: "storefront",
 };
+
+// Resolve a Material Symbols glyph for a free-form category string
+// (e.g. "Coffee Shop", "Italian Restaurant"). Tries exact match first,
+// then falls back to a substring scan so variants like "Coffee Shop"
+// or "Italian Restaurant" still pick up the right icon. Falls back to
+// the generic location pin only when nothing matches.
+function categoryIcon(category) {
+  if (!category) return "location_on";
+  if (CATEGORY_ICONS[category]) return CATEGORY_ICONS[category];
+  const cat = String(category).toLowerCase();
+  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
+    if (cat.includes(key.toLowerCase())) return icon;
+  }
+  return "location_on";
+}
 
 // Suggested-spot card shown beneath a thumbs-upped revisit card. Visually
 // matches HomeScreen's `.location-card` default state — dashed purple
 // outline, frosted background, same icon + title + category styling.
 function SuggestionCard({ id, name, category, isFaved, onToggleFave }) {
-  const iconName = CATEGORY_ICONS[category] || "location_on";
+  const iconName = categoryIcon(category);
   return (
     <div className="reward-suggestion-card">
       <div className="reward-revisit-text">
@@ -1239,7 +1263,7 @@ function SuggestionCard({ id, name, category, isFaved, onToggleFave }) {
 }
 
 function RevisitCard({ id, name, category, note, delay, rating, onRate }) {
-  const iconName = CATEGORY_ICONS[category] || "location_on";
+  const iconName = categoryIcon(category);
   return (
     <div className="reward-revisit-card" style={{ animationDelay: `${delay}ms` }}>
       <div className="reward-revisit-text">
