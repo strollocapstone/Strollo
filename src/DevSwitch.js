@@ -1,7 +1,7 @@
 // FEATURE: intro
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-08
+// BUILD: c88cd26b
 // DEPENDS ON: leaf
 // CONSUMED BY: ./App.js
 //
@@ -39,7 +39,7 @@ export default function DevSwitch({ onDev, onNormalUser }) {
           </button>
         </div>
         <p className="dev-switch__hint">
-          Dev mode skips the intro and quiz; every quiz answer is YES.
+          Dev mode skips the intro and onboarding and jumps to the map homescreen.
         </p>
       </div>
     </div>

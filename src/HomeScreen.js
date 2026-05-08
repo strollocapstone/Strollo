@@ -1,9 +1,9 @@
 // FEATURE: home-discovery + home-chat + home-voice + home-journey  (multi — phase 5 splits)
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: cda47b3
+// UPDATE DATE: 2026-05-08
+// BUILD: c88cd26b
 // DEPENDS ON: ./geminiService, ./mapUtils, ./useSpeechRecognition, various CSS
-// CONSUMED BY: ./App.js
+// CONSUMED BY: ./App.js, ./WalkCompanionWidget (CATEGORY_ICONS)
 //
 // Home hub. Currently mixes (1) nearby-places fetch via Overpass, (2) the AI
 // chat sheet that geocodes Gemini's place suggestions into map pins, (3) a
@@ -25,7 +25,7 @@ import { useSpeechRecognition } from "./useSpeechRecognition";
 import { sendMessage, buildSystemPrompt, extractPlaces, cleanResponseText, geocodePlace, getWalkingRoute, fetchNearbyPlaces } from "./geminiService";
 import { youIcon, youIconBelow, WatchLocation, LocateMe, FlyTo, TrackUserPosition, MapDragListener, MapCenterTracker, ZoomTracker, MapClickListener, isWithinWalkingRadius, haversineKm } from "./mapUtils";
 
-const CATEGORY_ICONS = {
+export const CATEGORY_ICONS = {
   "Coffee":     "local_cafe",
   "Restaurant": "restaurant",
   "Bar":        "local_bar",
@@ -607,59 +607,24 @@ export default function HomeScreen({
     setChatListening(false);
 
     if (text) {
-      // Show result briefly, then transition to chat
+      // Show the captured transcript briefly inside the listen card, then
+      // close it. We deliberately do NOT open the chat overlay any more —
+      // the audio icon should behave like the widget's "Say anything"
+      // affordance (listening state in place; the resulting tip surfaces
+      // in the widget's tips body when the user reaches it).
       setVoiceResult(text);
-      resultTimer.current = setTimeout(async () => {
+      resultTimer.current = setTimeout(() => {
         setVoiceResult("");
         setListenCardMode(false);
         setListenTextMode(false);
         setVoiceActive(false);
-
-        // Enter chat mode
-        const userMsg = { id: ++chatIdCounter.current, role: "user", text };
-        setChatMessages([userMsg]);
-        setChatMode(true);
-        setChatLoading(true);
-
-        const chatReqId = chatReqIdRef.current;
-        try {
-          const systemPrompt = buildSystemPrompt({
-            userLocation,
-            journeyItems: [],
-            elapsedMinutes: 0,
-            currentStopIndex: 0,
-            totalStops: 0,
-            preferences,
-            vibePreferences,
-          });
-          const response = await sendMessage([userMsg], systemPrompt);
-          if (chatReqIdRef.current !== chatReqId) return;
-          const places = extractPlaces(response);
-          const displayText = cleanResponseText(response);
-          const aiMsg = { id: ++chatIdCounter.current, role: "ai", text: displayText, places: places.length > 0 ? places : undefined };
-          setChatMessages(prev => {
-            const updated = [...prev, aiMsg];
-            if (places.length > 0) {
-              setSuggestedStops(places);
-              geocodeSuggestions(places);
-            }
-            return updated;
-          });
-        } catch (err) {
-          if (chatReqIdRef.current !== chatReqId) return;
-          console.error("Gemini error:", err);
-          const errMsg = { id: ++chatIdCounter.current, role: "ai", text: `Gemini error: ${err?.message || "unknown"}. Tap the mic to try again!` };
-          setChatMessages(prev => [...prev, errMsg]);
-        } finally {
-          if (chatReqIdRef.current === chatReqId) setChatLoading(false);
-        }
-      }, 1000);
+      }, 1200);
     } else {
       setListenCardMode(false);
       setListenTextMode(false);
       setVoiceActive(false);
     }
-  }, [userLocation, geocodeSuggestions, preferences, vibePreferences]);
+  }, []);
 
   const speech = useSpeechRecognition({ onAutoStop: handleAutoStop });
 
@@ -712,29 +677,18 @@ export default function HomeScreen({
   const handleSendQuery = useCallback((text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    setChatMessages([{ id: ++chatIdCounter.current, role: "user", text: trimmed }]);
-    setChatMode(true);
-    setChatLoading(true);
+    // Treat the typed query like a spoken request: jump to the navigation
+    // screen with an empty journey and pre-fill the widget's listening
+    // row with the typed text so it reads as a transcription. The widget
+    // runs its 3-second "Thinking" beat and then surfaces a Gemini tip
+    // based on what the user typed — no chat overlay.
     setQuery("");
     setListenCardMode(false);
     setListenTextMode(false);
     setVoiceActive(false);
-    const chatReqId = chatReqIdRef.current;
-    const systemPrompt = buildSystemPrompt({ userLocation, journeyItems: [], elapsedMinutes: 0, currentStopIndex: 0, totalStops: 0, preferences, vibePreferences });
-    sendMessage([{ role: "user", text: trimmed }], systemPrompt).then(response => {
-      if (chatReqIdRef.current !== chatReqId) return;
-      const places = extractPlaces(response);
-      const displayText = cleanResponseText(response);
-      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: displayText, places: places.length > 0 ? places : undefined }]);
-      if (places.length > 0) {
-        setSuggestedStops(places);
-        geocodeSuggestions(places);
-      }
-    }).catch(() => {
-      if (chatReqIdRef.current !== chatReqId) return;
-      setChatMessages(prev => [...prev, { id: ++chatIdCounter.current, role: "ai", text: "Gemini is busy right now. Tap the mic to try again!" }]);
-    }).finally(() => { if (chatReqIdRef.current === chatReqId) setChatLoading(false); });
-  }, [userLocation, geocodeSuggestions, preferences, vibePreferences]);
+    const origin = lastFetchedLocationRef.current || userLocation;
+    onStartWalk([], origin, { prefilledTranscript: trimmed });
+  }, [onStartWalk, lastFetchedLocationRef, userLocation]);
 
   const handlePlanWalk = useCallback(async (passedStops) => {
     const stops = passedStops || suggestedStops;
@@ -988,6 +942,15 @@ export default function HomeScreen({
       .filter((s) => addedIds.has(s.id))
       .filter((s) => isWithinWalkingRadius(origin, s));
     onStartWalk(items, origin);
+  };
+
+  // Audio icon on the search bar — drop the user onto the navigation
+  // screen with an empty journey and an auto-listen flag so the
+  // walk-companion widget mounts straight into its listening state.
+  // Matches the widget's "Say anything" flow on the nav screen.
+  const handleAudioListen = () => {
+    const origin = lastFetchedLocationRef.current || userLocation;
+    onStartWalk([], origin, { autoListen: true });
   };
 
   const toggleVoice = () => {
@@ -1268,15 +1231,12 @@ export default function HomeScreen({
       </div>
 
       {/* ── TOP BAR: profile FAB (right) ──
-           Doubles as the entry point to the widget-state preview menu so
-           designers can verify all 11 states from the home map. Identical
-           menu to the one on NavigationMapScreen — App.js owns the
-           routing so picking a state takes the user to the right screen
-           with the right journey. */}
+           Inert placeholder for now; the widget-state preview dropdown
+           that used to live here was removed. */}
       <div className="top-bar">
         <button
           type="button"
-          className="fab-circle top-right-btn"
+          className={`fab-circle top-right-btn${widgetPreview ? ' top-right-btn--active' : ''}`}
           aria-label="Open widget state preview menu"
           aria-haspopup="menu"
           aria-expanded={isPreviewMenuOpen}
@@ -1309,7 +1269,13 @@ export default function HomeScreen({
               )}
             </div>
             <ul className="nav-preview-menu-list" role="none">
-              {PREVIEW_STATES.map((opt) => {
+              {[
+                { key: 'arrived',                  label: "State: I've arrived" },
+                { key: 'nudge-tidbit',             label: 'Nudge: Tidbit' },
+                { key: 'nudge-detour',             label: 'Suggestion: Detour' },
+                { key: 'incident-with-suggestion', label: 'Suggestion: Unsafe street' },
+                { key: 'nudge-incident',           label: 'Suggestion: Live incident' },
+              ].map((opt) => {
                 const isActive = widgetPreview === opt.key;
                 return (
                   <li key={opt.key} role="none">
@@ -1617,7 +1583,7 @@ export default function HomeScreen({
                   </svg>
                 </button>
               ) : (
-                <button className="mic-btn" aria-label="Start exploring" onClick={handleStartWalk}>
+                <button className="mic-btn" aria-label="Speak to Strollo" onClick={handleAudioListen}>
                   <SoundWaveSvg active={false} />
                 </button>
               )}
@@ -1682,9 +1648,24 @@ export default function HomeScreen({
           {/* State: listening — live transcript */}
           {listenCardMode && !listenTextMode && !voiceResult && (
             <div className="listen-content visible">
-              <p className="listen-card-caption">
-                {speech.transcript || "What's on your mind?"}
-              </p>
+              {/* Mirror the walk widget's user-speaking row so the speaking
+                  experience reads identically across surfaces: yellow dot
+                  with 3 ripple arcs, italic Satoshi transcript that fades
+                  while empty, and a blinking caret. */}
+              <div className="listen-card-speaking">
+                <span className="wcw-listening-waves" aria-hidden="true">
+                  <svg width="22" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFD501" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="5" cy="12" r="2" fill="#FFD501" stroke="none" />
+                    <path className="wcw-wave-arc wcw-wave-arc--1" d="M9 9 Q 11.5 12 9 15" />
+                    <path className="wcw-wave-arc wcw-wave-arc--2" d="M13 7 Q 16.5 12 13 17" />
+                    <path className="wcw-wave-arc wcw-wave-arc--3" d="M17 5 Q 21 12 17 19" />
+                  </svg>
+                </span>
+                <p className={`listen-card-caption listen-card-caption--speaking${speech.transcript ? "" : " listen-card-caption--placeholder"}`}>
+                  {speech.transcript || "Listening…"}
+                  <span className="strollo-reel__caret" aria-hidden="true" />
+                </p>
+              </div>
             </div>
           )}
 

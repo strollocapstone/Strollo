@@ -1,8 +1,8 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-08
-// BUILD: c603b66
-// DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService
+// BUILD: c88cd26b
+// DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService, ./HomeScreen (CATEGORY_ICONS)
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
 // Bottom-pinned dynamic-island walk widget. Currently mixes: nav chrome
@@ -37,6 +37,7 @@ import {
   useTtsSpeak,
   useReverseGeocodeOnce,
 } from "./strollowConversation";
+import { CATEGORY_ICONS } from "./HomeScreen";
 import {
   sendMessage,
   buildConversationPrompt,
@@ -65,6 +66,64 @@ function SoundBars({ active, color = "#FFD501" }) {
       <rect className={cls} x="19"  y="6" width="3" height="6"  rx="1.5" style={{ animationDelay: "0s"   }} />
     </svg>
   );
+}
+
+// Wraps any word in `tip` that also appears in `transcript` with a yellow
+// keyword span. Skips short words and common stopwords so only the user's
+// salient words light up. Returns an array of mixed strings + JSX, ready
+// to render as the children of a <p>.
+const TIP_KEYWORD_STOPWORDS = new Set([
+  "a","an","and","or","but","the","is","are","was","were","be","been","being",
+  "have","has","had","do","does","did","will","would","should","could","can",
+  "of","to","in","on","at","by","for","with","from","about","as","into","out",
+  "i","you","he","she","it","we","they","me","him","her","us","them",
+  "my","your","his","its","our","their","mine","yours","ours","theirs",
+  "this","that","these","those","what","which","who","whom","where","when","why","how",
+  "any","some","all","each","every","none","no","not","only","very","really",
+  "just","also","too","so","than","then","now","here","there","like","find",
+  "want","need","get","give","take","make","look","looking","go","going",
+  "around","near","nearby","close","good","great","best","please",
+]);
+// Splits a body string on sentence boundaries (period / question / bang)
+// and renders each sentence as its own paragraph so two-sentence nudges
+// land on two visually distinct lines instead of running together.
+function NarrationBody({ text, className }) {
+  if (!text) return null;
+  const parts = String(text).match(/[^.!?]+[.!?]+/g) || [String(text)];
+  const lines = parts.map((p) => p.trim()).filter(Boolean);
+  if (lines.length <= 1) {
+    return <p className={className}>{text}</p>;
+  }
+  return (
+    <div className={`${className} wcw-narration--multi`}>
+      {lines.map((line, i) => (
+        <p key={i} className="wcw-narration-line">{line}</p>
+      ))}
+    </div>
+  );
+}
+
+function highlightTipKeywords(tip, transcript) {
+  if (!tip) return tip;
+  if (!transcript) return tip;
+  const keywords = new Set(
+    String(transcript)
+      .toLowerCase()
+      .split(/[^a-z']+/i)
+      .filter((w) => w && w.length >= 4 && !TIP_KEYWORD_STOPWORDS.has(w))
+  );
+  if (keywords.size === 0) return tip;
+  const tokens = String(tip).split(/(\s+)/);
+  return tokens.map((tok, i) => {
+    if (!tok || /^\s+$/.test(tok)) return tok;
+    const cleaned = tok.toLowerCase().replace(/[^a-z]/g, "");
+    if (cleaned && keywords.has(cleaned)) {
+      return (
+        <span key={`kw-${i}`} className="strollo-tips-tip-keyword">{tok}</span>
+      );
+    }
+    return tok;
+  });
 }
 
 function ProgressStrip({ progress, disabled = false, atTarget = false }) {
@@ -156,6 +215,27 @@ function WalkCompanionWidgetInner({
   distance = "—",
   eta = "—",
   progress = 0,
+  // When this counter increments, the widget calls startSpeak() — used by
+  // surfaces that want to mount the widget directly into its listening
+  // state (e.g. the HomeScreen audio icon). Initial mount with a non-zero
+  // value also triggers it. Pass null/undefined to opt out.
+  autoListenTrigger = null,
+  // Surfaces (e.g. HomeScreen's typed search) can hand the widget a
+  // pre-captured "transcript" string so it runs the same Thinking + tip
+  // flow as a real speech session, but skips the actual recording.
+  // The trigger counter re-fires the effect on each new typed query.
+  prefilledTranscript = "",
+  prefilledTranscriptTrigger = null,
+  // True after the user taps I've arrived — the widget swaps the I've
+  // arrived CTA for a Resume button (skip-btn shell with a play icon)
+  // and stays visually at-target. onResume advances the route.
+  isResting = false,
+  onResume,
+  // When the user taps Resume, the parent bumps `resumeTipNonce` with
+  // the next stop's name in `resumeTipFlavor` so the widget surfaces a
+  // contextual tip for where the user is headed next.
+  resumeTipFlavor = null,
+  resumeTipNonce = null,
   // True when the user is within ~300 ft of the next stop. When true, the
   // skip pill swaps its label/handler to "I'm here" so the user can confirm
   // arrival without leaving the widget.
@@ -235,6 +315,30 @@ function WalkCompanionWidgetInner({
   // the auto-narration feels varied across the 60s rotation cycle.
   const TIP_FLAVORS = ["history", "architecture", "hidden-detail", "food", "people-watching"];
   const [tipFlavor, setTipFlavor] = useState(TIP_FLAVORS[0]);
+  // When a prompt-pill tag was just tapped, the loading state's headline
+  // copy and the speak button both swap to "Strollo is looking for cool
+  // <tag> nearby..." / "Thinking" until the new flavoured tip arrives.
+  const [pendingPillTag, setPendingPillTag] = useState(null);
+  // True from the moment a spoken transcript is captured until BOTH (a)
+  // the new flavoured tip has arrived AND (b) at least 3 seconds have
+  // passed since speech ended — so the speak button stays in its
+  // Thinking state for a perceptible beat even when Gemini is fast.
+  const [pendingSpokenQuery, setPendingSpokenQuery] = useState(false);
+  const pendingSpokenQueryStartRef = useRef(0);
+  const MIN_THINKING_MS = 3000;
+  // Verbatim transcript of the user's last spoken request — used to
+  // highlight in yellow any of those words that appear in the resulting
+  // tip text.
+  const [lastSpokenTranscript, setLastSpokenTranscript] = useState("");
+  // True when the current pendingSpokenQuery was started by typed input
+  // rather than actual speech, so the listening row hides its dot+waves
+  // icon (no audio capture happening).
+  const [isTypedQuery, setIsTypedQuery] = useState(false);
+  // Dismissal flag for the in-walk tip card. The card is shown after a
+  // spoken (or typed) query lands while the user already has stops; once
+  // they tap close, this stays true until the next query begins so the
+  // walking turn-row returns.
+  const [spokenTipDismissed, setSpokenTipDismissed] = useState(false);
   const [tripToast, setTripToast] = useState(null);
   const idRef = useRef(0);
   const tripToastTimerRef = useRef(null);
@@ -245,14 +349,32 @@ function WalkCompanionWidgetInner({
   const headerLabel = currentLocationName || geoLabel;
 
   // GPS-grounded prose tip via Gemini, with skeleton-shimmer loading state.
-  const { tip, loading: tipsLoading } = useTipFetch({
+  // Spoken-query refetches skip the 5s footsteps floor; the widget enforces
+  // its own MIN_THINKING_MS instead, holding the displayed tip steady
+  // until both Gemini has replied AND the thinking floor has elapsed.
+  const { tip: rawTip, places: rawPlaces, loading: tipsLoading } = useTipFetch({
     userLocation,
     area: geoArea,
     nonce: tipNonce,
     flavor: tipFlavor,
     vibePreferences,
     preferences,
+    enforceMinLoading: !pendingSpokenQuery,
   });
+  // Snapshot of the most recent tip/places that should be DISPLAYED. While
+  // a spoken query is in flight (button "Thinking"), we hold these at the
+  // previous values so the body doesn't reveal the new tip before the
+  // 3-second thinking beat finishes. Refreshed the moment
+  // pendingSpokenQuery clears.
+  const [displayedTip, setDisplayedTip] = useState("");
+  const [displayedPlaces, setDisplayedPlaces] = useState([]);
+  useEffect(() => {
+    if (pendingSpokenQuery) return;
+    setDisplayedTip(rawTip);
+    setDisplayedPlaces(rawPlaces || []);
+  }, [rawTip, rawPlaces, pendingSpokenQuery]);
+  const tip = displayedTip;
+  const tipPlaces = displayedPlaces;
 
   // Browser TTS for AI replies (default off).
   // The hook itself is enabled whenever any surface is live; per-surface
@@ -470,7 +592,11 @@ function WalkCompanionWidgetInner({
   const NO_SPEECH_MS = 8000;     // 8s with nothing heard → auto-stop empty
   const MAX_LISTEN_MS = 30000;   // 30s hard cap
 
-  // Forward declaration so handleAutoStop can call askAi via a ref.
+  // When the speech recogniser auto-stops with a transcript, route the
+  // user's spoken request straight into a Gemini tip fetch (via flavour +
+  // nonce bump on useTipFetch) instead of opening the conversation reel.
+  // The widget body returns to its tips view with the new flavoured tip
+  // and place pill — no conversation-state switch.
   const handleAutoStop = useCallback((transcript) => {
     console.log("[Strollo] handleAutoStop called with:", transcript);
     setSpeakActive(false);
@@ -480,12 +606,13 @@ function WalkCompanionWidgetInner({
       console.log("[Strollo] handleAutoStop: empty transcript, returning");
       return;
     }
-    const userMsg = { id: `m-${++idRef.current}`, role: "user", text };
-    setMessages((ms) => {
-      const next = [...ms, userMsg];
-      askAiRef.current?.(text, next.slice(0, -1));
-      return next;
-    });
+    setPendingSpokenQuery(true);
+    setIsTypedQuery(false);
+    setSpokenTipDismissed(false);
+    pendingSpokenQueryStartRef.current = Date.now();
+    setLastSpokenTranscript(text);
+    setTipFlavor(text);
+    setTipNonce((n) => n + 1);
   }, [onSpeakEnd]);
 
   const stopConvListening = useCallback(() => {
@@ -777,22 +904,39 @@ function WalkCompanionWidgetInner({
     onRemoveByName(name);
   }, [onRemoveByName]);
 
-  // Prompt-pill tap → enter conversation, push prompt as user message, ask.
-  // Auto-flips voice on so the AI's introduction is read aloud (the user can
-  // mute via the speaker button afterwards).
+  // Prompt-pill tap → stay in Tips mode and refetch a flavoured tip via
+  // useTipFetch (which is keyed on tipFlavor + tipNonce). The loading
+  // sub-state shows footsteps + "Strollo is looking for cool <tag>
+  // nearby..." while the speak button flips to its Thinking state. We
+  // deliberately do NOT switch convMode to "conversation" any more —
+  // tapping a tag should not yank the user out of the empty-state tips
+  // view.
   const handlePromptTap = useCallback((p) => {
-    // Prime TTS inside this click — Chrome/Safari otherwise no-op the
-    // async `speak()` that fires after Gemini's reply lands.
     ttsPrime();
-    setConvMode("conversation");
-    setActiveVoice("conv");
-    const userMsg = { id: `m-${++idRef.current}`, role: "user", text: p.prompt };
-    setMessages((ms) => {
-      const next = [...ms, userMsg];
-      askAi(p.prompt, next.slice(0, -1));
-      return next;
-    });
-  }, [askAi, ttsPrime]);
+    setLastSpokenTranscript("");
+    setPendingPillTag(p.label);
+    setTipFlavor(p.label.toLowerCase());
+    setTipNonce((n) => n + 1);
+  }, [ttsPrime]);
+
+  // Clear the pending-tag flag once the new flavoured tip has arrived.
+  useEffect(() => {
+    if (pendingPillTag && !tipsLoading) setPendingPillTag(null);
+  }, [tipsLoading, pendingPillTag]);
+  // Spoken-query pending state clears only after BOTH Gemini has replied
+  // AND MIN_THINKING_MS has elapsed since speech ended.
+  useEffect(() => {
+    if (!pendingSpokenQuery) return;
+    if (tipsLoading) return;
+    const elapsed = Date.now() - (pendingSpokenQueryStartRef.current || 0);
+    const remaining = Math.max(0, MIN_THINKING_MS - elapsed);
+    if (remaining === 0) {
+      setPendingSpokenQuery(false);
+      return;
+    }
+    const t = setTimeout(() => setPendingSpokenQuery(false), remaining);
+    return () => clearTimeout(t);
+  }, [tipsLoading, pendingSpokenQuery]);
 
   // Restart → fully return to the original post-"Start exploring" state:
   // clear messages + live transcript, stop listening, cancel TTS, drop the
@@ -809,6 +953,18 @@ function WalkCompanionWidgetInner({
     setConvMode("tips");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopConvListening, ttsCancel]);
+
+  // When the user transitions back to no-stops (e.g. removed everything
+  // from the timeline), reset the widget to the empty-state tips flow:
+  // restore convMode to "tips" so the conversation reel doesn't linger,
+  // and bump tipNonce so useTipFetch refires + the loading footsteps
+  // play before the next tip lands.
+  useEffect(() => {
+    if (isEmpty) {
+      setConvMode("tips");
+      setTipNonce((n) => n + 1);
+    }
+  }, [isEmpty]);
 
   // Tip auto-refresh is FROZEN: no entry bump, no idle rotation. The tip
   // rendered on first load stays in place until the user manually triggers
@@ -835,20 +991,19 @@ function WalkCompanionWidgetInner({
 
   const startSpeak = () => {
     setSpeakActive(true);
-    // In empty state, the persistent speak button doubles as the entry point
-    // into the conversation reel: switch mode + drive our own STT recognizer
-    // so the live interim transcript flows into the reel's tier-0 slot.
-    if (isEmpty) {
-      if (convMode !== "conversation") setConvMode("conversation");
-      startConvListening();
-    } else {
-      // Walking-state path — open the in-walk conversation overlay above
-      // the nav chrome, switch to conversation mode, and start listening.
-      // Same STT/Gemini flow as empty-state.
-      if (!convOpen) setConvOpen(true);
-      if (convMode !== "conversation") setConvMode("conversation");
-      startConvListening();
-    }
+    // Reset per-session state so the listening row shows the
+    // pulsing wave icon + "Listening…" placeholder + caret instead of
+    // echoing the previous query's transcript.
+    setLastSpokenTranscript("");
+    setIsTypedQuery(false);
+    setPendingSpokenQuery(false);
+    // Listen in place in BOTH empty and walking states. The widget body
+    // swaps to the ear/wave + live-transcript row via `navListening`;
+    // convMode stays "tips" so the conversation reel never opens. When
+    // the recogniser auto-stops, handleAutoStop seeds a Gemini tip
+    // refetch flavoured by the transcript — the tip + place pill take
+    // over the body when ready.
+    startConvListening();
     onSpeakStart?.();
   };
   const stopSpeak = () => {
@@ -858,6 +1013,58 @@ function WalkCompanionWidgetInner({
     stopConvListening();
     onSpeakEnd?.();
   };
+
+  // External-trigger entry point: when the parent bumps `autoListenTrigger`
+  // (or mounts with it already > 0) we kick off the listening flow as if
+  // the user had tapped Say anything. Initial ref value is 0 so the very
+  // first non-zero trigger fires the effect even on mount.
+  const lastAutoListenTriggerRef = useRef(0);
+  useEffect(() => {
+    if (!autoListenTrigger) return;
+    if (lastAutoListenTriggerRef.current === autoListenTrigger) return;
+    lastAutoListenTriggerRef.current = autoListenTrigger;
+    if (speakActive) return;
+    ttsPrime();
+    startSpeak();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoListenTrigger]);
+
+  // When the next-stop target changes (Skip, Resume, route advance) or
+  // we transition between walking/empty states, dismiss any lingering
+  // in-walk tip card and clear the spoken-query transcript so the
+  // widget body falls back to the turn-row with fresh directions
+  // (or, in the empty case, the tips-body loading state).
+  const prevDestinationRef = useRef(destination);
+  const prevIsEmptyRef = useRef(isEmpty);
+  useEffect(() => {
+    if (prevDestinationRef.current !== destination || prevIsEmptyRef.current !== isEmpty) {
+      setSpokenTipDismissed(true);
+      setLastSpokenTranscript("");
+    }
+    prevDestinationRef.current = destination;
+    prevIsEmptyRef.current = isEmpty;
+  }, [destination, isEmpty]);
+
+  // Typed-search bridge: when the parent bumps prefilledTranscriptTrigger,
+  // the widget jumps straight to the post-speech "Thinking" state with
+  // the supplied transcript and kicks off a Gemini tip refetch — same
+  // flow as handleAutoStop but without an actual STT session.
+  const lastPrefilledTriggerRef = useRef(0);
+  useEffect(() => {
+    if (!prefilledTranscriptTrigger) return;
+    if (lastPrefilledTriggerRef.current === prefilledTranscriptTrigger) return;
+    lastPrefilledTriggerRef.current = prefilledTranscriptTrigger;
+    const text = String(prefilledTranscript || "").trim();
+    if (!text) return;
+    setLastSpokenTranscript(text);
+    setIsTypedQuery(true);
+    setPendingSpokenQuery(true);
+    setSpokenTipDismissed(false);
+    pendingSpokenQueryStartRef.current = Date.now();
+    setTipFlavor(text);
+    setTipNonce((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefilledTranscriptTrigger]);
 
   // Tap-to-toggle (matches the Strollo Conversation prototype's MicButton).
   // First tap → start listening; second tap → stop and commit transcript.
@@ -875,8 +1082,14 @@ function WalkCompanionWidgetInner({
   // also morph the nav-section below the divider into a "you're saying"
   // view — keep the normal walking chrome (Heading to / turn / DIST/ETA)
   // visible so the user can still see where they're going while talking.
+  // Stays true through the post-speech "Thinking" beat as well, so the
+  // user keeps looking at the same listening-row UI (waves + their
+  // captured transcript) while Strollo works on the reply. Drops back
+  // to false the moment pendingSpokenQuery clears, at which point the
+  // tip body takes over.
   const navListening = previewState === 'user-speaking'
-    || (listening && !(convOpen && !isEmpty));
+    || (listening && !(convOpen && !isEmpty))
+    || pendingSpokenQuery;
   // Dev-preview overrides: aiPending ("Strollo thinking…" pulse on the
   // speak button) is forced for the matching preview key. The transcript
   // shown during the listening preview uses a fixed sample so designers
@@ -885,7 +1098,9 @@ function WalkCompanionWidgetInner({
   const previewTranscript = previewState === 'user-speaking'
     ? "Find me a coffee shop nearby"
     : null;
-  const glowing = !!suggestion && !listening;
+  // Glow for any "Strollo has something to share" beat: an AI suggestion,
+  // a narration nudge (tidbit/fun-fact), or an incident announcement.
+  const glowing = (!!suggestion || !!narration) && !listening;
 
   // Drag-up to expand into the full-screen chat. Tracks pointerdown only when
   // the gesture starts on the widget chrome (not on a button), then watches
@@ -923,6 +1138,20 @@ function WalkCompanionWidgetInner({
       onPointerUp={onWidgetPointerEnd}
       onPointerCancel={onWidgetPointerEnd}
     >
+      {/* Animated gradient blobs that mirror the home screen's listen-card
+          background — visible while the user is speaking so the widget
+          gains the same Strollo-is-listening ambience. Always mounted
+          and toggled via the `--visible` modifier so the opacity
+          transition runs in BOTH directions (fades smoothly back to the
+          tip view when listening ends, instead of snapping off). */}
+      <div
+        className={`wcw-listening-blobs${navListening ? " wcw-listening-blobs--visible" : ""}`}
+        aria-hidden="true"
+      >
+        <div className="listen-blob listen-blob--1" />
+        <div className="listen-blob listen-blob--2" />
+        <div className="listen-blob listen-blob--3" />
+      </div>
       {/* In-walk conversation overlay — stacks above the nav chrome inside
           the same widget. Only renders during a walk; empty-state handles
           conversation through its own branch lower in the tree. */}
@@ -1045,14 +1274,7 @@ function WalkCompanionWidgetInner({
       )}
 
       <div className="wcw-status-row">
-        {navListening ? (
-          <>
-            <span className="wcw-listening-label">
-              <span className="wcw-listening-dot" />
-              You're saying
-            </span>
-          </>
-        ) : paused ? (
+        {paused ? (
           <span className="wcw-paused-msg">
             {"You're resting at "}
             <span className="wcw-paused-name">{destination || "your stop"}</span>
@@ -1096,19 +1318,33 @@ function WalkCompanionWidgetInner({
             <span className="wcw-heading-label">{atTarget ? "You are at" : "Heading to"}</span>
             <span className="wcw-destination">{destination}</span>
             {atTarget ? (
-              <button
-                type="button"
-                className="wcw-skip-btn wcw-skip-btn--arrived"
-                onClick={onArrived}
-                aria-label={`Confirm you have arrived at ${destination}`}
-              >
-                <svg className="wcw-skip-flag" width="11" height="13" viewBox="0 0 24 24" fill="#FFD501" stroke="none" aria-hidden="true">
-                  <path d="M8 3 L8 21" stroke="#FFD501" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M8 3 L18 6 L8 10 Z"/>
-                  <circle cx="8" cy="21" r="2"/>
-                </svg>
-                <span>I've arrived</span>
-              </button>
+              isResting ? (
+                <button
+                  type="button"
+                  className="wcw-skip-btn wcw-skip-btn--resume"
+                  onClick={onResume}
+                  aria-label={`Resume walk from ${destination}`}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="6 4 20 12 6 20 6 4" />
+                  </svg>
+                  <span>Resume</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="wcw-skip-btn wcw-skip-btn--arrived"
+                  onClick={onArrived}
+                  aria-label={`Confirm you have arrived at ${destination}`}
+                >
+                  <svg className="wcw-skip-flag" width="11" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <path d="M8 3 L8 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M8 3 L18 6 L8 10 Z"/>
+                    <circle cx="8" cy="21" r="2"/>
+                  </svg>
+                  <span>I've arrived</span>
+                </button>
+              )
             ) : canSkip ? (
               <button
                 type="button"
@@ -1127,14 +1363,28 @@ function WalkCompanionWidgetInner({
         )}
       </div>
 
+      {/* Empty-state listening row — same waves + italic transcript chrome
+          the walk-state widget shows while navListening. Replaces the
+          tips body for the duration of the user's spoken request. */}
+      {isEmpty && navListening && (() => {
+        const liveText = interim || lastSpokenTranscript || previewTranscript;
+        return (
+          <div className="wcw-turn-row wcw-turn-row--listening">
+            <h2 className={`wcw-turn wcw-turn--listening${liveText ? "" : " wcw-turn--listening-placeholder"}`}>
+              {liveText || "Listening…"}
+              <span className="strollo-reel__caret" aria-hidden="true" />
+            </h2>
+          </div>
+        );
+      })()}
+
       {/* Empty-state body = Strollo Conversation port (Tips / Reel / Minimized) */}
-      {isEmpty && convMode === "tips" && (
+      {isEmpty && !navListening && convMode === "tips" && (
         <div className="strollo-tips-body">
-          {(tipsLoading || previewState === 'no-stops') ? (
+          {((tipsLoading && !pendingSpokenQuery) || previewState === 'no-stops') ? (
             <div className="strollo-tips-loading" role="status" aria-live="polite">
               <div className="strollo-tips-loading-head">
-                {!(trip && trip.length > 0) && (
-                  <span className="strollo-tips-trail" aria-hidden="true">
+                <span className="strollo-tips-trail" aria-hidden="true">
                     {/* Two prints, both facing UPWARD with a slight stride
                         tilt. They're not symmetric — the left foot sits
                         a bit higher than the right so the pair reads as
@@ -1161,12 +1411,13 @@ function WalkCompanionWidgetInner({
                         <ellipse cx="7" cy="17.4" rx="3.2" ry="2.6" fill="currentColor" />
                       </svg>
                     ))}
-                  </span>
-                )}
+                </span>
                 <p className="strollo-tips-loading-text">
-                  {trip && trip.length > 0
-                    ? "Your stops are added. Ready when you are."
-                    : "Strollo is looking for things you might like nearby."}
+                  {pendingPillTag
+                    ? `Strollo is looking for cool ${pendingPillTag.toLowerCase()} nearby…`
+                    : pendingSpokenQuery
+                      ? "Strollo is finding something for you…"
+                      : "Strollo is looking for things you might like nearby."}
                 </p>
                 <button
                   type="button"
@@ -1188,19 +1439,96 @@ function WalkCompanionWidgetInner({
                 </button>
               </div>
               {/* Secondary prompt copy + prompt pills live together
-                  inside the dotted suggestion box, only when the user
-                  hasn't saved any stops. */}
-              {!(trip && trip.length > 0) && (
-                <div className="wcw-suggestion strollo-tips-hint">
-                  <span className="wcw-suggestion-text">
-                    Speak to Strollo to find spots to explore too.
-                  </span>
-                  <PromptPills onTap={handlePromptTap} />
-                </div>
-              )}
+                  inside the dotted suggestion box. Always shown in the
+                  empty-state loading view so the user can pivot via a
+                  prompt-pill tap or speech while Strollo is fetching. */}
+              <div className="wcw-suggestion strollo-tips-hint">
+                <span className="wcw-suggestion-text">
+                  What would you like to explore first?
+                </span>
+                <PromptPills onTap={handlePromptTap} />
+              </div>
             </div>
           ) : (
-            <p className="strollo-tips-tip">{tip}</p>
+            <>
+              {/* Tip + mute toggle. Same flex-start row geometry as the
+                  loading-head so the mute button's top aligns with the
+                  first line of the tip text. */}
+              <div className="strollo-tips-loading-head">
+                <p className="strollo-tips-tip">{highlightTipKeywords(tip, lastSpokenTranscript)}</p>
+                <button
+                  type="button"
+                  className={`wcw-icon-btn wcw-status-mute${activeVoice === "conv" ? " wcw-icon-btn--active" : ""}`}
+                  onClick={toggleConvVoice}
+                  aria-label={activeVoice === "conv" ? "Mute AI replies" : "Unmute AI replies"}
+                  aria-pressed={activeVoice === "conv"}
+                  title={activeVoice === "conv" ? "AI voice on — tap to mute" : "AI voice off — tap to unmute"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "conv" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "conv" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+              {/* Specific place pulled out of Gemini's TIP/PLACE response.
+                  Mirrors the .sugg-pin--open chrome from the home map's
+                  expanded location pin so the visual + add affordance is
+                  identical across surfaces. Tap → addLocation, which the
+                  parent geocodes + appends to the journey. */}
+              {tipPlaces && tipPlaces.length > 0 && (
+                <div className="wcw-tip-pills">
+                  {tipPlaces.slice(0, 1).map((p) => {
+                    const idx = (trip || []).findIndex(
+                      (t) => (t.name || "").toLowerCase() === p.name.toLowerCase()
+                    );
+                    const isAdded = idx >= 0;
+                    const sequence = isAdded ? idx + 1 : null;
+                    const icon = (p.category && CATEGORY_ICONS[p.category]) || "location_on";
+                    const onToggle = () => {
+                      if (isAdded) removeLocation(p.name);
+                      else addLocation(p.name);
+                    };
+                    return (
+                      <div className="wcw-tip-pill" key={p.name}>
+                        <div className={`sugg-pin sugg-pin--open${isAdded ? " sugg-pin--added" : ""}`}>
+                          <div className="sugg-pin-dot">
+                            {isAdded && sequence
+                              ? <span className="sugg-pin-dot-number">{sequence}</span>
+                              : <span className="material-symbols-rounded sugg-pin-dot-icon">{icon}</span>}
+                          </div>
+                          <span className="sugg-pin-name">{p.name}</span>
+                          <div className="sugg-pin-extra">
+                            <button
+                              type="button"
+                              className={`sugg-pin-add-btn${isAdded ? " sugg-pin-add-btn--remove" : ""}`}
+                              onClick={onToggle}
+                              aria-label={isAdded ? "Remove from itinerary" : "Add to itinerary"}
+                            >
+                              {isAdded ? (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" strokeWidth="3.2" strokeLinecap="round">
+                                  <line x1="6" y1="6" x2="18" y2="18"/>
+                                  <line x1="18" y1="6" x2="6" y2="18"/>
+                                </svg>
+                              ) : (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round">
+                                  <line x1="12" y1="5" x2="12" y2="19"/>
+                                  <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1231,16 +1559,110 @@ function WalkCompanionWidgetInner({
       )}
 
       {/* Walking-state body — preserved verbatim for non-empty journeys */}
-      {!isEmpty && (
-        navListening ? (
-          <h2 className="wcw-turn">{`“${(transcript || previewTranscript) || "…"}”`}</h2>
-        ) : paused ? null : (previewState === 'incident-with-suggestion' && narration && suggestion) ? (
+      {!isEmpty && (() => {
+        // Live transcript flows through the internal `interim` state which
+        // useSpeechRecognition updates word-by-word. `transcript` (the prop)
+        // is the nav-route text and is NOT used for the speaking UI.
+        const liveText = interim || lastSpokenTranscript || previewTranscript;
+        if (navListening) {
+          return (
+            <div className="wcw-turn-row wcw-turn-row--listening">
+              <h2 className={`wcw-turn wcw-turn--listening${liveText ? "" : " wcw-turn--listening-placeholder"}`}>
+                {liveText || "Listening…"}
+                <span className="strollo-reel__caret" aria-hidden="true" />
+              </h2>
+            </div>
+          );
+        }
+        // After a spoken (or typed) query lands while the user has stops,
+        // replace the turn row with the same tip + place pill chrome the
+        // empty-state body uses, so Strollo's reply is visible mid-walk.
+        // A close button drops the user back to the turn instructions.
+        const showWalkingTip = !speakActive
+          && !pendingSpokenQuery
+          && !!lastSpokenTranscript
+          && !spokenTipDismissed
+          && !!tip;
+        if (showWalkingTip) {
+          const firstPlace = (tipPlaces && tipPlaces[0]) || null;
+          return (
+            <div className="wcw-walk-tip">
+              <div className="wcw-walk-tip-head">
+                <p className="strollo-tips-tip">{highlightTipKeywords(tip, lastSpokenTranscript)}</p>
+                <button
+                  type="button"
+                  className={`wcw-turn-speaker${activeVoice !== "nav" ? " wcw-turn-speaker--muted" : ""}`}
+                  onClick={toggleNavVoice}
+                  aria-label={activeVoice === "nav" ? "Mute navigation" : "Unmute navigation"}
+                  aria-pressed={activeVoice !== "nav"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                    <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                    {activeVoice === "nav" && (
+                      <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                    {activeVoice !== "nav" && (
+                      <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+              {firstPlace && (() => {
+                const idx = (trip || []).findIndex(
+                  (t) => (t.name || "").toLowerCase() === firstPlace.name.toLowerCase()
+                );
+                const isAdded = idx >= 0;
+                const sequence = isAdded ? idx + 1 : null;
+                const icon = (firstPlace.category && CATEGORY_ICONS[firstPlace.category]) || "location_on";
+                const onToggle = () => {
+                  if (isAdded) removeLocation(firstPlace.name);
+                  else addLocation(firstPlace.name);
+                };
+                return (
+                  <div className="wcw-tip-pills">
+                    <div className="wcw-tip-pill">
+                      <div className={`sugg-pin sugg-pin--open${isAdded ? " sugg-pin--added" : ""}`}>
+                        <div className="sugg-pin-dot">
+                          {isAdded && sequence
+                            ? <span className="sugg-pin-dot-number">{sequence}</span>
+                            : <span className="material-symbols-rounded sugg-pin-dot-icon">{icon}</span>}
+                        </div>
+                        <span className="sugg-pin-name">{firstPlace.name}</span>
+                        <div className="sugg-pin-extra">
+                          <button
+                            type="button"
+                            className={`sugg-pin-add-btn${isAdded ? " sugg-pin-add-btn--remove" : ""}`}
+                            onClick={onToggle}
+                            aria-label={isAdded ? "Remove from itinerary" : "Add to itinerary"}
+                          >
+                            {isAdded ? (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5A4B64" strokeWidth="3.2" strokeLinecap="round">
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                              </svg>
+                            ) : (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        }
+        return paused ? null : (previewState === 'incident-with-suggestion' && narration && suggestion) ? (
           // Dual-render preview: live incident announced via narration AND
           // a follow-up suggestion (e.g., reroute) presented inline. The
           // ordinary mutually-exclusive branches keep one or the other,
           // so we open this short-circuit only for the explicit preview key.
           <>
-            <p className="wcw-narration">{narration}</p>
+            <NarrationBody className="wcw-narration" text={narration} />
             <div className="wcw-suggestion" role="status">
               <span className="wcw-suggestion-icon" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1253,21 +1675,129 @@ function WalkCompanionWidgetInner({
             </div>
           </>
         ) : suggestion ? (
-          <div className="wcw-suggestion" role="status">
-            <span className="wcw-suggestion-icon" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18h6" />
-                <path d="M10 22h4" />
-                <path d="M12 2a7 7 0 0 0-4 12.7 4 4 0 0 1 1.5 3.1V18h5v-.2a4 4 0 0 1 1.5-3.1A7 7 0 0 0 12 2z" />
+          previewState === 'nudge-incident' || previewState === 'incident-with-suggestion' ? (
+            // Live-incident / unsafe-street row — pulsing yellow dot on
+            // the left, the Gemini-generated heads-up body in the middle
+            // (same typography as the tidbit narration), nav-voice mute
+            // on the right. No dotted-box chrome.
+            <div className="wcw-turn-row wcw-incident-row">
+              <span className="wcw-incident-dot" aria-hidden="true" />
+              <NarrationBody className="wcw-narration" text={suggestion} />
+              <button
+                type="button"
+                className={`wcw-turn-speaker${activeVoice !== "nav" ? " wcw-turn-speaker--muted" : ""}`}
+                onClick={toggleNavVoice}
+                aria-label={activeVoice === "nav" ? "Mute navigation" : "Unmute navigation"}
+                aria-pressed={activeVoice !== "nav"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                  <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                  {activeVoice === "nav" && (
+                    <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  )}
+                  {activeVoice !== "nav" && (
+                    <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          ) : previewState === 'nudge-detour' ? (
+            // Detour suggestion — dotted yellow box wraps the sparkle +
+            // body copy; mute button stays outside the box on the right.
+            <div className="wcw-turn-row wcw-detour-row">
+              <div className="wcw-detour-box">
+                <span className="wcw-narration-icon" aria-hidden="true">
+                  <svg width="44" height="44" viewBox="0 0 24 24" stroke="none">
+                    <defs>
+                      <linearGradient id="wcw-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%"  stopColor="#C77DFF" />
+                        <stop offset="100%" stopColor="#FFD501" />
+                      </linearGradient>
+                    </defs>
+                    <path className="wcw-sparkle wcw-sparkle--main" fill="url(#wcw-sparkle-grad)"
+                          d="M11 2 C 11 6 12 7 16 7 C 12 7 11 8 11 12 C 11 8 10 7 6 7 C 10 7 11 6 11 2 Z" />
+                    <path className="wcw-sparkle wcw-sparkle--small" fill="url(#wcw-sparkle-grad)"
+                          d="M18 13 C 18 15 18.4 15.4 20 15.4 C 18.4 15.4 18 15.8 18 17.8 C 18 15.8 17.6 15.4 16 15.4 C 17.6 15.4 18 15 18 13 Z" />
+                  </svg>
+                </span>
+                <NarrationBody className="wcw-narration" text={suggestion} />
+              </div>
+              <button
+                type="button"
+                className={`wcw-turn-speaker${activeVoice !== "nav" ? " wcw-turn-speaker--muted" : ""}`}
+                onClick={toggleNavVoice}
+                aria-label={activeVoice === "nav" ? "Mute navigation" : "Unmute navigation"}
+                aria-pressed={activeVoice !== "nav"}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                  <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                  {activeVoice === "nav" && (
+                    <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  )}
+                  {activeVoice !== "nav" && (
+                    <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  )}
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <div className="wcw-suggestion" role="status">
+              <span className="wcw-suggestion-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD501" stroke="#B5912E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M12 2a7 7 0 0 0-4 12.7 4 4 0 0 1 1.5 3.1V18h5v-.2a4 4 0 0 1 1.5-3.1A7 7 0 0 0 12 2z" />
+                </svg>
+              </span>
+              <span className="wcw-suggestion-text">{suggestion}</span>
+            </div>
+          )
+        ) : narration ? (
+          // Tidbit / fun-fact row — yellow lightbulb on the left, narration
+          // body in the middle, nav-voice mute on the right (matches the
+          // turn-row layout in every other walking state so the mute button
+          // is reachable while a tidbit is on screen).
+          <div className="wcw-turn-row wcw-narration-row">
+            <span className="wcw-narration-icon" aria-hidden="true">
+              {/* Soft 4-point sparkle with curved arms (smoother than a
+                  diamond) plus a tiny twinkle beside it. Both arms pulse
+                  gently in opposite phases so the cluster reads as a
+                  living "fun fact / did you know" beat. */}
+              <svg width="44" height="44" viewBox="0 0 24 24" stroke="none">
+                <defs>
+                  <linearGradient id="wcw-sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%"  stopColor="#C77DFF" />
+                    <stop offset="100%" stopColor="#FFD501" />
+                  </linearGradient>
+                </defs>
+                <path className="wcw-sparkle wcw-sparkle--main" fill="url(#wcw-sparkle-grad)"
+                      d="M11 2 C 11 6 12 7 16 7 C 12 7 11 8 11 12 C 11 8 10 7 6 7 C 10 7 11 6 11 2 Z" />
+                <path className="wcw-sparkle wcw-sparkle--small" fill="url(#wcw-sparkle-grad)"
+                      d="M18 13 C 18 15 18.4 15.4 20 15.4 C 18.4 15.4 18 15.8 18 17.8 C 18 15.8 17.6 15.4 16 15.4 C 17.6 15.4 18 15 18 13 Z" />
               </svg>
             </span>
-            <span className="wcw-suggestion-text">{suggestion}</span>
+            <NarrationBody className="wcw-narration" text={narration} />
+            <button
+              type="button"
+              className={`wcw-turn-speaker${activeVoice !== "nav" ? " wcw-turn-speaker--muted" : ""}`}
+              onClick={toggleNavVoice}
+              aria-label={activeVoice === "nav" ? "Mute navigation" : "Unmute navigation"}
+              aria-pressed={activeVoice !== "nav"}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                <polygon points="4 9 8 9 13 4 13 20 8 15 4 15" />
+                {activeVoice === "nav" && (
+                  <path d="M16.5 8.2 a4 4 0 0 1 0 7.6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                )}
+                {activeVoice !== "nav" && (
+                  <line x1="3" y1="20" x2="21" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                )}
+              </svg>
+            </button>
           </div>
-        ) : narration ? (
-          <p className="wcw-narration">{narration}</p>
         ) : (
           <div className="wcw-turn-row">
-            <h2 className="wcw-turn">{atTarget ? "You made it to your stop. Now enjoy it." : instruction}</h2>
+            <h2 className="wcw-turn">{isResting ? "You made it to your stop. Now enjoy it." : instruction}</h2>
             {/* Mute / speaker toggle moved up next to the turn instruction
                 so the secondary controls don't crowd the bottom row. Lower
                 hierarchy than the SAY ANYTHING bar — compact, subtle. */}
@@ -1289,10 +1819,10 @@ function WalkCompanionWidgetInner({
               </svg>
             </button>
           </div>
-        )
-      )}
+        );
+      })()}
 
-      {!navListening && !isEmpty && (() => {
+      {!isEmpty && (() => {
         // Parse the next maneuver direction from the instruction text.
         // "left" / "right" / "arriving" stay as words; "straight" is
         // shown as an upward arrow glyph instead so the cell has a
@@ -1327,13 +1857,6 @@ function WalkCompanionWidgetInner({
           </div>
         );
       })()}
-      {/* Progress strip — dotted curve with the user's boots walking
-          toward the destination flag. Sits between the stats row and
-          the bottom buttons during a walk OR a stops-added preview. */}
-      {!isEmpty && (
-        <ProgressStrip progress={progress} atTarget={atTarget} />
-      )}
-
       {!(convOpen && !isEmpty) && (
       <div className="wcw-bottom">
         <div className="wcw-bottom-left">
@@ -1430,20 +1953,32 @@ function WalkCompanionWidgetInner({
               </svg>
             </button>
           )}
-          <button
-            type="button"
-            className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${aiPending ? " wcw-speak--pending" : ""}`}
-            onClick={onSpeakToggle}
-            disabled={aiPending}
-            aria-label={aiPending ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
-            aria-pressed={speakActive}
-            aria-busy={aiPending}
-          >
-            {aiPending
-              ? <span className="wcw-speak-spinner" aria-hidden="true" />
-              : <SoundBars active={speakActive} color="currentColor" />}
-            <span className="wcw-speak-label">{aiPending ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
-          </button>
+          {(() => {
+            // The button shows the Thinking state for either an in-flight
+            // Gemini conversation reply (aiPending) OR an in-flight tip
+            // refetch driven by the user (prompt-pill tag tap or spoken
+            // request) while it's still loading. Both should disable
+            // interaction and swap the icon for a spinner.
+            const thinking = aiPending
+              || (!!pendingPillTag && tipsLoading)
+              || pendingSpokenQuery;
+            return (
+              <button
+                type="button"
+                className={`wcw-icon-btn wcw-speak${speakActive ? " wcw-speak--active" : ""}${thinking ? " wcw-speak--pending" : ""}`}
+                onClick={onSpeakToggle}
+                disabled={thinking}
+                aria-label={thinking ? "Thinking" : (speakActive ? "Stop talking" : "Tap to start talking; recording auto-stops")}
+                aria-pressed={speakActive}
+                aria-busy={thinking}
+              >
+                {thinking
+                  ? <span className="wcw-speak-spinner" aria-hidden="true" />
+                  : <SoundBars active={speakActive} color="currentColor" />}
+                <span className="wcw-speak-label">{thinking ? "Thinking" : (speakActive ? "Listening" : "Say anything")}</span>
+              </button>
+            );
+          })()}
         </div>
       </div>
       )}
