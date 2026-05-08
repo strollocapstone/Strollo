@@ -1,7 +1,7 @@
 // FEATURE: shared-hook + shared-ui  (multi — phase 2 splits)
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: cda47b3
+// UPDATE DATE: 2026-05-08
+// BUILD: c88cd26b
 // DEPENDS ON: ./geminiService, ./mapUtils (reverseGeocode), ./cloudTtsService, ./services/googleMapsService
 // CONSUMED BY: ./WalkCompanionWidget
 //
@@ -35,6 +35,9 @@ export const PROMPT_PILLS = [
   { glyph: "💎", label: "Hidden gems", prompt: "Any hidden gems within walking distance?" },
   { glyph: "☕", label: "Cafes",       prompt: "What's a great café within a few minutes of here?" },
   { glyph: "🍜", label: "Food",        prompt: "Where should I eat nearby right now?" },
+  { glyph: "🌳", label: "Parks",       prompt: "What's a nice park or green space within walking distance?" },
+  { glyph: "🎨", label: "Art",         prompt: "Any cool galleries or street art around here?" },
+  { glyph: "📚", label: "Books",       prompt: "Any interesting bookshops or libraries nearby?" },
 ];
 
 // ── LocationPill ─────────────────────────────────────────────────────────
@@ -264,14 +267,74 @@ export function SkeletonLine({ width = "100%" }) {
 // Single GPS-grounded prose tip via Gemini. Re-fires whenever `nonce`
 // changes (parent bumps it on every re-entry to tips mode), or when the
 // reverse-geocoded area changes.
-export function useTipFetch({ userLocation, area, nonce, flavor = null, vibePreferences, preferences }) {
+export function useTipFetch({ userLocation, area, nonce, flavor = null, vibePreferences, preferences, enforceMinLoading = true }) {
   const [tip, setTip] = useState("");
+  // Up to 3 named places (with categories) parsed out of Gemini's reply,
+  // so the widget can stack a few "Add this" pills below the tip. Each
+  // entry is { name: string, category: string|null }. Empty array when
+  // Gemini didn't pin down any place.
+  const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Display loading flag — held true for at least MIN_LOADING_MS so the
+  // "Strollo is looking for things nearby" footsteps state never flashes
+  // by faster than the user can read it. Decoupled from the real loading
+  // flag (which flips false the moment the cache hits or Gemini replies).
+  const [displayLoading, setDisplayLoading] = useState(true);
+  const MIN_LOADING_MS = 5000;
+  const startedAtRef = useRef(Date.now());
   // Coordinates + tip text from the last successful Gemini response, so we
   // can skip refetching when the user is within ~500 ft (152 m) of where
-  // the previous tip was generated.
+  // the previous tip was generated AND the flavour key hasn't changed.
   const lastTipLocationRef = useRef(null);
   const lastTipRef = useRef("");
+  const lastPlacesRef = useRef([]);
+  const lastFlavorRef = useRef(null);
+  // Last nonce we actually serviced. When the consumer bumps `nonce`
+  // (e.g. on transition back to the empty state after removing stops),
+  // we treat it as an explicit "give me a fresh tip" signal — bypass
+  // the 500-ft location cache so the loading footsteps actually play.
+  const lastNonceRef = useRef(null);
+
+  // Reset the loading-floor clock whenever a new fetch is triggered.
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+    setDisplayLoading(true);
+  }, [nonce, flavor]);
+
+  // Round lat/lng to ~11m precision (4dp) so passive GPS jitter doesn't
+  // re-fire the fetch effect mid-Gemini-call and cancel the in-flight
+  // request — which used to leave the loading footsteps spinning forever
+  // when the user was effectively standing still.
+  const roundedLat = userLocation && userLocation[0] != null
+    ? Math.round(userLocation[0] * 1e4) / 1e4
+    : null;
+  const roundedLng = userLocation && userLocation[1] != null
+    ? Math.round(userLocation[1] * 1e4) / 1e4
+    : null;
+
+  // Apply the floor: when real loading flips false, keep displayLoading
+  // true until at least MIN_LOADING_MS has elapsed since fetch started.
+  // Consumers can opt out via `enforceMinLoading: false` for refetches
+  // that should release as soon as Gemini replies (e.g. spoken-query
+  // tips, where the user expects only a brief "Thinking" beat).
+  useEffect(() => {
+    if (loading) {
+      setDisplayLoading(true);
+      return;
+    }
+    if (!enforceMinLoading) {
+      setDisplayLoading(false);
+      return;
+    }
+    const elapsed = Date.now() - startedAtRef.current;
+    const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+    if (remaining === 0) {
+      setDisplayLoading(false);
+      return;
+    }
+    const t = setTimeout(() => setDisplayLoading(false), remaining);
+    return () => clearTimeout(t);
+  }, [loading, enforceMinLoading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,9 +345,18 @@ export function useTipFetch({ userLocation, area, nonce, flavor = null, vibePref
     }
 
     // 500-ft cache: if the user has barely moved since the last successful
-    // tip, just keep the previous tip on screen instead of refetching.
+    // tip AND the requested flavour matches the cached tip AND the
+    // consumer hasn't bumped nonce since, reuse it. A nonce change is an
+    // explicit refresh signal (prompt-pill tap, spoken request, return
+    // to empty state) and must force a fresh fetch.
     const FT_500_KM = 0.1524;
-    if (lastTipLocationRef.current && lastTipRef.current) {
+    const nonceChanged = lastNonceRef.current !== null && lastNonceRef.current !== nonce;
+    if (
+      !nonceChanged &&
+      lastTipLocationRef.current &&
+      lastTipRef.current &&
+      lastFlavorRef.current === flavor
+    ) {
       const [pLat, pLng] = lastTipLocationRef.current;
       const dLat = userLocation[0] - pLat;
       const dLng = userLocation[1] - pLng;
@@ -292,18 +364,30 @@ export function useTipFetch({ userLocation, area, nonce, flavor = null, vibePref
       const km = Math.sqrt(dLat * dLat + dLng * dLng) * 111.32;
       if (km < FT_500_KM) {
         setTip(lastTipRef.current);
+        setPlaces(lastPlacesRef.current || []);
         setLoading(false);
+        lastNonceRef.current = nonce;
         return;
       }
     }
 
-    const tipPrompt = `Recommend ONE specific, doable thing to go see or try right now — 1 to 2 sentences, max 28 words.
-GPS coordinates (use loosely as a hint, never quote them): ${userLocation[0].toFixed(5)}, ${userLocation[1].toFixed(5)}
+    const tipPrompt = `Recommend ONE specific, doable thing to go see or try right now near these GPS coordinates: ${userLocation[0].toFixed(5)}, ${userLocation[1].toFixed(5)}
 Reverse-geocoded label (may be vague like "Unnamed Alley" — ignore it if it isn't useful): ${area || "unknown"}
 ${flavor ? `Lean this recommendation toward: ${flavor}.\n` : ""}
 The recommendation should feel like a friend's tip: a kind of place (a mural-lined alley, an old bookstore, a quiet rooftop, a bakery that's busy at this hour), an action (people-watch on a stoop, taste a seasonal pastry, follow a street artist's tags), or a sensory invitation. It does NOT have to be tied to the user's exact street — it's fine to suggest something generic-but-vivid that any neighborhood plausibly has.
 **Never** say "you're near <place>" or "around <area>" or echo the location label. Don't apologize for not knowing where they are. Don't say "explore" without giving a concrete thing to do.
-Plain text only. No quotes. No markdown. No preamble. No "Welcome" or "Hi".`;
+
+Output exactly this format, no other text and no markdown:
+TIP: <1 to 2 sentences, max 28 words>
+PLACES:
+- <Real Named Place 1> | <Category 1>
+- <Real Named Place 2> | <Category 2>
+- <Real Named Place 3> | <Category 3>
+
+Rules for the PLACES list:
+- Up to 3 items. Provide at least 1 if anything fits the tip — even one item is enough.
+- Each line is a real, named place nearby that fits the tip — e.g. "Tartine Bakery" — paired with a category from this set: Coffee, Restaurant, Bar, Ice Cream, Bakery, Bookstore, Library, Theatre, Florist, Museum, Gallery, Art, Viewpoint, Attraction, Arts, Park, Garden.
+- If you genuinely cannot suggest any specific place, write a single line "- NONE" instead of inventing one.`;
 
     const sys = buildSystemPrompt({
       userLocation,
@@ -331,37 +415,66 @@ Plain text only. No quotes. No markdown. No preamble. No "Welcome" or "Hi".`;
         try {
           const text = await sendMessage([{ role: "user", text: tipPrompt }], sys);
           if (cancelled) return;
-          const clean = (text || "").trim().replace(/^["'`]+|["'`]+$/g, "").split("\n")[0];
-          if (clean) {
-            setTip(clean);
+          const raw = (text || "").trim();
+          // Parse the TIP / PLACE two-line response. Falls back to using
+          // the whole reply as the tip if Gemini didn't honour the format.
+          const tipMatch = raw.match(/TIP\s*:\s*([^\n]+)/i);
+          const stripQuotes = (s) => s.replace(/^["'`]+|["'`]+$/g, "").trim();
+          const cleanTip = stripQuotes(
+            tipMatch ? tipMatch[1] : raw.split("\n")[0] || ""
+          );
+          // Pull each "- Name | Category" bullet from the PLACES block.
+          // Lines after the PLACES: header until a blank line / EOF are
+          // candidates. NONE filters out the empty placeholder.
+          const placesBlock = raw.split(/PLACES\s*:/i)[1] || "";
+          const cleanPlaces = placesBlock
+            .split("\n")
+            .map((ln) => ln.trim())
+            .filter((ln) => ln.startsWith("-"))
+            .map((ln) => ln.replace(/^[-*]\s*/, ""))
+            .map((ln) => {
+              const [rawName, rawCat] = ln.split("|").map((s) => stripQuotes(s || ""));
+              return { name: rawName, category: rawCat || null };
+            })
+            .filter((p) => p.name && !/^none$/i.test(p.name))
+            .slice(0, 3);
+          if (cleanTip) {
+            setTip(cleanTip);
+            setPlaces(cleanPlaces);
             setLoading(false);
             // Snapshot for the 500-ft cache so the next render reuses this.
             lastTipLocationRef.current = [userLocation[0], userLocation[1]];
-            lastTipRef.current = clean;
+            lastTipRef.current = cleanTip;
+            lastPlacesRef.current = cleanPlaces;
+            lastFlavorRef.current = flavor;
+            lastNonceRef.current = nonce;
             return;
           }
         } catch (e) {
           // swallow + retry
         }
       }
-      // All retries exhausted. If we have a previous tip in cache, fall
-      // back to it rather than leaving the skeleton up forever.
+      // All retries exhausted. Prefer a cached tip when we have one;
+      // otherwise show a friendly fallback so the loading footsteps
+      // don't spin forever when Gemini is unreachable.
       if (cancelled) return;
       if (lastTipRef.current) {
         setTip(lastTipRef.current);
-        setLoading(false);
+        setPlaces(lastPlacesRef.current || []);
       } else {
-        setLoading(true);
+        setTip("Take a moment to look around — something nearby will catch your eye.");
+        setPlaces([]);
       }
+      setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nonce, userLocation && userLocation[0], userLocation && userLocation[1], area, flavor]);
+  }, [nonce, roundedLat, roundedLng, area, flavor]);
 
-  return { tip, loading };
+  return { tip, places, loading: displayLoading };
 }
 
 // ── useTtsSpeak ──────────────────────────────────────────────────────────

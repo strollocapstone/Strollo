@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: 39ece31e
+// UPDATE DATE: 2026-05-08
+// BUILD: c88cd26b
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //
@@ -18,7 +18,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./NavigationMapScreen.css";
 import WalkCompanionWidget from "./WalkCompanionWidget";
-import { getWalkingRoute, geocodePlace } from "./geminiService";
+import { getWalkingRoute, geocodePlace, sendMessage } from "./geminiService";
 import { useJourneyVoice } from "./useJourneyVoice";
 import { youIcon, youIconBelow, WatchLocation, haversineKm, ZoomTracker } from "./mapUtils";
 
@@ -65,6 +65,19 @@ const finalDestPinIcon = () => L.divIcon({
 
 const stopLabelIcon = (name, desc, sequence, mode = 'pill', removable = false, muted = false) => {
   const icon = NAV_CATEGORY_ICONS[desc] || "location_on";
+  // Visited stops render as a small green dot — same vocabulary as the
+  // timeline rail's `.tl-rail-node--visited` so the visited state is
+  // visually consistent across the timeline + map surfaces.
+  if (mode === 'visited') {
+    return L.divIcon({
+      className: "",
+      html: `<div class="sugg-pin sugg-pin--visited" aria-label="${name}">
+        <div class="sugg-pin-dot sugg-pin-dot--visited"></div>
+      </div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }
   if (mode === 'mini') {
     return L.divIcon({
       className: "",
@@ -221,7 +234,7 @@ function computeBearing([lat1, lng1], [lat2, lng2]) {
 }
 
 // ── NavigationMapScreen ────────────────────────────────────────────────────
-export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true, widgetPreview = null, onSetWidgetPreview }) {
+export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstraints, onOpenTimeline, journeyItems = [], startLocation, onJourneyChange, addedIds, setAddedIds, visitedIds, setVisitedIds, setVisitedAt, setStopDwellMs, vibePreferences, preferences, showVoice = true, widgetPreview = null, onSetWidgetPreview, autoListenTrigger = null, prefilledTranscript = "", prefilledTranscriptTrigger = null, forceAtTargetTrigger = 0, onLastStopArrival, onClearWidgetPreview }) {
   // Confirmed stops match the Timeline's confirmed list: items the user has
   // explicitly added (in addedIds) AND that have valid coordinates. Falling
   // back to "all journey items with coords" preserves behavior if addedIds
@@ -380,12 +393,12 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const PREVIEW_NARRATION = {
     'strollo-speaking':         "On your left — the historic Claremont Hotel, built in 1915 and once nicknamed the \"Million Dollar Hotel\".",
     'nudge-tidbit':             "Did you know? This block was a thriving jazz district back in the 1940s.",
-    'incident-with-suggestion': "Heads up — there's roadwork on Market Street ahead.",
   };
   const PREVIEW_SUGGESTION = {
     'nudge-add-stop':           "Tartine Bakery is two blocks away — want to add it as a stop?",
-    'nudge-incident':           "Heads up — there's roadwork on Market Street ahead. Tap to reroute.",
-    'incident-with-suggestion': "I can route you down 17th Street instead — want me to switch?",
+    'nudge-detour':             "There's a quiet alley with murals two blocks east — worth a detour?",
+    'nudge-incident':           "Heads up — there's a reported break-in on the block ahead. Want me to find you another way?",
+    'incident-with-suggestion': "Next block is quiet and off the beaten path — your vibe or should I reroute?",
   };
   const AI_NARRATIONS = [
     "On your left — the historic Claremont Hotel, built in 1915 and once nicknamed the \"Million Dollar Hotel\".",
@@ -405,7 +418,75 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
       ? AI_NARRATIONS[aiSampleIdx % AI_NARRATIONS.length]
       : ""
   );
-  const aiSuggestion = (widgetPreview && PREVIEW_SUGGESTION[widgetPreview]) ?? (
+  // Live-incident preview asks Gemini for a fresh "heads-up + reroute"
+  // line that name-checks the user's current target stop. Cached per
+  // target id so re-entering the preview at the same stop reuses the
+  // copy instead of refetching.
+  const [aiLiveIncidentText, setAiLiveIncidentText] = useState("");
+  const aiLiveIncidentTargetRef = useRef(null);
+  useEffect(() => {
+    if (widgetPreview !== 'nudge-incident') return;
+    const targetName = nextTarget?.name || null;
+    if (!targetName) return;
+    if (aiLiveIncidentTargetRef.current === targetName) return;
+    aiLiveIncidentTargetRef.current = targetName;
+    let cancelled = false;
+    (async () => {
+      const prompt = `Write a short, urgent live-incident nudge from a walking-route assistant. Pick ONE realistic incident on the next block (reported break-in, suspicious activity, broken streetlight, water-main leak, sudden road closure, etc.). Mention the user is heading to "${targetName}" and offer to find another way there.
+
+Output a single sentence (or two short sentences), max 28 words, in this style: "Heads up — there's been a reported break-in on the block ahead. Want me to find another way to ${targetName}?"
+
+Plain text only. No quotes, no markdown, no preamble.`;
+      try {
+        const text = await sendMessage([{ role: "user", text: prompt }]);
+        if (cancelled) return;
+        const clean = (text || "").trim().replace(/^["'`]+|["'`]+$/g, "").split("\n")[0];
+        if (clean) setAiLiveIncidentText(clean);
+      } catch (e) {
+        // Silent fail — the static PREVIEW_SUGGESTION fallback still renders.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widgetPreview, nextTarget?.name]);
+
+  // Unsafe-street preview asks Gemini for a casual "heads up, the next
+  // block's a bit off the beaten path" nudge that name-checks the user's
+  // target stop and offers a different route. Same caching strategy as
+  // the live-incident fetch.
+  const [aiUnsafeStreetText, setAiUnsafeStreetText] = useState("");
+  const aiUnsafeStreetTargetRef = useRef(null);
+  useEffect(() => {
+    if (widgetPreview !== 'incident-with-suggestion') return;
+    const targetName = nextTarget?.name || null;
+    if (!targetName) return;
+    if (aiUnsafeStreetTargetRef.current === targetName) return;
+    aiUnsafeStreetTargetRef.current = targetName;
+    let cancelled = false;
+    (async () => {
+      const prompt = `Write a casual, friendly safety nudge from a walking-route assistant. The user's path goes through a quieter, less-busy / off-the-beaten-path block on the way to "${targetName}". Acknowledge it might feel that way and offer to take them a different (busier) route if they'd prefer. Don't sound alarmist — match the tone of someone walking with a friend.
+
+Output a single short line (one sentence), max 18 words, in this style: "Next block is quiet and off the beaten path — your vibe or should I reroute?"
+
+Plain text only. No quotes, no markdown, no preamble.`;
+      try {
+        const text = await sendMessage([{ role: "user", text: prompt }]);
+        if (cancelled) return;
+        const clean = (text || "").trim().replace(/^["'`]+|["'`]+$/g, "").split("\n")[0];
+        if (clean) setAiUnsafeStreetText(clean);
+      } catch (e) {
+        // Silent fail — the static PREVIEW_SUGGESTION fallback still renders.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [widgetPreview, nextTarget?.name]);
+
+  const aiSuggestion = (
+    widgetPreview === 'nudge-incident' && aiLiveIncidentText
+      ? aiLiveIncidentText
+      : widgetPreview === 'incident-with-suggestion' && aiUnsafeStreetText
+        ? aiUnsafeStreetText
+        : (widgetPreview && PREVIEW_SUGGESTION[widgetPreview])
+  ) ?? (
     aiTestMode === 2 || aiTestMode === 3
       ? AI_SUGGESTIONS[aiSampleIdx % AI_SUGGESTIONS.length]
       : ""
@@ -483,6 +564,16 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // made it. Now enjoy it.") state without actually walking 300 ft up to
   // a real stop. Force-flag OR'd with the live geofence test below.
   const [forceAtTarget, setForceAtTarget] = useState(false);
+  // When the parent bumps `forceAtTargetTrigger` (e.g. after the user
+  // taps Oops on the Reward screen), force the widget back into its
+  // at-target state so I've arrived shows up again on the same stop.
+  const lastForceTriggerRef = React.useRef(0);
+  useEffect(() => {
+    if (!forceAtTargetTrigger) return;
+    if (lastForceTriggerRef.current === forceAtTargetTrigger) return;
+    lastForceTriggerRef.current = forceAtTargetTrigger;
+    setForceAtTarget(true);
+  }, [forceAtTargetTrigger]);
   const isAtTarget = widgetPreview === 'arrived' || forceAtTarget || (liveDistToTargetM !== null && liveDistToTargetM <= FT_300_M);
 
   // Boots overlap the stop pin once the user is on top of it. When the
@@ -490,18 +581,29 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // "below" variant so they hang beneath the purple route-dot instead of
   // covering the pill. Threshold is tighter than FT_300_M so the boots
   // only flip when the icons would actually collide on screen.
-  const NEAR_STOP_M = 30;
+  // Visual-collision threshold in *screen pixels*. The boots SVG is ~42px
+  // wide and the stop pill is ~150px wide; once the user marker comes
+  // within ~70 px of a stop pin the two glyphs start overlapping. Working
+  // in pixels means the rule behaves the same at any zoom level — at
+  // zoom 18 it's a tight 70px geofence (a few meters), at zoom 12 it's
+  // a much wider real-world distance (hundreds of meters), exactly the
+  // behaviour we want.
+  const COLLISION_PX = 70;
   const isNearAnyStop = React.useMemo(() => {
     if (!userLocation) return false;
     if (widgetPreview === 'arrived') return true;
     if (!confirmedStops?.length) return false;
+    // Web-Mercator meters-per-pixel at the user's latitude.
+    const lat = (userLocation[0] || 0) * Math.PI / 180;
+    const mPerPx = 156543.03 * Math.cos(lat) / Math.pow(2, mapZoom);
+    const threshM = COLLISION_PX * mPerPx;
     for (const s of confirmedStops) {
       if (s.lat == null || s.lng == null) continue;
       const m = haversineKm(userLocation, [s.lat, s.lng]) * 1000;
-      if (m <= NEAR_STOP_M) return true;
+      if (m <= threshM) return true;
     }
     return false;
-  }, [userLocation, confirmedStops, widgetPreview]);
+  }, [userLocation, confirmedStops, widgetPreview, mapZoom]);
 
   // ── Real-time per-stop dwell tracker ────────────────────────────────────
   // Watches the user's geolocation and accumulates the actual time spent
@@ -555,36 +657,87 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
     };
   }, []);
 
+  // Tracks the "resting" state — user has tapped I've arrived but hasn't
+  // resumed yet. Suppresses route advancement (`nextTarget` stays put)
+  // and swaps the I've arrived CTA for a Resume button. Cleared by
+  // handleResume, which fires the tip refetch flavoured by the next
+  // stop's name so the user gets contextual tips on resume.
+  const [restingStopId, setRestingStopId] = useState(null);
+  const [resumeTipFlavor, setResumeTipFlavor] = useState(null);
+  const [resumeTipNonce, setResumeTipNonce] = useState(0);
   const handleArrived = () => {
-    if (!nextTarget || !setVisitedIds) return;
-    // Was this the last unvisited stop? If so, the walk is complete —
-    // arriving here should return to the homepage instead of falling
-    // through into the empty-destination "Start exploring" state, which
-    // would happen automatically once nextTarget becomes null.
+    if (!nextTarget) return;
+    // Clear any prior force-at-target override now that the user has
+    // taken the next deliberate action.
+    setForceAtTarget(false);
     const remainingAfter = confirmedStops.filter(
       (s) => !visitedIds?.has(s.id) && s.id !== nextTarget.id
     ).length;
-    setVisitedIds((prev) => {
-      const out = new Set(prev);
-      out.add(nextTarget.id);
-      return out;
-    });
-    if (setVisitedAt) {
-      setVisitedAt((prev) => {
-        const out = new Map(prev);
-        out.set(nextTarget.id, Date.now());
+    if (remainingAfter === 0) {
+      // Last stop — finalize visited + bounce to the Reward screen.
+      const arrivedId = nextTarget.id;
+      if (setVisitedIds) {
+        setVisitedIds((prev) => {
+          const out = new Set(prev);
+          out.add(arrivedId);
+          return out;
+        });
+      }
+      if (setVisitedAt) {
+        setVisitedAt((prev) => {
+          const out = new Map(prev);
+          out.set(arrivedId, Date.now());
+          return out;
+        });
+      }
+      // Notify the parent so an "Oops" tap on Reward can undo this final
+      // visit and pop the user back to the I've arrived state here.
+      if (onLastStopArrival) onLastStopArrival(arrivedId);
+      const finish = onEndWalk || onGoBack;
+      if (finish) setTimeout(() => finish(), 0);
+      return;
+    }
+    // More stops ahead — drop into the resting state. Defer the
+    // visitedIds / visitedAt write until Resume so the widget keeps
+    // reading nextTarget as the current stop (atTarget stays true,
+    // header still says "You are at <destination>").
+    setRestingStopId(nextTarget.id);
+  };
+  const handleResume = () => {
+    if (!restingStopId) return;
+    // Drop any at-target overrides — once Resume is tapped, the widget
+    // should read as "Heading to <next stop>" with directions, not as
+    // arrived.
+    setForceAtTarget(false);
+    // Quiet clear — only nulls the preview flag in App, does NOT trigger
+    // setupWidgetPreview's full "exit preview" cleanup that wipes the
+    // journey and routes the user back home.
+    if (onClearWidgetPreview && widgetPreview === 'arrived') onClearWidgetPreview();
+    if (setVisitedIds) {
+      setVisitedIds((prev) => {
+        const out = new Set(prev);
+        out.add(restingStopId);
         return out;
       });
     }
-    if (remainingAfter === 0) {
-      // Last stop confirmed — bounce to the Reward screen so the user
-      // sees their walk reflection. Falls back to onGoBack if the
-      // parent didn't wire onEndWalk. Deferred one tick so the
-      // visitedIds update flushes before the parent unmounts this
-      // screen.
-      const finish = onEndWalk || onGoBack;
-      if (finish) setTimeout(() => finish(), 0);
+    if (setVisitedAt) {
+      setVisitedAt((prev) => {
+        const out = new Map(prev);
+        out.set(restingStopId, Date.now());
+        return out;
+      });
     }
+    // Trigger a tip refetch flavoured by the upcoming stop's name so the
+    // walking widget surfaces tips contextual to where the user is
+    // headed next. Reads via `resumeTipFlavor` / `resumeTipNonce` props.
+    const upcoming = confirmedStops.find(
+      (s) => !visitedIds?.has(s.id) && s.id !== restingStopId
+    );
+    if (upcoming && upcoming.name) {
+      setResumeTipFlavor(upcoming.name);
+      setResumeTipNonce((n) => n + 1);
+    }
+    setRestingStopId(null);
   };
 
   // Apply voice-extracted edit actions to the journey
@@ -659,7 +812,17 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   const routeFetchedFor = React.useRef(null);
   const routeTargetRef = React.useRef(null);
   useEffect(() => {
-    if (!userLocation || stopPositions.length < 1) return;
+    // No more stops to walk to (e.g., user removed everything from the
+    // timeline). Wipe the cached route + turn-by-turn so the dotted line
+    // to the previous "next stop" disappears immediately.
+    if (!userLocation || stopPositions.length < 1) {
+      setWalkingRoute(null);
+      setRouteInfo(null);
+      setRouteSteps([]);
+      routeTargetRef.current = null;
+      routeFetchedFor.current = null;
+      return;
+    }
     const target = stopPositions[0];
     const targetKey = `${target[0]},${target[1]}`;
     const targetChanged = routeTargetRef.current !== targetKey;
@@ -759,7 +922,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 positions={walked}
                 pathOptions={{
                   color: "#8851D4",
-                  weight: 4,
+                  weight: 5,
                   opacity: 0.45,
                   dashArray: "1 8",
                   lineCap: "round",
@@ -803,13 +966,35 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             />
           )}
 
+          {/* PRE-START preview — stops added but Start exploring not yet
+              tapped. Draws a single light-purple dotted line connecting
+              the user through every confirmed stop in order so the user
+              can preview the route before committing. Replaces both the
+              immediate-next leg AND the future-leg lines for this state. */}
+          {isExplorationMode && userLocation && confirmedStops.length > 0 && (
+            <Polyline
+              positions={[
+                userLocation,
+                ...confirmedStops.map((s) => [s.lat, s.lng]),
+              ].filter(Boolean)}
+              pathOptions={{
+                color: "#C77DFF",
+                weight: 5,
+                opacity: 0.85,
+                dashArray: "1 8",
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          )}
+
           {/* IMMEDIATE next stop — dotted purple line from the user to the
               next target along real streets (OSRM); falls back to a
               straight dotted line while the route fetch is in flight. */}
-          {walkingRoute && (
+          {!isExplorationMode && walkingRoute && (
             <Polyline positions={walkingRoute} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.95, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
-          {!walkingRoute && userLocation && stopPositions.length > 0 && (
+          {!isExplorationMode && !walkingRoute && userLocation && stopPositions.length > 0 && (
             <Polyline positions={[userLocation, ...stopPositions]} pathOptions={{ color: "#8851D4", weight: 5, opacity: 0.85, dashArray: "1 8", lineCap: "round", lineJoin: "round" }} />
           )}
 
@@ -878,7 +1063,8 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               // otherwise crowd a tight cluster — at single-stop scale it
               // never does, so we keep the pill there too.
               let mode;
-              if (expanded) mode = 'open';
+              if (isVisited) mode = 'visited';
+              else if (expanded) mode = 'open';
               else if (mapZoom < 12) mode = 'hidden';
               else mode = 'pill';
               if (mode === 'hidden') return null;
@@ -994,14 +1180,12 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
         </MapContainer>
       </div>
 
-      {/* Profile FAB — top-right of the map. Doubles as a dev toggle for
-          the at-target ("You are at" / "You made it. Now enjoy it.")
-          widget state, so the arrived UI can be previewed without
-          walking 300 ft to a real stop. Each tap also advances the AI
-          test mode for the secondary narration / suggestion previews. */}
+      {/* Profile FAB — top-right of the map. Opens a small preview menu
+          for design + dev to verify the four marquee widget states
+          without walking to / triggering them in the real flow. */}
       <button
         type="button"
-        className="fab-circle top-right-btn"
+        className={`fab-circle top-right-btn${widgetPreview ? ' top-right-btn--active' : ''}`}
         aria-label="Open widget state preview menu"
         aria-haspopup="menu"
         aria-expanded={isPreviewMenuOpen}
@@ -1035,7 +1219,13 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
               )}
             </div>
             <ul className="nav-preview-menu-list" role="none">
-              {PREVIEW_STATES.map((opt) => {
+              {[
+                { key: 'arrived',                  label: "State: I've arrived" },
+                { key: 'nudge-tidbit',             label: 'Nudge: Tidbit' },
+                { key: 'nudge-detour',             label: 'Suggestion: Detour' },
+                { key: 'incident-with-suggestion', label: 'Suggestion: Unsafe street' },
+                { key: 'nudge-incident',           label: 'Suggestion: Live incident' },
+              ].map((opt) => {
                 const isActive = widgetPreview === opt.key;
                 return (
                   <li key={opt.key} role="none">
@@ -1045,10 +1235,14 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                       className={`nav-preview-menu-item${isActive ? " nav-preview-menu-item--active" : ""}`}
                       onClick={() => {
                         if (onSetWidgetPreview) onSetWidgetPreview(opt.key);
-                        // Reset the manual cycler so its samples don't compete
-                        // with the preview's curated copy.
                         setAiTestMode(0);
                         setForceAtTarget(false);
+                        // Each of these previews represents a state AFTER
+                        // the user has started exploring, so drop out of
+                        // exploration mode. Otherwise nextTarget stays
+                        // null and the widget body collapses to the
+                        // "Your stops are added…" preview copy.
+                        setIsExplorationMode(false);
                         setIsPreviewMenuOpen(false);
                       }}
                     >
@@ -1141,7 +1335,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
            same button on home: clicking flips exploration mode off, which
            lets nextTarget compute, the OSRM route render, and the widget
            transition into walk mode. ── */}
-      {isExplorationMode && confirmedStops.length > 0 && (
+      {isExplorationMode && confirmedStops.length > 0 && !isAtTarget && (
         <button
           type="button"
           className="fab-circle start-walk-pill nav-start-walk-pill"
@@ -1240,7 +1434,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           // Start exploring yet. Override the directions headline with
           // a calm "ready when you are" line so the widget doesn't fake
           // a live walk.
-          instruction = "your stops are added. ready when you are.";
+          instruction = "Your stops are added. Ready when you are.";
         } else if (!userLocation || liveDistToStopM === null) {
           instruction = "head out";
         } else if (distToTurnM !== null && distToTurnM <= 15) {
@@ -1257,6 +1451,9 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
           <WalkCompanionWidget
             ref={widgetRef}
             previewState={widgetPreview}
+            autoListenTrigger={autoListenTrigger}
+            prefilledTranscript={prefilledTranscript}
+            prefilledTranscriptTrigger={prefilledTranscriptTrigger}
             destination={nextWaypoint}
             instruction={instruction}
             distance={isEmpty ? "—" : distance}
@@ -1268,6 +1465,10 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             narration={aiNarration}
             suggestion={aiSuggestion}
             onArrived={handleArrived}
+            onResume={handleResume}
+            isResting={!!restingStopId}
+            resumeTipFlavor={resumeTipFlavor}
+            resumeTipNonce={resumeTipNonce}
             onOpenTimeline={onOpenTimeline}
             onEnd={onEndWalk || onGoBack}
             onSkip={() => {

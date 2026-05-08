@@ -1,7 +1,7 @@
 // FEATURE: shell
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: 25225b52
+// UPDATE DATE: 2026-05-08
+// BUILD: c88cd26b
 // DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./WelcomeScreen, ./DevSwitch, ./cloudTtsService
 // CONSUMED BY: ./index.js (root mount)
 //
@@ -73,6 +73,26 @@ function App() {
   // screen, and widget overrides flow through NavigationMapScreen down to
   // WalkCompanionWidget so designers can preview each state in-context.
   const [widgetPreview, setWidgetPreview] = useState(null);
+  // Bumped when HomeScreen's audio icon launches an empty-journey walk —
+  // forwarded to the nav-screen widget so it mounts straight into the
+  // listening state instead of waiting for a Say anything tap.
+  const [autoListenTrigger, setAutoListenTrigger] = useState(0);
+  // ID of the last stop the user confirmed (via I've arrived) right
+  // before the Reward screen kicked in. Cleared on Reward → home flow,
+  // and used by Reward's "Oops" CTA to undo that final visit so the
+  // nav screen can return to the I've arrived state on that stop.
+  const [lastArrivedStopId, setLastArrivedStopId] = useState(null);
+  // Counter the nav screen watches; bumping it sets forceAtTarget=true
+  // briefly so the widget reads as at-target after the Oops bounce
+  // even if GPS jitter has the user a few meters off.
+  const [forceAtTargetTrigger, setForceAtTargetTrigger] = useState(0);
+  // When the user types into HomeScreen's search bar and hits enter, the
+  // typed text is forwarded to the nav-screen widget so it can run the
+  // same 3-second "Thinking" beat + tip flow without an actual speech
+  // session. `prefilledTranscript` is the text; the trigger counter
+  // re-fires the widget effect on each new query.
+  const [prefilledTranscript, setPrefilledTranscript] = useState("");
+  const [prefilledTranscriptTrigger, setPrefilledTranscriptTrigger] = useState(0);
   const lastFetchedLocationRef = useRef(null);
   const lastFetchTimeRef = useRef(0);
 
@@ -226,7 +246,7 @@ function App() {
             frame. QuizScreen's z-index keeps it on top while open. */}
         {(screen === 'home' || screen === 'constraints' || screen === 'quiz' || (screen === 'timeline' && timelineReturnScreen === 'home')) && (
           <HomeScreen
-            onStartWalk={(items, userLoc) => {
+            onStartWalk={(items, userLoc, opts) => {
               // NavigationMapScreen treats `addedIds` as the authoritative
               // "confirmed stops" list (filters journeyItems by id). Without
               // this, planned chat stops have fresh IDs that addedIds doesn't
@@ -239,6 +259,11 @@ function App() {
               setVisitedIds(new Set());
               setVisitedAt(new Map());
               setStopDwellMs(new Map());
+              if (opts && opts.autoListen) setAutoListenTrigger((n) => n + 1);
+              if (opts && opts.prefilledTranscript) {
+                setPrefilledTranscript(opts.prefilledTranscript);
+                setPrefilledTranscriptTrigger((n) => n + 1);
+              }
               setScreen('navigation');
             }}
             onSetConstraints={() => { setConstraintsReturnScreen('home'); setScreen('constraints'); }}
@@ -312,7 +337,7 @@ function App() {
             from the nav flow — that way the prefs slide-down close
             animation reveals the live map + walk widget underneath
             instead of a flash of home/white. */}
-        {(screen === 'navigation' || (screen === 'timeline' && timelineReturnScreen === 'navigation') || (screen === 'constraints' && constraintsReturnScreen === 'navigation')) && (
+        {(screen === 'navigation' || screen === 'reward' || (screen === 'timeline' && timelineReturnScreen === 'navigation') || (screen === 'constraints' && constraintsReturnScreen === 'navigation')) && (
           <NavigationMapScreen
             onGoBack={() => {
               // Back arrow = abandon the walk → wipe all walk state so the
@@ -352,6 +377,12 @@ function App() {
             showVoice={screen === 'navigation'}
             widgetPreview={widgetPreview}
             onSetWidgetPreview={setupWidgetPreview}
+            autoListenTrigger={autoListenTrigger}
+            prefilledTranscript={prefilledTranscript}
+            prefilledTranscriptTrigger={prefilledTranscriptTrigger}
+            forceAtTargetTrigger={forceAtTargetTrigger}
+            onLastStopArrival={(id) => setLastArrivedStopId(id)}
+            onClearWidgetPreview={() => setWidgetPreview(null)}
           />
         )}
         {screen === 'reward' && (
@@ -373,9 +404,30 @@ function App() {
               setStopDwellMs(new Map());
               setStartLocation(null);
               setTripStartTime(null);
+              setLastArrivedStopId(null);
               setScreen('home');
             }}
-            onResume={() => setScreen('navigation')}
+            onResume={() => {
+              // "Oops, I'm not done exploring" — undo the final-stop
+              // visit, force the widget back to its at-target state,
+              // and pop back to the navigation screen so the user
+              // sees the I've arrived button at the same stop again.
+              if (lastArrivedStopId) {
+                setVisitedIds((prev) => {
+                  const out = new Set(prev);
+                  out.delete(lastArrivedStopId);
+                  return out;
+                });
+                setVisitedAt((prev) => {
+                  const out = new Map(prev);
+                  out.delete(lastArrivedStopId);
+                  return out;
+                });
+                setLastArrivedStopId(null);
+                setForceAtTargetTrigger((n) => n + 1);
+              }
+              setScreen('navigation');
+            }}
             onSeeProgress={() => setScreen('progress')}
           />
         )}

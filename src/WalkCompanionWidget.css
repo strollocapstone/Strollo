@@ -195,10 +195,29 @@
   background: rgba(0, 0, 0, 0.45);
   color: #F7F3F5;
 }
-/* "I am here" mode — same shell, dot icon instead of skip arrows. The dot
-   matches the timeline's added-stop rail node so it reads as "this is your
-   confirmed stop". */
-.wcw-skip-btn--arrived { color: rgba(247, 243, 245, 0.85); }
+/* "I've arrived" — primary CTA variant of .wcw-skip-btn. Filled Strollo
+   yellow with the same accent ink the start-walk pill uses, so the
+   confirm-arrival action is visually prominent in the status row. */
+/* Solid yellow CTA — dark ink on the Strollo primary. The flag glyph
+   uses currentColor so it inherits the dark accent ink. */
+.wcw-skip-btn--arrived {
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  font-weight: 700;
+  padding: 5px 11px;
+  box-shadow: 0 1px 5px rgba(255, 213, 1, 0.18);
+}
+.wcw-skip-btn--arrived:hover {
+  background: var(--color-primary, #FFD501);
+  color: var(--color-accent, #1E1541);
+  filter: brightness(1.04);
+}
+.wcw-skip-btn--resume {
+  /* Same shell as the regular Skip button but with a play glyph + Resume
+     label. Keeps the dark-translucent chrome the user already associates
+     with the Skip CTA so resuming after an arrival stop reads as a small
+     unobtrusive action. */
+}
 
 
 .wcw-skip-dot {
@@ -220,11 +239,14 @@
   margin: 84px 0;
   font-family: var(--font-brand, var(--font-ui));
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.005em;
-  text-transform: lowercase;
+  text-transform: none;
   color: #F7F3F5;
+}
+.wcw-turn::first-letter {
+  text-transform: uppercase;
 }
 /* While listening, the turn line shows the live transcription quoted. */
 .wcw--listening .wcw-turn {
@@ -233,15 +255,217 @@
   text-transform: none;
   color: #F7F3F5;
 }
+/* Animated gradient blobs painted behind the widget content while the
+   user is speaking. Mirrors HomeScreen's .listen-card-blobs visual but
+   clips to the widget's full 20px border-radius. The individual
+   .listen-blob--1/2/3 keyframes (blob1/2/3) live in HomeScreen.css and
+   are reused as-is. */
+.wcw-listening-blobs {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  /* Long opacity transition in BOTH directions so the gradient eases in
+     when listening starts and eases back out into the tip view when
+     listening ends, rather than snapping off. */
+  transition: opacity 540ms ease;
+}
+.wcw-listening-blobs--visible {
+  opacity: 1;
+}
+/* Lift every other direct child of the widget above the blob layer so
+   the chrome + body copy paint on top of the moving gradient. Applied
+   unconditionally so the lift stays in place during the fade-out too
+   (otherwise content would briefly slip under the blobs mid-transition). */
+.wcw > *:not(.wcw-listening-blobs) {
+  position: relative;
+  z-index: 1;
+}
 
-/* AI ambient narration: chatty info about what the user is passing. */
+/* User-speaking row variant: a yellow dot + three concentric arcs that
+   ripple outwards (Strollo emitting sound while it listens) plus the
+   live transcription, italic and lower-weight in Satoshi. Generous
+   vertical padding lifts the row to roughly the same height as the
+   non-listening turn-instruction row so the first line of body copy
+   sits where the mute button does in the other state. */
+.wcw-turn-row--listening {
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+.wcw-listening-waves {
+  flex-shrink: 0;
+  width: 22px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wcw-listening-waves svg { display: block; }
+.wcw-wave-arc { opacity: 0; }
+@keyframes wcw-wave-pulse {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  60%  { opacity: 0.35; }
+  100% { opacity: 0; }
+}
+.wcw-wave-arc--1 { animation: wcw-wave-pulse 1.4s ease-out infinite; }
+.wcw-wave-arc--2 { animation: wcw-wave-pulse 1.4s ease-out 0.4s infinite; }
+.wcw-wave-arc--3 { animation: wcw-wave-pulse 1.4s ease-out 0.8s infinite; }
+.wcw-turn--listening {
+  font-family: "Satoshi", sans-serif;
+  font-weight: 400;
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(247, 243, 245, 0.85);
+}
+.wcw-turn--listening-placeholder {
+  /* "Listening…" placeholder is more transparent than the live
+     transcription so the placeholder reads as a quiet hint. */
+  color: rgba(247, 243, 245, 0.45);
+}
+
+/* Narration row variant — used for tidbit / fun-fact previews. Lightbulb
+   glyph on the left, narration body in the middle, mute on the right.
+   Inherits .wcw-turn-row's flex-start alignment + 20px vertical padding
+   + 6px gap so the row matches every other walking-state body. */
+/* Match the live-incident row's gap so the body text starts at the
+   same x position across all nudge rows (9px icon column + 12px gap
+   = 21px from the row's left edge). */
+.wcw-turn-row.wcw-narration-row {
+  gap: 12px;
+}
+.wcw-narration-row .wcw-narration {
+  flex: 1;
+  margin: 0;
+}
+
+/* Detour row — plain inline layout, no dashed rules. */
+.wcw-detour-row {
+  /* (intentionally empty — inherits .wcw-turn-row layout) */
+}
+.wcw-detour-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.wcw-detour-box .wcw-narration {
+  flex: 1;
+  margin: 0;
+}
+
+/* Live-incident row — pulsing yellow dot + the same Unbounded body type
+   as the tidbit narration. Reuses .wcw-narration's typography by sharing
+   the <p> element. Compound selector wins over the generic
+   .wcw-turn-row gap: 14 so the spacing matches the Tidbit / Detour
+   rows. */
+.wcw-turn-row.wcw-incident-row {
+  gap: 12px;
+}
+.wcw-incident-row .wcw-narration {
+  flex: 1;
+  margin: 0;
+  padding-right: 4px;
+}
+.wcw-incident-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #FFD501;
+  box-shadow: 0 0 0 0 rgba(255, 213, 1, 0.40);
+  animation: wcw-incident-pulse 1.8s ease-out infinite;
+  margin-top: 6px;
+}
+@keyframes wcw-incident-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(255, 213, 1, 0.45); transform: scale(0.96); }
+  70%  { box-shadow: 0 0 0 6px rgba(255, 213, 1, 0);    transform: scale(1.03); }
+  100% { box-shadow: 0 0 0 0   rgba(255, 213, 1, 0);    transform: scale(0.96); }
+}
+.wcw-narration-icon {
+  /* Layout footprint matches the live-incident dot (9px) so the body
+     text starts at the same x as the incident row. The visible sparkle
+     SVG is rendered larger via absolute positioning + overflow:visible
+     so the glyph is still legible even though it occupies only 9px in
+     the flex layout. */
+  position: relative;
+  flex-shrink: 0;
+  width: 9px;
+  height: 22px;
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 6px;
+}
+.wcw-narration-icon svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(199, 125, 255, 0.55))
+          drop-shadow(0 0 5px rgba(255, 213, 1, 0.4));
+}
+/* Curved-arm sparkle pulse — main + small twinkle ease in/out at offset
+   phases so the cluster shimmers without feeling synchronised. Each
+   sparkle has its own transform-origin at its visual centre. */
+@keyframes wcw-sparkle-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.78; }
+  50%      { transform: scale(1.08); opacity: 1;    }
+}
+.wcw-sparkle {
+  transform-origin: center;
+  animation: wcw-sparkle-pulse 1.6s ease-in-out infinite;
+}
+.wcw-sparkle--main {
+  transform-origin: 11px 7px;
+}
+.wcw-sparkle--small {
+  transform-origin: 18px 15.4px;
+  animation-delay: 0.6s;
+}
+
+/* AI ambient narration: chatty info about what the user is passing.
+   Same scale + family as the empty-state .strollo-tips-loading-text so
+   the tidbit nudge reads at the same visual weight as the
+   "Strollo is looking…" loading copy. */
 .wcw-narration {
   margin: 12px 0 12px;
   font-family: var(--font-brand, var(--font-ui));
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
   color: #F7F3F5;
+}
+.wcw-narration--multi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.wcw-narration-line {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.wcw-narration-row .wcw-narration {
+  margin: 0;
+  padding-right: 4px;
 }
 /* Empty/idle state — Strollo is "looking around" while no destination is
    set and there's nothing to narrate. The text gently breathes in opacity
@@ -275,16 +499,16 @@
   50%      { opacity: 1; }
 }
 
-/* AI detour suggestion: dotted-bordered pill with a yellow lightbulb. */
+/* Suggestion row — yellow lightbulb + body copy in an inline layout, no
+   dashed border. */
 .wcw-suggestion {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   margin: 12px 0 12px;
-  padding: 10px 8px;
-  border: 1.5px dashed rgba(247, 243, 245, 0.30);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 0;
+  border: none;
+  background: transparent;
 }
 .wcw-suggestion-icon {
   flex-shrink: 0;
@@ -317,8 +541,8 @@
 .wcw-stats {
   display: flex;
   gap: 28px;
-  padding: 0 0 14px;
-  margin-top: 24px;
+  padding: 0;
+  margin-top: 10px;
 }
 .wcw-stat {
   display: flex;
@@ -538,13 +762,20 @@
 .strollo-tips-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  /* Match the gap used inside the loading wrapper (.strollo-tips-loading)
+     so the space above the dotted suggestion box is identical in the
+     loading and post-loading sub-states of the empty-tips view. */
+  gap: 32px;
   padding: 16px 2px 22px;
+}
+.strollo-tips-tip-keyword {
+  color: #FFD501;
 }
 .strollo-tips-tip {
   margin: 0;
-  font-size: 17px;
-  font-weight: 500;
+  font-family: var(--font-brand, var(--font-ui));
+  font-size: 18px;
+  font-weight: 600;
   line-height: 1.32;
   letter-spacing: -0.012em;
   color: #fff;
@@ -555,6 +786,74 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* In-walk tip card — fired by a spoken (or typed) query while the user
+   already has stops added. Mirrors the empty-state tips body chrome
+   (head row with tip + close button, place pill stacked beneath) so
+   Strollo's reply takes over the body until the user dismisses it. */
+.wcw-walk-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wcw-walk-tip-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.wcw-walk-tip-head .strollo-tips-tip { flex: 1; }
+.wcw-walk-tip-close { margin-left: auto; }
+
+/* Tip-place pills — reuses the home map's expanded .sugg-pin chrome so the
+   visual + add affordance is identical across surfaces. The home pill is
+   positioned absolutely as a Leaflet marker; here we drop them inline, so
+   reset transform/position and hide the marker pointer tail. Multiple
+   pills stack vertically with a small gap. */
+.wcw-tip-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.wcw-tip-pill {
+  display: flex;
+  justify-content: flex-start;
+  animation: tipIn 520ms cubic-bezier(.2,.8,.2,1) both;
+}
+.wcw-tip-pill .sugg-pin {
+  position: static;
+  transform: none;
+  /* Translucent in the unselected state so the pill reads as a soft
+     suggestion against the dark widget chrome — same chip vocabulary as
+     the prompt-pill tags in the dotted suggestion box. The
+     sugg-pin--added rule below restores the standard lavender once
+     the place is in the trip. */
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+}
+.wcw-tip-pill .sugg-pin .sugg-pin-name {
+  color: #fff;
+}
+.wcw-tip-pill .sugg-pin.sugg-pin--added {
+  background: #F4EEFB;
+}
+.wcw-tip-pill .sugg-pin.sugg-pin--added .sugg-pin-name {
+  color: #34233E;
+}
+.wcw-tip-pill .sugg-pin::after {
+  display: none;
+}
+/* The "+" / "×" button inside the in-widget pill — soft white chip that
+   sits inside the already-translucent pill chrome. */
+.wcw-tip-pill .sugg-pin .sugg-pin-add-btn {
+  background: rgba(255, 255, 255, 0.42);
+}
+.wcw-tip-pill .sugg-pin .sugg-pin-add-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+.wcw-tip-pill .sugg-pin.sugg-pin--added .sugg-pin-add-btn {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* "Looking around" loading state — friendly copy + three bouncing
@@ -606,7 +905,7 @@
   margin: 0;
   font-family: "Unbounded", sans-serif;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.005em;
   color: #F7F3F5;
@@ -972,10 +1271,21 @@
    conversation mode (smaller, secondary background). */
 .wcw-turn-row {
   display: flex;
-  align-items: center;
+  /* Mute speaker button sits at the top of the row so its top edge
+     aligns with the top of the first line of body copy, instead of
+     being vertically centred against multi-line instructions. */
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
+  /* Same vertical breathing room as the listening row so the body
+     copy gets matching padding across all states (idle preview,
+     navigating, speaking). */
+  padding: 20px 0;
+}
+.wcw-turn-row .wcw-turn,
+.wcw-narration-row .wcw-narration {
+  padding-right: 0;
 }
 .wcw-turn-row .wcw-turn {
   flex: 1;

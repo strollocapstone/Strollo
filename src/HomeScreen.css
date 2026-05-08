@@ -323,6 +323,28 @@
 }
 .sugg-pin--mini .sugg-pin-dot-icon { display: none; }
 
+/* Visited variant — bare green dot on the map for stops the user has
+   already arrived at, matching the timeline's .tl-rail-node--visited
+   green node so the surfaces share one "completed" vocabulary. */
+.sugg-pin--visited {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+.sugg-pin--visited::after { display: none; }
+.sugg-pin--visited .sugg-pin-name,
+.sugg-pin--visited .sugg-pin-extra,
+.sugg-pin--visited .sugg-pin-badge,
+.sugg-pin--visited .sugg-pin-label { display: none; }
+.sugg-pin-dot--visited {
+  width: 12px; height: 12px;
+  background: #16A34A;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+}
+.sugg-pin-dot--visited .sugg-pin-dot-icon,
+.sugg-pin-dot--visited .sugg-pin-dot-number { display: none; }
+
 /* Smooth fade-in when a pin's icon is replaced (only changing pins trigger this thanks to iconCache) */
 .sugg-pin {
   animation: sugg-pin-fade 0.18s ease-out;
@@ -389,13 +411,13 @@
   background: var(--color-primary) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  /* Symmetric ambient halo — same softness above and below the pill so
-     it floats off the map without feeling weighed down. Centered yellow
-     glow keeps the brand feel. */
+  /* Asymmetric grounded shadow — darker drop below the pill so it lifts
+     visibly off the busy map (pins, dotted route lines) instead of
+     blending in. The yellow halo keeps the brand feel. */
   box-shadow:
-    0 -3px 10px rgba(30, 21, 65, 0.13),
-    0  3px 10px rgba(30, 21, 65, 0.13),
-    0  0 10px rgba(255, 213, 1, 0.22) !important;
+    0 -2px 8px rgba(30, 21, 65, 0.18),
+    0  6px 16px rgba(30, 21, 65, 0.32),
+    0  0 12px rgba(255, 213, 1, 0.24) !important;
 }
 .start-walk-pill:hover {
   background: var(--color-primary) !important;
@@ -1200,6 +1222,31 @@
   color: #8851D4;
   font-size: 16px;
   font-weight: 600;
+}
+
+/* User-speaking state inside the listen card — mirrors the walk widget's
+   .wcw-turn-row--listening row (yellow dot + ripple arcs + italic Satoshi
+   transcript with a blinking caret) so the speaking experience reads
+   identically across surfaces. */
+.listen-card-speaking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 40px;
+}
+.listen-card-caption--speaking {
+  font-family: "Satoshi", sans-serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 16px;
+  color: rgba(30, 21, 65, 0.85);
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+.listen-card-caption--placeholder {
+  color: rgba(30, 21, 65, 0.45);
 }
 .listen-card-close {
   position: absolute;
