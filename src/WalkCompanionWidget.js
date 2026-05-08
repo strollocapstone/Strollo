@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-08
-// BUILD: c88cd26b
+// BUILD: 83bf9c46
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService, ./HomeScreen (CATEGORY_ICONS)
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
@@ -913,7 +913,11 @@ function WalkCompanionWidgetInner({
   // view.
   const handlePromptTap = useCallback((p) => {
     ttsPrime();
-    setLastSpokenTranscript("");
+    // Seed the keyword-highlight transcript with the pill's label so any
+    // word from the tag (e.g. "Hidden gems" → hidden, gems) that lands in
+    // Gemini's tip lights up in Strollo yellow, just like a spoken-query
+    // tip does.
+    setLastSpokenTranscript(p.label);
     setPendingPillTag(p.label);
     setTipFlavor(p.label.toLowerCase());
     setTipNonce((n) => n + 1);
