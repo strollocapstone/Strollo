@@ -269,6 +269,19 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
   // Dev-only diagnostic: log the journey state every time it changes so
   // we can see whether saved stops actually land in confirmedStops in
   // the right order (and which ones have geocoded coords yet).
+  // The widget's End-walk button adds `wcw--ending` to the .wcw DOM
+  // node directly to play its 240ms fade-out before the parent navigates
+  // away. Because we keep this screen MOUNTED while the Reward overlay
+  // is up (so map + widget state survives Oops), that class would
+  // otherwise persist when the user comes back via Oops, leaving the
+  // widget stuck at opacity:0. Clean it up whenever the nav screen
+  // becomes visible again.
+  useEffect(() => {
+    if (!showVoice) return;
+    const w = document.querySelector('.wcw.wcw--ending');
+    if (w) w.classList.remove('wcw--ending');
+  }, [showVoice]);
+
   useEffect(() => {
     console.log("[Nav] journeyItems=", journeyItems.map((j) => `${j.name}(${j.lat ? "✓" : "—"})`));
     console.log("[Nav] confirmedStops=", confirmedStops.map((s) => s.name));
