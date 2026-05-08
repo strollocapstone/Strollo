@@ -1,4 +1,8 @@
 // FEATURE: progress
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: 25225b52
+// DEPENDS ON: ./RewardScreen (getStopCollectible, getStopTint)
 // CONSUMED BY: ./App.js
 //
 // Per-category exploration progress. Reads the user's confirmed + visited
@@ -43,23 +47,28 @@ const TOP_N = 5;
 // and category nudges can be previewed end-to-end. Spread across enough
 // categories that the top-6 / "see all" UX is visible. Each `desc` is
 // crafted so the food classifier can pick a specific food collectible.
+// Each entry carries a `neighborhood` (shown in the detail card's "Where"),
+// `daysAgo` + `at` ("HH:MM" 24h) for a deterministic timestamp, and `dwellMin`
+// so the detail card surfaces realistic where/when/time-spent without
+// requiring a real walk. Times are spread across a couple of weeks so the
+// "When" field shows a mix of "Today at …", "Yesterday", and dated entries.
 const MOCK_PROGRESS_STOPS = [
-  { id: "mock-1",  name: "Sightglass Coffee",        desc: "Coffee Shop" },
-  { id: "mock-2",  name: "Blue Bottle Coffee",       desc: "Coffee Shop" },
-  { id: "mock-3",  name: "Ritual Coffee Roasters",   desc: "Coffee Shop" },
-  { id: "mock-4",  name: "Four Barrel Coffee",       desc: "Coffee Shop" },
-  { id: "mock-5",  name: "Andytown Coffee",          desc: "Coffee Shop" },
-  { id: "mock-6",  name: "Mensho Tokyo Ramen",       desc: "Ramen Restaurant" },
-  { id: "mock-7",  name: "Akiko's Sushi Bar",        desc: "Sushi Restaurant" },
-  { id: "mock-8",  name: "Tony's Pizza Napoletana",  desc: "Pizza Restaurant" },
-  { id: "mock-9",  name: "Tartine Bakery",           desc: "Bakery" },
-  { id: "mock-10", name: "Bi-Rite Creamery",         desc: "Ice Cream" },
-  { id: "mock-11", name: "Golden Gate Park",         desc: "Park" },
-  { id: "mock-12", name: "Dolores Park",             desc: "Park" },
-  { id: "mock-13", name: "Salesforce Park",          desc: "Park" },
-  { id: "mock-14", name: "Buena Vista Park",         desc: "Park" },
-  { id: "mock-15", name: "City Lights Books",        desc: "Bookshop" },
-  { id: "mock-16", name: "SFMOMA",                   desc: "Museum" },
+  { id: "mock-1",  name: "Sightglass Coffee",        desc: "Coffee Shop",        neighborhood: "SoMa, San Francisco",         daysAgo: 0,  at: "09:42", dwellMin: 22 },
+  { id: "mock-2",  name: "Blue Bottle Coffee",       desc: "Coffee Shop",        neighborhood: "Hayes Valley, San Francisco", daysAgo: 2,  at: "10:15", dwellMin: 14 },
+  { id: "mock-3",  name: "Ritual Coffee Roasters",   desc: "Coffee Shop",        neighborhood: "Mission, San Francisco",      daysAgo: 5,  at: "08:55", dwellMin: 18 },
+  { id: "mock-4",  name: "Four Barrel Coffee",       desc: "Coffee Shop",        neighborhood: "Mission, San Francisco",      daysAgo: 7,  at: "11:20", dwellMin: 26 },
+  { id: "mock-5",  name: "Andytown Coffee",          desc: "Coffee Shop",        neighborhood: "Outer Sunset, San Francisco", daysAgo: 10, at: "10:05", dwellMin: 31 },
+  { id: "mock-6",  name: "Mensho Tokyo Ramen",       desc: "Ramen Restaurant",   neighborhood: "Tenderloin, San Francisco",   daysAgo: 1,  at: "19:30", dwellMin: 48 },
+  { id: "mock-7",  name: "Akiko's Sushi Bar",        desc: "Sushi Restaurant",   neighborhood: "Union Square, San Francisco", daysAgo: 4,  at: "20:10", dwellMin: 65 },
+  { id: "mock-8",  name: "Tony's Pizza Napoletana",  desc: "Pizza Restaurant",   neighborhood: "North Beach, San Francisco",  daysAgo: 9,  at: "18:45", dwellMin: 52 },
+  { id: "mock-9",  name: "Tartine Bakery",           desc: "Bakery",             neighborhood: "Mission, San Francisco",      daysAgo: 0,  at: "11:18", dwellMin: 17 },
+  { id: "mock-10", name: "Bi-Rite Creamery",         desc: "Ice Cream",          neighborhood: "Mission, San Francisco",      daysAgo: 3,  at: "15:55", dwellMin: 12 },
+  { id: "mock-11", name: "Golden Gate Park",         desc: "Park",               neighborhood: "Richmond, San Francisco",     daysAgo: 1,  at: "14:25", dwellMin: 84 },
+  { id: "mock-12", name: "Dolores Park",             desc: "Park",               neighborhood: "Mission, San Francisco",      daysAgo: 6,  at: "16:40", dwellMin: 55 },
+  { id: "mock-13", name: "Salesforce Park",          desc: "Park",               neighborhood: "SoMa, San Francisco",         daysAgo: 0,  at: "12:50", dwellMin: 28 },
+  { id: "mock-14", name: "Buena Vista Park",         desc: "Park",               neighborhood: "Haight, San Francisco",       daysAgo: 8,  at: "10:30", dwellMin: 41 },
+  { id: "mock-15", name: "City Lights Books",        desc: "Bookshop",           neighborhood: "North Beach, San Francisco",  daysAgo: 2,  at: "13:15", dwellMin: 33 },
+  { id: "mock-16", name: "SFMOMA",                   desc: "Museum",             neighborhood: "SoMa, San Francisco",         daysAgo: 12, at: "14:00", dwellMin: 92 },
 ];
 
 function classify(stop) {
@@ -70,16 +79,53 @@ function classify(stop) {
   return FALLBACK.id;
 }
 
+// Friendly "today at 3:42 PM" / "May 7 at 3:42 PM" for the collectible detail
+// card. Falls back to a soft placeholder when we never recorded a timestamp
+// (e.g. preview/mock journeys).
+function formatVisitedAt(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return `Today at ${time}`;
+  const date = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${date} at ${time}`;
+}
+
+function formatDwellMs(ms) {
+  if (!ms || ms < 30000) return null; // <30s reads as noise; hide it
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "Less than a minute";
+  if (mins === 1) return "1 minute";
+  if (mins < 60) return `${mins} minutes`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem === 0 ? `${hrs}h` : `${hrs}h ${rem}m`;
+}
+
 export default function ProgressScreen({
   journeyItems = [],
   visitedIds,
+  visitedAt,
+  stopDwellMs,
   onGoBack,
   onPlanAnother,
 }) {
   const [showAll, setShowAll] = useState(false);
+  // When the user taps a collectible, surface the stop's where/when/how-long
+  // in a centered modal. `null` = closed.
+  const [selectedStop, setSelectedStop] = useState(null);
   const visitedSet = visitedIds instanceof Set
     ? visitedIds
     : new Set(visitedIds || []);
+  const arrivalMap = visitedAt instanceof Map
+    ? visitedAt
+    : new Map(Object.entries(visitedAt || {}));
+  const dwellMap = stopDwellMs instanceof Map
+    ? stopDwellMs
+    : new Map(Object.entries(stopDwellMs || {}));
 
   const realVisited = useMemo(
     () => journeyItems.filter((s) => visitedSet.has(s.id)),
@@ -87,7 +133,29 @@ export default function ProgressScreen({
   );
   // No real walk yet → render a preview built from MOCK_PROGRESS_STOPS so
   // the screen always has something to demonstrate.
-  const visitedStops = realVisited.length === 0 ? MOCK_PROGRESS_STOPS : realVisited;
+  const usingMock = realVisited.length === 0;
+  const visitedStops = usingMock ? MOCK_PROGRESS_STOPS : realVisited;
+
+  // Mock arrival/dwell so the collectible-detail modal shows realistic
+  // where/when/time-spent in the preview state. Anchored to a stable
+  // "now" the first time the screen mounts so the dates don't shift while
+  // the user is browsing.
+  const mockMaps = useMemo(() => {
+    const arrivals = new Map();
+    const dwells = new Map();
+    const now = new Date();
+    for (const s of MOCK_PROGRESS_STOPS) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - (s.daysAgo || 0));
+      const [hh, mm] = (s.at || "12:00").split(":").map(Number);
+      d.setHours(hh, mm, 0, 0);
+      arrivals.set(s.id, d.getTime());
+      dwells.set(s.id, (s.dwellMin || 0) * 60 * 1000);
+    }
+    return { arrivals, dwells };
+  }, []);
+  const effectiveArrivals = usingMock ? mockMaps.arrivals : arrivalMap;
+  const effectiveDwell = usingMock ? mockMaps.dwells : dwellMap;
 
   // Group visited stops by category id so each row can show the actual
   // collectibles the user collected in that category.
@@ -139,11 +207,11 @@ export default function ProgressScreen({
       <div className="progress-bg-frost" />
       <div className="progress-scroll">
         <header className="progress-header">
-          <h1 className="progress-title">Your exploration progress</h1>
+          <h1 className="progress-title">Your exploration collection so far</h1>
           <p className="progress-subtitle">
             {totalCollected === 0
               ? "Every new spot fills your map. Explore a spot in any category and your collection grows from here."
-              : `${totalCollected} reward${totalCollected === 1 ? "" : "s"} so far — explore a spot in a category you haven't yet and watch your map get richer.`}
+              : `${totalCollected} treasure${totalCollected === 1 ? "" : "s"} and counting — the more you explore, the richer your collection gets.`}
           </p>
         </header>
 
@@ -165,7 +233,7 @@ export default function ProgressScreen({
                   <span className="progress-category-label">{r.label}</span>
                   <span
                     className="progress-category-count"
-                    aria-label={`${r.stops.length} reward${r.stops.length === 1 ? "" : "s"}`}
+                    aria-label={`${r.stops.length} treasure${r.stops.length === 1 ? "" : "s"}`}
                   >
                     {r.stops.length}
                   </span>
@@ -184,13 +252,16 @@ export default function ProgressScreen({
                     }}
                   >
                     {r.stops.map((s) => (
-                      <span
+                      <button
+                        type="button"
                         className="progress-collectible"
                         key={s.id}
                         style={{ background: getStopTint(s) }}
+                        onClick={() => setSelectedStop(s)}
+                        aria-label={`See details for ${s.name}`}
                       >
                         {getStopCollectible(s)}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -231,6 +302,67 @@ export default function ProgressScreen({
           </button>
         )}
       </div>
+
+      {selectedStop && (
+        <div
+          className="progress-detail-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${selectedStop.name} details`}
+          onClick={() => setSelectedStop(null)}
+        >
+          <div
+            className="progress-detail-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="progress-detail-close"
+              onClick={() => setSelectedStop(null)}
+              aria-label="Close"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <span
+              className="progress-detail-art"
+              style={{ background: getStopTint(selectedStop) }}
+              aria-hidden="true"
+            >
+              {getStopCollectible(selectedStop)}
+            </span>
+            <h2 className="progress-detail-name">{selectedStop.name}</h2>
+            {selectedStop.desc && (
+              <p className="progress-detail-kind">{selectedStop.desc}</p>
+            )}
+            <dl className="progress-detail-meta">
+              {(() => {
+                const when = formatVisitedAt(effectiveArrivals.get(selectedStop.id));
+                const dwell = formatDwellMs(effectiveDwell.get(selectedStop.id));
+                const where = selectedStop.neighborhood || selectedStop.desc || "On your route";
+                return (
+                  <>
+                    <div className="progress-detail-row">
+                      <dt>Where</dt>
+                      <dd>{where}</dd>
+                    </div>
+                    <div className="progress-detail-row">
+                      <dt>When</dt>
+                      <dd>{when || "Sometime on this trip"}</dd>
+                    </div>
+                    <div className="progress-detail-row">
+                      <dt>Time spent</dt>
+                      <dd>{dwell || "A quick stop"}</dd>
+                    </div>
+                  </>
+                );
+              })()}
+            </dl>
+          </div>
+        </div>
+      )}
 
       {/* Bottom action bar — same vocabulary as the Reward screen so the
           two surfaces feel like one family. */}

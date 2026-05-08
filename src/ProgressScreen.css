@@ -14,11 +14,12 @@
   color: #34233E;
   display: flex;
   flex-direction: column;
-  animation: progress-screen-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: progress-screen-in 540ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes progress-screen-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .progress-bg-frost {
   position: absolute;
@@ -72,7 +73,7 @@
 .progress-categories {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 40px;
   margin-bottom: 18px;
 }
 
@@ -88,14 +89,14 @@
 .progress-category:not(:last-child)::after {
   content: "";
   position: absolute;
-  left: 14%;
-  right: 14%;
-  bottom: -14px;
+  left: 6%;
+  right: 6%;
+  bottom: -20px;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0,
-    rgba(52, 35, 62, 0.06) 50%,
+    rgba(52, 35, 62, 0.10) 50%,
     transparent 100%
   );
   pointer-events: none;
@@ -185,6 +186,21 @@
     inset 0 -1px 2px rgba(52, 35, 62, 0.18),
     0 2px 6px rgba(52, 35, 62, 0.14);
   overflow: hidden;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.18s ease;
+}
+.progress-collectible:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    inset 0 -1px 2px rgba(52, 35, 62, 0.18),
+    0 4px 12px rgba(52, 35, 62, 0.22);
+}
+.progress-collectible:active { transform: scale(0.96); }
+.progress-collectible:focus-visible {
+  outline: 2px solid rgba(136, 81, 212, 0.6);
+  outline-offset: 2px;
 }
 .progress-collectible svg {
   width: 92%;
@@ -209,16 +225,22 @@
 .progress-category--empty .progress-category-label { opacity: 0.75; color: #5A4B64; }
 .progress-category--empty .progress-category-count { opacity: 0.55; }
 
-/* Friendly nudge under under-explored categories — encourages the next walk. */
+/* Friendly nudge under under-explored categories — encourages the next walk.
+   Left-aligned with a subtle purple accent so it reads as an encouragement
+   rather than blending into the row metadata. */
 .progress-category-nudge {
-  margin: 0;
-  padding-left: 42px;
+  margin: 6px 0 0;
+  padding: 8px 12px 8px 14px;
   font-family: "Satoshi", sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 12.5px;
-  color: #6F5C7C;
-  line-height: 1.35;
-  font-style: italic;
+  color: #5B3DA1;
+  line-height: 1.4;
+  text-align: left;
+  background: rgba(136, 81, 212, 0.08);
+  border-left: 3px solid rgba(136, 81, 212, 0.55);
+  border-radius: 6px;
+  align-self: stretch;
 }
 
 /* ── See all toggle — frosted-glass pill matching the quiz screen's
@@ -292,3 +314,126 @@
 }
 .progress-undo-pill:hover  { background: rgba(255, 255, 255, 0.55); }
 .progress-undo-pill:active { transform: scale(0.98); }
+
+/* ── Collectible detail modal ───────────────────────────────────────────── */
+/* Tapping a collectible opens this centered card showing the artwork at a
+   larger size plus the where/when/how-long for that stop. Backdrop click
+   and the close button both dismiss. */
+.progress-detail-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(30, 21, 65, 0.42);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: progress-detail-overlay-in 200ms ease-out;
+}
+@keyframes progress-detail-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.progress-detail-card {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF4FF 100%);
+  padding: 28px 22px 22px;
+  box-shadow: 0 18px 48px rgba(30, 21, 65, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: progress-detail-card-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes progress-detail-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.progress-detail-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(30, 21, 65, 0.06);
+  color: #1E1541;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+.progress-detail-close:hover { background: rgba(30, 21, 65, 0.12); }
+.progress-detail-art {
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 -2px 4px rgba(52, 35, 62, 0.18),
+    0 8px 22px rgba(52, 35, 62, 0.20);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.progress-detail-art svg {
+  width: 92%;
+  height: 92%;
+  display: block;
+}
+.progress-detail-name {
+  font-family: "Unbounded", sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #34233E;
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.progress-detail-kind {
+  font-family: "Satoshi", sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  color: #6F5C7C;
+  margin: 0 0 16px;
+}
+.progress-detail-meta {
+  width: 100%;
+  margin: 0;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(52, 35, 62, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.progress-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-family: "Satoshi", sans-serif;
+}
+.progress-detail-row dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8A78A0;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+.progress-detail-row dd {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #34233E;
+  margin: 0;
+  text-align: right;
+  line-height: 1.35;
+}
