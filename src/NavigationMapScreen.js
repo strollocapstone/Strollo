@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
 // LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-07
-// BUILD: cda47b3
+// UPDATE DATE: 2026-05-08
+// BUILD: c603b66
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //
@@ -760,7 +760,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 pathOptions={{
                   color: "#8851D4",
                   weight: 4,
-                  opacity: 0.20,
+                  opacity: 0.45,
                   dashArray: "1 8",
                   lineCap: "round",
                   lineJoin: "round",
@@ -777,7 +777,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
             <Polyline
               positions={remainingRoute}
               pathOptions={{
-                color: "#CC84F9",
+                color: "#C77DFF",
                 weight: 4,
                 opacity: 0.85,
                 dashArray: "1 8",
@@ -793,7 +793,7 @@ export default function NavigationMapScreen({ onGoBack, onEndWalk, onSetConstrai
                 ...remainingStops.map((s) => [s.lat, s.lng]),
               ]}
               pathOptions={{
-                color: "#CC84F9",
+                color: "#C77DFF",
                 weight: 4,
                 opacity: 0.85,
                 dashArray: "1 8",
