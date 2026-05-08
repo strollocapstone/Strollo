@@ -1,9 +1,9 @@
 // FEATURE: reward
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-04-28
-// BUILD: f718df0
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-07
+// BUILD: 25225b52
 // DEPENDS ON: ./geminiService (fetchNearbyPlaces)
-// CONSUMED BY: ./App.js
+// CONSUMED BY: ./App.js, ./ProgressScreen (getStopCollectible, getStopTint)
 //
 // Post-walk reflection screen. Renders distance/duration stats, per-stop
 // linger time (computed from `visitedAt` and `stopDwellMs` Maps that App.js
@@ -1955,7 +1955,18 @@ export default function RewardScreen({
             className="reward-share-btn"
             onClick={onSeeProgress || onComplete}
           >
-            <span>See my exploration progress</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {/* Open treasure chest: raised lid + clasp loop + bumpy treasure
+                  mound + body with U-shaped lock plate and prominent keyhole. */}
+              <path d="M3 8 Q3 3 8 3 L16 3 Q21 3 21 8 L21 10 L3 10 Z" />
+              <path d="M11 10 V11.5 Q11 12 11.5 12 H12.5 Q13 12 13 11.5 V10" />
+              <path d="M3 13.5 Q5.5 10.5 8 12.5 Q10 10 12 12.5 Q14 10 16 12.5 Q18.5 10.5 21 13.5" />
+              <path d="M3 13.5 V20 Q3 21 4 21 H20 Q21 21 21 20 V13.5" />
+              <path d="M10.5 14.5 V18.5 Q10.5 19.5 11.5 19.5 H12.5 Q13.5 19.5 13.5 18.5 V14.5" />
+              <circle cx="12" cy="16.5" r="0.85" fill="currentColor" stroke="none" />
+              <line x1="12" y1="17.2" x2="12" y2="18.4" />
+            </svg>
+            <span>See my exploration collection so far</span>
           </button>
           {/* Hidden on past-date throwbacks — there's no walk to resume. */}
           {dateMode === 'today' && (

@@ -1,7 +1,7 @@
 // FEATURE: shell
 // LAST UPDATED BY: Seemin Masood
 // UPDATE DATE: 2026-05-07
-// BUILD: cda47b3
+// BUILD: 25225b52
 // DEPENDS ON: ./HomeScreen, ./NavigationMapScreen, ./PreferencesScreen, ./TimelineScreen, ./QuizScreen, ./RewardScreen, ./LoadingScreen, ./WelcomeScreen, ./DevSwitch, ./cloudTtsService
 // CONSUMED BY: ./index.js (root mount)
 //
@@ -383,6 +383,8 @@ function App() {
           <ProgressScreen
             journeyItems={journeyItems}
             visitedIds={visitedIds}
+            visitedAt={visitedAt}
+            stopDwellMs={stopDwellMs}
             onGoBack={() => setScreen('reward')}
             onPlanAnother={() => {
               // Same wipe-and-home as the reward screen's onComplete so a
