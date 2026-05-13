@@ -1,7 +1,7 @@
 // FEATURE: walk-nav
-// LAST UPDATED BY: Eric Tsai
-// UPDATE DATE: 2026-05-13
-// BUILD: 1b65e1e
+// LAST UPDATED BY: Seemin Masood
+// UPDATE DATE: 2026-05-08
+// BUILD: 71132ffc
 // DEPENDS ON: ./WalkCompanionWidget, ./mapUtils, ./geminiService, ./useJourneyVoice, ./HomeScreen (chat-overlay mode for in-walk chat)
 // CONSUMED BY: ./App.js
 //
@@ -768,14 +768,6 @@ Plain text only. No quotes, no markdown, no preamble.`;
 
     const addedFromVoice = [];
     if (adds && adds.length && userLocation) {
-      // Insert voice-added stops immediately after the current target so the
-      // new place becomes the next destination, not a detour bolted onto the
-      // end of the trip. If there's no active target (exploration mode, or
-      // the target was just removed in this same call), fall back to append.
-      const targetIdx = nextTarget
-        ? next.findIndex((s) => s.id === nextTarget.id)
-        : -1;
-      let insertAt = targetIdx >= 0 ? targetIdx + 1 : next.length;
       for (const place of adds) {
         const result = await geocodePlace(place.name, userLocation[0], userLocation[1]);
         if (result) {
@@ -786,8 +778,7 @@ Plain text only. No quotes, no markdown, no preamble.`;
             lat: result.lat,
             lng: result.lng,
           };
-          next.splice(insertAt, 0, newStop);
-          insertAt += 1;
+          next.push(newStop);
           addedFromVoice.push(newStop.id);
         }
       }
@@ -818,7 +809,7 @@ Plain text only. No quotes, no markdown, no preamble.`;
         return out;
       });
     }
-  }, [journeyItems, userLocation, nextTarget, onJourneyChange, setAddedIds]);
+  }, [journeyItems, userLocation, onJourneyChange, setAddedIds]);
 
   const voice = useJourneyVoice({
     userLocation,
