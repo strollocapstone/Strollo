@@ -1,7 +1,7 @@
 // FEATURE: walk-nav + walk-conv + walk-tts  (multi — phase 4 splits)
-// LAST UPDATED BY: Seemin Masood
-// UPDATE DATE: 2026-05-08
-// BUILD: 76058f4
+// LAST UPDATED BY: Eric Tsai
+// UPDATE DATE: 2026-05-13
+// BUILD: e345ac7
 // DEPENDS ON: ./strollowConversation, ./geminiService, ./cloudTtsService, ./HomeScreen (CATEGORY_ICONS)
 // CONSUMED BY: ./NavigationMapScreen, ./LockScreen
 //
@@ -1847,41 +1847,18 @@ function WalkCompanionWidgetInner({
         );
       })()}
 
-      {!isEmpty && (() => {
-        // Parse the next maneuver direction from the instruction text.
-        // "left" / "right" / "arriving" stay as words; "straight" is
-        // shown as an upward arrow glyph instead so the cell has a
-        // strong directional anchor at a glance.
-        const ins = (instruction || "").toLowerCase();
-        let turnDir = "straight";
-        if (ins.includes("arriv")) turnDir = "arriving";
-        else if (ins.includes("left")) turnDir = "left";
-        else if (ins.includes("right")) turnDir = "right";
-        const goValue = paused ? "—" : (
-          turnDir === "straight" ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-label="straight ahead">
-              <line x1="12" y1="20" x2="12" y2="6"/>
-              <polyline points="6 11 12 6 18 11"/>
-            </svg>
-          ) : turnDir
-        );
-        return (
-          <div className="wcw-stats">
-            <div className="wcw-stat">
-              <span className="wcw-stat-label">DIST</span>
-              <span className="wcw-stat-value">{paused ? "—" : distance}</span>
-            </div>
-            <div className="wcw-stat">
-              <span className="wcw-stat-label">ETA</span>
-              <span className="wcw-stat-value">{paused ? "—" : eta}</span>
-            </div>
-            <div className="wcw-stat">
-              <span className="wcw-stat-label">GO</span>
-              <span className="wcw-stat-value">{goValue}</span>
-            </div>
+      {!isEmpty && (
+        <div className="wcw-stats">
+          <div className="wcw-stat">
+            <span className="wcw-stat-label">DIST</span>
+            <span className="wcw-stat-value">{paused ? "—" : distance}</span>
           </div>
-        );
-      })()}
+          <div className="wcw-stat">
+            <span className="wcw-stat-label">ETA</span>
+            <span className="wcw-stat-value">{paused ? "—" : eta}</span>
+          </div>
+        </div>
+      )}
       {!(convOpen && !isEmpty) && (
       <div className="wcw-bottom">
         <div className="wcw-bottom-left">
